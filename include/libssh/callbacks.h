@@ -400,6 +400,67 @@ struct ssh_socket_callbacks_struct {
 };
 typedef struct ssh_socket_callbacks_struct *ssh_socket_callbacks;
 
+/** 
+* @brief callback to read data from the socket
+* If this function returns less than zero
+* it must update WSASetLastError or errno
+* @param socket_t to read from
+* @param userdata for callback
+* @param buffer for read data
+* @param size of read buffer
+* @return < 0 on error and >= 0 indicated how much data read into buffer
+*/
+typedef int(*ssh_callback_recv) (socket_t socket, void *userdata, char *buffer, int size);
+
+/**
+* @brief callback to write data to the socket
+* If this function returns less than zero
+* it must update WSASetLastError or errno
+* @param socket_t to write to
+* @param userdata for callback
+* @param buffer to write from
+* @param size how much data to write
+* @return < 0 on error and >= 0 indicated how much data consumed from buffer
+*/
+typedef int(*ssh_callback_send) (socket_t socket, void *userdata, const char *buffer, int size);
+
+/**
++* @brief callback to write data to the socket
++* If this function returns less than zero
++* it must update WSASetLastError or errno
++* @param socket_t to write to
++* @param userdata for callback
++* @return < 0 on error >= 0 on success
++*/
+typedef int(*ssh_callback_close) (socket_t socket, void *userdata);
+
+/**
+* These are the callbacks exported by the socket structure
+* They are called by unbuffered read and write when socket data is sent or received
+*/
+struct ssh_socket_io_callbacks_struct {
+	/**
+	* User-provided data. User is free to set anything he wants here
+	*/
+	void *userdata;
+	/**
+	* This function will be called to write data to the socket. 
+	* The data not consumed will appear on the next send event.
+	*/
+	ssh_callback_send send;
+	/**
+	* This function will be called to read data from the socket.
+	*/
+	ssh_callback_recv recv;
+	/**
+	* This function will be called to close the socket
+	* (not called close because there is a #define for close in the source)
+	*/
+	ssh_callback_close closecb;
+};
+
+typedef struct ssh_socket_io_callbacks_struct *ssh_socket_io_callbacks;
+
 #define SSH_SOCKET_FLOW_WRITEWILLBLOCK 1
 #define SSH_SOCKET_FLOW_WRITEWONTBLOCK 2
 
@@ -564,6 +625,30 @@ typedef struct ssh_packet_callbacks_struct *ssh_packet_callbacks;
  * @return SSH_OK on success, SSH_ERROR on error.
  */
 LIBSSH_API int ssh_set_callbacks(ssh_session session, ssh_callbacks cb);
+
+
+/**
+* @brief Set the session io callback functions.
+*
+* This functions sets the session io callback functions 
+* It allows you to use your own custom network interactions
+*
+* @code
+* struct ssh_socket_io_callbacks_struct io_cb = {
+*   .userdata = data,
+*   .send = my_send_function
+*   .recv = my_recv_function
+* };
+* ssh_set_io_callbacks(session, &io_cb);
+* @endcode
+*
+* @param  session      The session to set the callback structure.
+*
+* @param  io_cb           The callback structure itself.
+*
+* @return SSH_OK on success, SSH_ERROR on error.
+*/
+LIBSSH_API int ssh_set_io_callbacks(ssh_session session, ssh_socket_io_callbacks cb);
 
 /**
  * @brief SSH channel data callback. Called when data is available on a channel
