@@ -86,6 +86,7 @@ struct ssh_socket_struct {
   ssh_buffer in_buffer;
   ssh_session session;
   ssh_socket_callbacks callbacks;
+  ssh_socket_io_callbacks io_callbacks;
   ssh_poll_handle poll_handle;
 };
 
@@ -199,7 +200,21 @@ void ssh_socket_reset(ssh_socket s){
  */
 
 void ssh_socket_set_callbacks(ssh_socket s, ssh_socket_callbacks callbacks){
-	s->callbacks=callbacks;
+    s->callbacks=callbacks;
+}
+
+/**
+* @internal
+* @brief the socket io callbacks, i.e. the callbacks to called
+* to read or write data to the socket.
+* Only useful when using an externally provided socket fd
+* @param s socket to set callbacks on.
+* @param callbacks a ssh_socket_io_callback object reference.
+*/
+
+void ssh_socket_set_io_callbacks(ssh_socket s, ssh_socket_io_callbacks io_callbacks)
+{
+    s->io_callbacks = io_callbacks;
 }
 
 /**
@@ -441,11 +456,17 @@ int ssh_socket_unix(ssh_socket s, const char *path) {
  */
 void ssh_socket_close(ssh_socket s){
   if (ssh_socket_is_open(s)) {
+    if (s->io_callbacks && s->io_callbacks->closecb)
+    {
+      s->io_callbacks->closecb(s->fd, s->io_callbacks->userdata);
+    }
+    else
+    {
+      CLOSE_SOCKET(s->fd);
+    }   
 #ifdef _WIN32
-    CLOSE_SOCKET(s->fd);
     s->last_errno = WSAGetLastError();
 #else
-    CLOSE_SOCKET(s->fd);
     s->last_errno = errno;
 #endif
   }
@@ -509,7 +530,9 @@ static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
     if (s->data_except) {
         return -1;
     }
-    if (s->fd_is_socket) {
+    if (s->io_callbacks && s->io_callbacks->recv)
+        rc = s->io_callbacks->recv(s->fd, s->io_callbacks->userdata, buffer, len);
+    else if (s->fd_is_socket) {
         rc = recv(s->fd,buffer, len, 0);
     } else {
         rc = read(s->fd,buffer, len);
@@ -546,7 +569,9 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
         return -1;
     }
 
-    if (s->fd_is_socket) {
+    if (s->io_callbacks && s->io_callbacks->send)
+        w = s->io_callbacks->send(s->fd, s->io_callbacks->userdata, buffer, len);
+    else if (s->fd_is_socket) {
         w = send(s->fd, buffer, len, flags);
     } else {
         w = write(s->fd, buffer, len);
