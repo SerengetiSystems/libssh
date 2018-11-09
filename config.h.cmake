@@ -59,6 +59,9 @@
 /* Define to 1 if you have the <openssl/aes.h> header file. */
 #cmakedefine HAVE_OPENSSL_AES_H 1
 
+/* Define to 1 if you have the <openssl/modes.h> header file. */
+#cmakedefine HAVE_OPENSSL_MODES_H 1
+
 /* Define to 1 if you have the <wspiapi.h> header file. */
 #cmakedefine HAVE_WSPIAPI_H 1
 
