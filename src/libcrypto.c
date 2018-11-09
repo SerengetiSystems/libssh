@@ -55,6 +55,10 @@
 #include <openssl/des.h>
 #endif
 
+#ifdef HAVE_OPENSSL_MODES_H
+#include <openssl/modes.h>
+#endif
+
 #if (defined(HAVE_VALGRIND_VALGRIND_H) && defined(HAVE_OPENSSL_IA32CAP_LOC))
 #include <valgrind/valgrind.h>
 #define CAN_DISABLE_AESNI
