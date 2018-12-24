@@ -548,6 +548,7 @@ int ssh_connect(ssh_session session) {
   if (session->opts.fd != SSH_INVALID_SOCKET) {
     session->session_state=SSH_SESSION_STATE_SOCKET_CONNECTED;
     ssh_socket_set_fd(session->socket, session->opts.fd);
+    ssh_socket_set_io_callbacks(session->socket, &session->socket_io_callbacks);
     ret=SSH_OK;
 #ifndef _WIN32
   } else if (session->opts.ProxyCommand != NULL){

@@ -39,6 +39,9 @@
 #include <string.h>
 
 #ifdef WITH_ZLIB
+#ifdef ZLIB_WINAPI //if zlib has ZLIB_WINAPI defined it includes windows.h so include this first
+#include <winsock2.h>
+#endif
 #include <zlib.h>
 #endif
 

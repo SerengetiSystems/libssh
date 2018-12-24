@@ -89,6 +89,9 @@ if (OPENSSL_FOUND)
     endif()
 
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
+    check_include_file(openssl/modes.h HAVE_OPENSSL_MODES_H)
+
+    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
     check_include_file(openssl/blowfish.h HAVE_OPENSSL_BLOWFISH_H)
 
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
