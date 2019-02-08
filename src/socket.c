@@ -73,23 +73,6 @@ enum ssh_socket_states_e {
 	SSH_SOCKET_CLOSED
 };
 
-struct ssh_socket_struct {
-  socket_t fd;
-  int fd_is_socket;
-  int last_errno;
-  int read_wontblock; /* reading now on socket will
-                       not block */
-  int write_wontblock;
-  int data_except;
-  enum ssh_socket_states_e state;
-  ssh_buffer out_buffer;
-  ssh_buffer in_buffer;
-  ssh_session session;
-  ssh_socket_callbacks callbacks;
-  ssh_socket_io_callbacks io_callbacks;
-  ssh_poll_handle poll_handle;
-};
-
 static int sockets_initialized = 0;
 
 static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
@@ -98,7 +81,6 @@ static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
 static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
                                            const void *buffer,
                                            uint32_t len);
-
 /**
  * \internal
  * \brief inits the socket system (windows specific)
@@ -152,6 +134,8 @@ ssh_socket ssh_socket_new(ssh_session session) {
   s->last_errno = -1;
   s->fd_is_socket = 1;
   s->session = session;
+  s->io_callbacks = NULL;
+  s->callbacks = NULL;
   s->in_buffer = ssh_buffer_new();
   if (s->in_buffer == NULL) {
     ssh_set_error_oom(session);
@@ -274,19 +258,32 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
         revents |= POLLIN;
     }
     if ((revents & POLLIN) && s->state == SSH_SOCKET_CONNECTED) {
-        s->read_wontblock = 1;
         nread = ssh_socket_unbuffered_read(s, buffer, sizeof(buffer));
         if (nread < 0) {
-            if (p != NULL) {
-                ssh_poll_remove_events(p, POLLIN);
-            }
+#ifdef _WIN32
+			if (s->last_errno == WSAEWOULDBLOCK || s->last_errno == EAGAIN)
+#else
+			if (s->last_errno == EAGAIN)
+#endif
+			{
+				SSH_LOG(SSH_LOG_TRACE, "Socket unexpectedly returned EAGAIN");
+				//skip this socket as it will block
+				s->read_wontblock = 0;
+				return -2;
+			}
+			else
+			{
+				if (p != NULL) {
+					ssh_poll_remove_events(p, POLLIN);
+				}
 
-            if (s->callbacks != NULL && s->callbacks->exception != NULL) {
-                s->callbacks->exception(SSH_SOCKET_EXCEPTION_ERROR,
-                                        s->last_errno,
-                                        s->callbacks->userdata);
-            }
-            return -2;
+				if (s->callbacks != NULL && s->callbacks->exception != NULL) {
+					s->callbacks->exception(SSH_SOCKET_EXCEPTION_ERROR,
+						s->last_errno,
+						s->callbacks->userdata);
+				}
+				return -2;
+			}
         }
         if (nread == 0) {
             if (p != NULL) {

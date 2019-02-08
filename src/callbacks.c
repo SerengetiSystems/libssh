@@ -78,7 +78,10 @@ int ssh_set_io_callbacks(ssh_session session, ssh_socket_io_callbacks io_cb) {
       "Invalid callback passed in (badly initialized)");
     return SSH_ERROR;
   }
+
   session->socket_io_callbacks = *io_cb;
+  if (session->socket)
+	  session->socket->io_callbacks = &(session->socket_io_callbacks);
   return SSH_OK;
 }
 

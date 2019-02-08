@@ -114,8 +114,11 @@ typedef unsigned long int nfds_t;
 #endif /* WIN32 */
 #endif /* HAVE_POLL */
 
+typedef int(*poll_fn)(ssh_pollfd_t *, nfds_t, int);
+
 void ssh_poll_init(void);
 void ssh_poll_cleanup(void);
+void ssh_poll_set(poll_fn mypoll);
 int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout);
 typedef struct ssh_poll_ctx_struct *ssh_poll_ctx;
 typedef struct ssh_poll_handle_struct *ssh_poll_handle;
