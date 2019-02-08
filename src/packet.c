@@ -130,6 +130,7 @@ static ssh_packet_callback default_packet_handlers[]= {
   ssh_packet_channel_failure,              // SSH2_MSG_CHANNEL_FAILURE            100
 };
 
+#define DEBUG_PACKET 1
 /** @internal
  * @brief check if the received packet is allowed for the current session state
  * @param session current ssh_session
@@ -1085,7 +1086,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
     }
 #ifdef DEBUG_PACKET
     SSH_LOG(SSH_LOG_PACKET,
-            "rcv packet cb (len=%zu, state=%s)",
+            "rcv packet cb (len=%u, state=%s)",
             receivedlen,
             session->packet_state == PACKET_STATE_INIT ?
                 "INIT" :
@@ -1103,7 +1104,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
                  */
 #ifdef DEBUG_PACKET
                 SSH_LOG(SSH_LOG_PACKET,
-                        "Waiting for more data (%zu < %u)",
+                        "Waiting for more data (%u < %u)",
                         receivedlen,
                         lenfield_blocksize);
 #endif
@@ -1179,6 +1180,8 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
                 packet_second_block = (uint8_t*)data + lenfield_blocksize + etm_packet_offset;
                 processed = to_be_read - current_macsize;
             }
+
+
 
             /* remaining encrypted bytes from the packet, MAC not included */
             packet_remaining =
