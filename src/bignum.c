@@ -43,7 +43,7 @@ ssh_string ssh_make_bignum_string(bignum num) {
   }
 
 #ifdef DEBUG_CRYPTO
-  fprintf(stderr, "%d bits, %d bytes, %d padding\n", bits, len, pad);
+  SSH_LOG(SSH_LOG_CRYPTO, "%d bits, %d bytes, %d padding", bits, len, pad);
 #endif /* DEBUG_CRYPTO */
 
   ptr = ssh_string_new(len + pad);
@@ -72,7 +72,7 @@ bignum ssh_make_string_bn(ssh_string string){
   size_t len = ssh_string_len(string);
 
 #ifdef DEBUG_CRYPTO
-  fprintf(stderr, "Importing a %d bits, %d bytes object ...\n",
+  SSH_LOG(SSH_LOG_CRYPTO, "Importing a %d bits, %d bytes object ...",
       len * 8, len);
 #endif /* DEBUG_CRYPTO */
 
@@ -113,8 +113,7 @@ void ssh_print_bignum(const char *which, const bignum num) {
   char *hex = NULL;
   hex = bignum_bn2hex(num);
 #endif
-  fprintf(stderr, "%s value: ", which);
-  fprintf(stderr, "%s\n", (hex == NULL) ? "(null)" : (char *) hex);
+  SSH_LOG(SSH_LOG_CRYPTO, "%s value: %s", which, (hex == NULL) ? "(null)" : (char *)hex);
 #ifdef HAVE_LIBGCRYPT
   SAFE_FREE(hex);
 #elif defined HAVE_LIBCRYPTO

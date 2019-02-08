@@ -1600,7 +1600,7 @@ void ssh_print_hash(enum ssh_publickey_hash_type type,
         return;
     }
 
-    fprintf(stderr, "%s\n", fingerprint);
+	SSH_LOG(SSH_LOG_CRYPTO, fingerprint);
 
     SAFE_FREE(fingerprint);
 }
@@ -1620,7 +1620,8 @@ void ssh_print_hexa(const char *descr, const unsigned char *what, size_t len) {
     if (hexa == NULL) {
       return;
     }
-    fprintf(stderr, "%s: %s\n", descr, hexa);
+
+    _ssh_log(SSH_LOG_CRYPTO, descr, hexa);
 
     free(hexa);
 }

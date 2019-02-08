@@ -81,25 +81,20 @@ struct ssh_poll_ctx_struct {
   size_t chunk_size;
 };
 
+static poll_fn ssh_poll_emu;
+
 #ifdef HAVE_POLL
 #include <poll.h>
 
 void ssh_poll_init(void) {
-    return;
+	ssh_poll_emu = poll;
 }
 
 void ssh_poll_cleanup(void) {
-    return;
-}
-
-int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout) {
-  return poll((struct pollfd *) fds, nfds, timeout);
+	ssh_poll_emu = poll;
 }
 
 #else /* HAVE_POLL */
-
-typedef int (*poll_fn)(ssh_pollfd_t *, nfds_t, int);
-static poll_fn ssh_poll_emu;
 
 #include <sys/types.h>
 
@@ -257,11 +252,16 @@ void ssh_poll_cleanup(void) {
     ssh_poll_emu = bsd_poll;
 }
 
-int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout) {
-    return (ssh_poll_emu)(fds, nfds, timeout);
+#endif /* HAVE_POLL */
+
+void ssh_poll_set(poll_fn mypoll)
+{
+	ssh_poll_emu = mypoll;
 }
 
-#endif /* HAVE_POLL */
+int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout) {
+	return (ssh_poll_emu)(fds, nfds, timeout);
+}
 
 /**
  * @brief  Allocate a new poll object, which could be used within a poll context.

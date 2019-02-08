@@ -341,7 +341,10 @@ enum {
 	SSH_LOG_PACKET,
 	/** Every function path
 	 */
-	SSH_LOG_FUNCTIONS
+	SSH_LOG_FUNCTIONS,
+	/** Encryption/Decryption results
+	 */
+	SSH_LOG_CRYPTO
 };
 /** @} */
 #define SSH_LOG_RARE SSH_LOG_WARNING
@@ -363,7 +366,8 @@ enum {
 #define SSH_LOG_DEBUG 3
 /** Get trace output, packet information, ... */
 #define SSH_LOG_TRACE 4
-
+/** Get crypto/packet output */
+#define SSH_LOG_CRYPT 5
 /** @} */
 
 enum ssh_options_e {

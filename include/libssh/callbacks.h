@@ -425,14 +425,9 @@ typedef int(*ssh_callback_recv) (socket_t socket, void *userdata, char *buffer, 
 typedef int(*ssh_callback_send) (socket_t socket, void *userdata, const char *buffer, int size);
 
 /**
-+* @brief callback to write data to the socket
-+* If this function returns less than zero
-+* it must update WSASetLastError or errno
-+* @param socket_t to write to
-+* @param userdata for callback
-+* @return < 0 on error >= 0 on success
++* @brief callback to close a user managed socket
 +*/
-typedef int(*ssh_callback_close) (socket_t socket, void *userdata);
+typedef void(*ssh_callback_close) (socket_t socket, void *userdata);
 
 /**
 * These are the callbacks exported by the socket structure

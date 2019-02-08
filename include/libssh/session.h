@@ -102,6 +102,23 @@ struct ssh_common_struct {
     int log_verbosity; /* verbosity of the log functions */
 };
 
+struct ssh_socket_struct {
+	socket_t fd;
+	int fd_is_socket;
+	int last_errno;
+	int read_wontblock; /* reading now on socket will
+						not block */
+	int write_wontblock;
+	int data_except;
+	enum ssh_socket_states_e state;
+	ssh_buffer out_buffer;
+	ssh_buffer in_buffer;
+	ssh_session session;
+	ssh_socket_callbacks callbacks;
+	ssh_socket_io_callbacks io_callbacks;
+	ssh_poll_handle poll_handle;
+};
+
 struct ssh_session_struct {
     struct ssh_common_struct common;
     struct ssh_socket_struct *socket;
