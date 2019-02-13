@@ -38,6 +38,9 @@
 #include "libssh/socket.h"
 #include "libssh/session.h"
 #include "libssh/dh.h"
+#ifdef WITH_GEX
+#include "libssh/dh-gex.h"
+#endif /* WITH_GEX */
 #include "libssh/ecdh.h"
 #include "libssh/threads.h"
 #include "libssh/misc.h"
@@ -253,6 +256,12 @@ static int dh_handshake(ssh_session session) {
         case SSH_KEX_DH_GROUP18_SHA512:
           rc = ssh_client_dh_init(session);
           break;
+#ifdef WITH_GEX
+        case SSH_KEX_DH_GEX_SHA1:
+        case SSH_KEX_DH_GEX_SHA256:
+          rc = ssh_client_dhgex_init(session);
+          break;
+#endif /* WITH_GEX */
 #ifdef HAVE_ECDH
         case SSH_KEX_ECDH_SHA2_NISTP256:
         case SSH_KEX_ECDH_SHA2_NISTP384:
@@ -274,7 +283,6 @@ static int dh_handshake(ssh_session session) {
           return SSH_ERROR;
       }
 
-      session->dh_handshake_state = DH_STATE_INIT_SENT;
     case DH_STATE_INIT_SENT:
     	/* wait until ssh_packet_dh_reply is called */
     	break;
@@ -746,7 +754,7 @@ error:
 }
 
 const char *ssh_copyright(void) {
-    return SSH_STRINGIFY(LIBSSH_VERSION) " (c) 2003-2018 "
+    return SSH_STRINGIFY(LIBSSH_VERSION) " (c) 2003-2019 "
            "Aris Adamantiadis, Andreas Schneider "
            "and libssh contributors. "
            "Distributed under the LGPL, please refer to COPYING "

@@ -22,7 +22,7 @@ set(APPLICATION_NAME ${PROJECT_NAME})
 #     Increment AGE. Set REVISION to 0
 #   If the source code was changed, but there were no interface changes:
 #     Increment REVISION.
-set(LIBRARY_VERSION "4.7.3")
+set(LIBRARY_VERSION "4.7.4")
 set(LIBRARY_SOVERSION "4")
 
 # where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
@@ -223,6 +223,7 @@ message(STATUS "libnacl support: ${WITH_NACL}")
 message(STATUS "SFTP support: ${WITH_SFTP}")
 message(STATUS "Server support : ${WITH_SERVER}")
 message(STATUS "GSSAPI support : ${WITH_GSSAPI}")
+message(STATUS "GEX support : ${WITH_GEX}")
 message(STATUS "Pcap debugging support : ${WITH_PCAP}")
 message(STATUS "With static library: ${WITH_STATIC_LIB}")
 message(STATUS "Unit testing: ${UNIT_TESTING}")

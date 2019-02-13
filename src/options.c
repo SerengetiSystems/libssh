@@ -350,37 +350,6 @@ int ssh_options_set_algo(ssh_session session,
  *                \n
  *                See the corresponding numbers in libssh.h.
  *
- *              - SSH_OPTIONS_AUTH_CALLBACK:
- *                Set a callback to use your own authentication function
- *                (function pointer).
- *
- *              - SSH_OPTIONS_AUTH_USERDATA:
- *                Set the user data passed to the authentication
- *                function (generic pointer).
- *
- *              - SSH_OPTIONS_LOG_CALLBACK:
- *                Set a callback to use your own logging function
- *                (function pointer).
- *
- *              - SSH_OPTIONS_LOG_USERDATA:
- *                Set the user data passed to the logging function
- *                (generic pointer).
- *
- *              - SSH_OPTIONS_STATUS_CALLBACK:
- *                Set a callback to show connection status in realtime
- *                (function pointer).\n
- *                \n
- *                @code
- *                fn(void *arg, float status)
- *                @endcode
- *                \n
- *                During ssh_connect(), libssh will call the callback
- *                with status from 0.0 to 1.0.
- *
- *              - SSH_OPTIONS_STATUS_ARG:
- *                Set the status argument which should be passed to the
- *                status callback (generic pointer).
- *
  *              - SSH_OPTIONS_CIPHERS_C_S:
  *                Set the symmetric cipher client to server (const char *,
  *                comma-separated list).
@@ -393,6 +362,14 @@ int ssh_options_set_algo(ssh_session session,
  *                Set the key exchange method to be used (const char *,
  *                comma-separated list). ex:
  *                "ecdh-sha2-nistp256,diffie-hellman-group14-sha1,diffie-hellman-group1-sha1"
+ *
+ *              - SSH_OPTIONS_HMAC_C_S:
+ *                Set the Message Authentication Code algorithm client to server
+ *                (const char *, comma-separated list).
+ *
+ *              - SSH_OPTIONS_HMAC_S_C:
+ *                Set the Message Authentication Code algorithm server to client
+ *                (const char *, comma-separated list).
  *
  *              - SSH_OPTIONS_HOSTKEYS:
  *                Set the preferred server host key types (const char *,
@@ -474,6 +451,18 @@ int ssh_options_set_algo(ssh_session session,
  *                and system-wide OpenSSH configuration files. LibSSH
  *                automatically uses these configuration files unless
  *                you provide it with this option or with different file (bool).
+ *
+ *              - SSH_OPTIONS_REKEY_DATA
+ *                Set the data limit that can be transferred with a single
+ *                key in bytes. RFC 4253 Section 9 recommends 1GB of data, while
+ *                RFC 4344 provides more specific restrictions, that are applied
+ *                automatically. When specified, the lower value will be used.
+ *                (uint64_t, 0=default)
+ *
+ *              - SSH_OPTIONS_REKEY_TIME
+ *                Set the time limit for a session before intializing a rekey
+ *                in seconds. RFC 4253 Section 9 recommends one hour.
+ *                (uint32_t, 0=off)
  *
  * @param  value The value to set. This is a generic pointer and the
  *               datatype which is used should be set according to the
@@ -1012,6 +1001,30 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 session->opts.config_processed = !(*x);
             }
             break;
+        case SSH_OPTIONS_REKEY_DATA:
+            if (value == NULL) {
+                ssh_set_error_invalid(session);
+                return -1;
+            } else {
+                uint64_t *x = (uint64_t *)value;
+                session->opts.rekey_data = *x;
+            }
+            break;
+        case SSH_OPTIONS_REKEY_TIME:
+            if (value == NULL) {
+                ssh_set_error_invalid(session);
+                return -1;
+            } else {
+                uint32_t *x = (uint32_t *)value;
+                if ((*x * 1000) < *x) {
+                    ssh_set_error(session, SSH_REQUEST_DENIED,
+                                  "The provided value (%" PRIu32 ") for rekey"
+                                  " time is too large", *x);
+                    return -1;
+                }
+                session->opts.rekey_time = (*x) * 1000;
+            }
+            break;
         default:
             ssh_set_error(session, SSH_REQUEST_DENIED, "Unknown ssh option %d", type);
             return -1;
@@ -1488,6 +1501,26 @@ static int ssh_bind_set_key(ssh_bind sshbind, char **key_loc,
     return 0;
 }
 
+static int ssh_bind_set_algo(ssh_bind sshbind,
+                             enum ssh_kex_types_e algo,
+                             const char *list)
+{
+    char *p = NULL;
+
+    p = ssh_keep_known_algos(algo, list);
+    if (p == NULL) {
+        ssh_set_error(sshbind, SSH_REQUEST_DENIED,
+                      "Setting method: no algorithm for method \"%s\" (%s)",
+                      ssh_kex_get_description(algo), list);
+        return -1;
+    }
+
+    SAFE_FREE(sshbind->wanted_methods[algo]);
+    sshbind->wanted_methods[algo] = p;
+
+    return 0;
+}
+
 /**
  * @brief Set options for an SSH server bind.
  *
@@ -1552,6 +1585,28 @@ static int ssh_bind_set_key(ssh_bind sshbind, char **key_loc,
  *                      - SSH_BIND_OPTIONS_IMPORT_KEY:
  *                        Set the Private Key for the server directly (ssh_key)
  *
+ *                      - SSH_BIND_OPTIONS_CIPHERS_C_S:
+ *                        Set the symmetric cipher client to server (const char *,
+ *                        comma-separated list).
+ *
+ *                      - SSH_BIND_OPTIONS_CIPHERS_S_C:
+ *                        Set the symmetric cipher server to client (const char *,
+ *                        comma-separated list).
+ *
+ *                      - SSH_BIND_OPTIONS_KEY_EXCHANGE:
+ *                        Set the key exchange method to be used (const char *,
+ *                        comma-separated list). ex:
+ *                        "ecdh-sha2-nistp256,diffie-hellman-group14-sha1"
+ *
+ *                      - SSH_BIND_OPTIONS_HMAC_C_S:
+ *                        Set the Message Authentication Code algorithm client
+ *                        to server (const char *, comma-separated list).
+ *
+ *                      - SSH_BIND_OPTIONS_HMAC_S_C:
+ *                        Set the Message Authentication Code algorithm server
+ *                        to client (const char *, comma-separated list).
+ *
+ *
  * @param  value        The value to set. This is a generic pointer and the
  *                      datatype which should be used is described at the
  *                      corresponding value of type above.
@@ -1559,8 +1614,10 @@ static int ssh_bind_set_key(ssh_bind sshbind, char **key_loc,
  * @return              0 on success, < 0 on error, invalid option, or parameter.
  */
 int ssh_bind_options_set(ssh_bind sshbind, enum ssh_bind_options_e type,
-    const void *value) {
+    const void *value)
+{
   char *p, *q;
+  const char *v;
   int i, rc;
 
   if (sshbind == NULL) {
@@ -1782,6 +1839,58 @@ int ssh_bind_options_set(ssh_bind sshbind, enum ssh_bind_options_e type,
         }
       }
       break;
+    case SSH_BIND_OPTIONS_CIPHERS_C_S:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            if (ssh_bind_set_algo(sshbind, SSH_CRYPT_C_S, v) < 0)
+                return -1;
+        }
+        break;
+    case SSH_BIND_OPTIONS_CIPHERS_S_C:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            if (ssh_bind_set_algo(sshbind, SSH_CRYPT_S_C, v) < 0)
+                return -1;
+        }
+        break;
+    case SSH_BIND_OPTIONS_KEY_EXCHANGE:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            rc = ssh_bind_set_algo(sshbind, SSH_KEX, v);
+            if (rc < 0) {
+                return -1;
+            }
+        }
+        break;
+    case SSH_BIND_OPTIONS_HMAC_C_S:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            if (ssh_bind_set_algo(sshbind, SSH_MAC_C_S, v) < 0)
+                return -1;
+        }
+        break;
+     case SSH_BIND_OPTIONS_HMAC_S_C:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            if (ssh_bind_set_algo(sshbind, SSH_MAC_S_C, v) < 0)
+                return -1;
+        }
+        break;
     default:
       ssh_set_error(sshbind, SSH_REQUEST_DENIED, "Unknown ssh option %d", type);
       return -1;

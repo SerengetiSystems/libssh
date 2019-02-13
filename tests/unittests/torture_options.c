@@ -402,7 +402,7 @@ static void torture_options_set_knownhosts(void **state)
     /* ssh_options_apply() should set the path to correct value */
     rc = ssh_options_apply(session);
     assert_ssh_return_code(session, rc);
-    assert_true(session->opts.knownhosts != NULL);
+    assert_non_null(session->opts.knownhosts);
 }
 
 static void torture_options_get_knownhosts(void **state)
@@ -552,7 +552,7 @@ static void torture_options_config_match(void **state)
     rv = ssh_options_parse_config(session, "test_config");
     assert_ssh_return_code_equal(session, rv, SSH_ERROR);
 
-    /* The Match canonical keyword is ignored */
+    /* The Match canonical keyword is the same as match all */
     torture_reset_config(session);
     config = fopen("test_config", "w");
     assert_non_null(config);
@@ -565,7 +565,7 @@ static void torture_options_config_match(void **state)
 
     rv = ssh_options_parse_config(session, "test_config");
     assert_ssh_return_code_equal(session, rv, SSH_OK);
-    assert_int_equal(session->opts.port, 34);
+    assert_int_equal(session->opts.port, 33);
 
     session->opts.port = 0;
 

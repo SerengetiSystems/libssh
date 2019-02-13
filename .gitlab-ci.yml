@@ -34,6 +34,7 @@ fedora/openssl_1.1.x/x86_64:
     -DPICKY_DEVELOPER=ON
     -DWITH_BLOWFISH_CIPHER=ON
     -DWITH_SFTP=ON -DWITH_SERVER=ON -DWITH_ZLIB=ON -DWITH_PCAP=ON
+    -DWITH_DEBUG_CRYPTO=ON -DWITH_DEBUG_PACKET=ON -DWITH_DEBUG_CALLTRACE=ON
     -DUNIT_TESTING=ON -DCLIENT_TESTING=ON -DSERVER_TESTING=ON .. &&
     make -j$(nproc) && ctest --output-on-failure
   tags:
@@ -53,7 +54,7 @@ fedora/openssl_1.1.x/x86_64/minimal:
     -DCMAKE_BUILD_TYPE=RelWithDebInfo
     -DPICKY_DEVELOPER=ON
     -DWITH_SFTP=OFF -DWITH_SERVER=OFF -DWITH_ZLIB=OFF -DWITH_PCAP=OFF
-    -DUNIT_TESTING=ON -DCLIENT_TESTING=ON .. &&
+    -DUNIT_TESTING=ON -DCLIENT_TESTING=ON -DWITH_GEX=OFF .. &&
     make -j$(nproc) && ctest --output-on-failure
   tags:
   - shared
@@ -87,11 +88,34 @@ fedora/address-sanitizer:
     paths:
       - obj/
 
+# This is disabled as it report OpenSSL issues
+# It also has ethe same issues with cwrap as AddressSanitizer
+.fedora/memory-sanitizer:
+  image: $CI_REGISTRY/$BUILD_IMAGES_PROJECT:$FEDORA_BUILD
+  script:
+  - mkdir -p obj && cd obj && cmake
+    -DCMAKE_BUILD_TYPE=MemorySanitizer
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DPICKY_DEVELOPER=ON
+    -DWITH_SFTP=ON -DWITH_SERVER=ON -DWITH_ZLIB=ON -DWITH_PCAP=ON
+    -DUNIT_TESTING=ON ..
+    && make -j$(nproc) && ctest --output-on-failure
+  tags:
+  - shared
+  except:
+  - tags
+  artifacts:
+    expire_in: 1 week
+    when: on_failure
+    paths:
+      - obj/
+
 fedora/undefined-sanitizer:
   image: $CI_REGISTRY/$BUILD_IMAGES_PROJECT:$FEDORA_BUILD
   script:
   - mkdir -p obj && cd obj && cmake
-    -DCMAKE_C_FLAGS="-fsanitize=undefined -fsanitize=null -fsanitize=alignment -fno-sanitize-recover"
+    -DCMAKE_BUILD_TYPE=UndefinedSanitizer
+    -DPICKY_DEVELOPER=ON
     -DWITH_SFTP=ON -DWITH_SERVER=ON -DWITH_ZLIB=ON -DWITH_PCAP=ON
     -DUNIT_TESTING=ON -DCLIENT_TESTING=ON -DSERVER_TESTING=ON ..
     && make -j$(nproc) && ctest --output-on-failure
@@ -272,7 +296,7 @@ fedora/mingw32:
     paths:
       - obj/
 
-Debian.cross.mips-linux-gnu:
+.Debian.cross.mips-linux-gnu:
   <<: *Debian_cross_template
 
 tumbleweed/openssl_1.1.x/x86_64/gcc:
@@ -454,6 +478,7 @@ visualstudio/x86_64:
   - branches@libssh/libssh-mirror
   - branches@ansasaki/libssh-mirror
   - branches@cryptomilk/libssh-mirror
+  - branches@jjelen/libssh-mirror
   artifacts:
     expire_in: 1 week
     when: on_failure
@@ -480,6 +505,7 @@ visualstudio/x86:
   - branches@libssh/libssh-mirror
   - branches@ansasaki/libssh-mirror
   - branches@cryptomilk/libssh-mirror
+  - branches@jjelen/libssh-mirror
   artifacts:
     expire_in: 1 week
     when: on_failure

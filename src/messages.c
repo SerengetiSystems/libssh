@@ -448,7 +448,7 @@ static void ssh_message_queue(ssh_session session, ssh_message message)
 
     if (session->ssh_message_list == NULL) {
         session->ssh_message_list = ssh_list_new();
-        if (session->ssh_message_list != NULL) {
+        if (session->ssh_message_list == NULL) {
             /*
              * If the message list couldn't be allocated, the message can't be
              * enqueued
@@ -683,12 +683,12 @@ static ssh_buffer ssh_msg_userauth_build_digest(ssh_session session,
                                                 const char *service,
                                                 ssh_string algo)
 {
-    struct ssh_crypto_struct *crypto =
-        session->current_crypto ? session->current_crypto :
-                                  session->next_crypto;
+    struct ssh_crypto_struct *crypto = NULL;
     ssh_buffer buffer;
     ssh_string str=NULL;
     int rc;
+
+    crypto = ssh_packet_get_current_crypto(session, SSH_DIRECTION_IN);
 
     buffer = ssh_buffer_new();
     if (buffer == NULL) {

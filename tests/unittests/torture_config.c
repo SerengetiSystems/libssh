@@ -19,6 +19,7 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define LIBSSH_TESTCONFIG9 "libssh_testconfig9.tmp"
 #define LIBSSH_TESTCONFIG10 "libssh_testconfig10.tmp"
 #define LIBSSH_TESTCONFIG11 "libssh_testconfig11.tmp"
+#define LIBSSH_TESTCONFIG12 "libssh_testconfig12.tmp"
 #define LIBSSH_TESTCONFIGGLOB "libssh_testc*[36].tmp"
 
 #define USERNAME "testuser"
@@ -48,6 +49,7 @@ static int setup_config_files(void **state)
     unlink(LIBSSH_TESTCONFIG9);
     unlink(LIBSSH_TESTCONFIG10);
     unlink(LIBSSH_TESTCONFIG11);
+    unlink(LIBSSH_TESTCONFIG12);
 
     torture_write_file(LIBSSH_TESTCONFIG1,
                        "User "USERNAME"\nInclude "LIBSSH_TESTCONFIG2"\n\n");
@@ -129,6 +131,11 @@ static int setup_config_files(void **state)
                        "\tHostName nonuser-testhost.com\n"
                        "Match all\n"
                        "\tHostName all-matched.com\n"
+                       /* Unsupported options */
+                       "Match originalhost example\n"
+                       "\tHostName original-example.com\n"
+                       "Match localuser guest\n"
+                       "\tHostName local-guest.com\n"
                        "");
 
     /* ProxyJump */
@@ -151,6 +158,26 @@ static int setup_config_files(void **state)
                        "\tProxyCommand "PROXYCMD"\n"
                        "Host ipv6\n"
                        "\tProxyJump [2620:52:0::fed]\n"
+                       "");
+
+    /* RekeyLimit combinations */
+    torture_write_file(LIBSSH_TESTCONFIG12,
+                       "Host default\n"
+                       "\tRekeyLimit default none\n"
+                       "Host data1\n"
+                       "\tRekeyLimit 42G\n"
+                       "Host data2\n"
+                       "\tRekeyLimit 31M\n"
+                       "Host data3\n"
+                       "\tRekeyLimit 521K\n"
+                       "Host time1\n"
+                       "\tRekeyLimit default 3D\n"
+                       "Host time2\n"
+                       "\tRekeyLimit default 2h\n"
+                       "Host time3\n"
+                       "\tRekeyLimit default 160m\n"
+                       "Host time4\n"
+                       "\tRekeyLimit default 9600\n"
                        "");
 
     session = ssh_new();
@@ -176,6 +203,7 @@ static int teardown(void **state)
     unlink(LIBSSH_TESTCONFIG9);
     unlink(LIBSSH_TESTCONFIG10);
     unlink(LIBSSH_TESTCONFIG11);
+    unlink(LIBSSH_TESTCONFIG12);
 
     ssh_free(*state);
 
@@ -381,34 +409,34 @@ static void torture_config_match(void **state)
     /* Without any settings we should get all-matched.com hostname */
     ssh_options_set(session, SSH_OPTIONS_HOST, "unmatched");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "all-matched.com");
 
     /* Hostname example does simple hostname matching */
     torture_reset_config(session);
     ssh_options_set(session, SSH_OPTIONS_HOST, "example");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "example.com");
 
     /* We can match also both hosts from a comma separated list */
     torture_reset_config(session);
     ssh_options_set(session, SSH_OPTIONS_HOST, "example1");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "exampleN");
 
     torture_reset_config(session);
     ssh_options_set(session, SSH_OPTIONS_HOST, "example2");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "exampleN");
 
     /* We can match by user */
     torture_reset_config(session);
     ssh_options_set(session, SSH_OPTIONS_USER, "guest");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "guest.com");
 
     /* We can combine two options on a single line to match both of them */
@@ -416,7 +444,7 @@ static void torture_config_match(void **state)
     ssh_options_set(session, SSH_OPTIONS_USER, "tester");
     ssh_options_set(session, SSH_OPTIONS_HOST, "testhost");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "testhost.com");
 
     /* We can also negate conditions */
@@ -424,8 +452,103 @@ static void torture_config_match(void **state)
     ssh_options_set(session, SSH_OPTIONS_USER, "not-tester");
     ssh_options_set(session, SSH_OPTIONS_HOST, "testhost");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
-    assert_true(ret == 0);
+    assert_ssh_return_code(session, ret);
     assert_string_equal(session->opts.host, "nonuser-testhost.com");
+
+    /* Match final is not completely supported, but should do quite much the
+     * same as "match all". The trailing "all" is not mandatory. */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match final all\n"
+                       "\tHostName final-all.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code(session, ret);
+    assert_string_equal(session->opts.host, "final-all.com");
+
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match final\n"
+                       "\tHostName final.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code(session, ret);
+    assert_string_equal(session->opts.host, "final.com");
+
+    /* Match canonical is not completely supported, but should do quite much the
+     * same as "match all". The trailing "all" is not mandatory. */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match canonical all\n"
+                       "\tHostName canonical-all.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code(session, ret);
+    assert_string_equal(session->opts.host, "canonical-all.com");
+
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match canonical all\n"
+                       "\tHostName canonical.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code(session, ret);
+    assert_string_equal(session->opts.host, "canonical.com");
+
+    /* Try to create some invalid configurations */
+    /* Missing argument to Match*/
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match\n"
+                       "\tHost missing.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
+
+    /* Missing argument to unsupported option originalhost */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match originalhost\n"
+                       "\tHost originalhost.com\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
+
+    /* Missing argument to unsupported option localuser */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match localuser\n"
+                       "\tUser localuser2\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
+
+    /* Missing argument to option user*/
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match user\n"
+                       "\tUser user2\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
+
+    /* Missing argument to option host */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match host\n"
+                       "\tUser host2\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
+
+    /* Missing argument to unsupported option exec */
+    torture_write_file(LIBSSH_TESTCONFIG10,
+                       "Match exec\n"
+                       "\tUser exec\n"
+                       "");
+    torture_reset_config(session);
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG10);
+    assert_ssh_return_code_equal(session, ret, SSH_ERROR);
 }
 
 /**
@@ -637,6 +760,80 @@ static void torture_config_proxyjump(void **state) {
     assert_ssh_return_code_equal(session, ret, SSH_ERROR);
 }
 
+/**
+ * @brief Verify the configuration parser handles all the possible
+ * versions of RekeyLimit configuration option.
+ */
+static void torture_config_rekey(void **state)
+{
+    ssh_session session = *state;
+    int ret = 0;
+
+    /* Default values */
+    ssh_options_set(session, SSH_OPTIONS_HOST, "default");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 0);
+    assert_int_equal(session->opts.rekey_time, 0);
+
+    /* 42 GB */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "data1");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, (long long) 42 * 1024 * 1024 * 1024);
+    assert_int_equal(session->opts.rekey_time, 0);
+
+    /* 41 MB */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "data2");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 31 * 1024 * 1024);
+    assert_int_equal(session->opts.rekey_time, 0);
+
+    /* 521 KB */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "data3");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 521 * 1024);
+    assert_int_equal(session->opts.rekey_time, 0);
+
+    /* default 3D */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "time1");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 0);
+    assert_int_equal(session->opts.rekey_time, 3 * 24 * 60 * 60 * 1000);
+
+    /* default 2h */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "time2");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 0);
+    assert_int_equal(session->opts.rekey_time, 2 * 60 * 60 * 1000);
+
+    /* default 160m */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "time3");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 0);
+    assert_int_equal(session->opts.rekey_time, 160 * 60 * 1000);
+
+    /* default 9600 [s] */
+    torture_reset_config(session);
+    ssh_options_set(session, SSH_OPTIONS_HOST, "time4");
+    ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
+    assert_ssh_return_code(session, ret);
+    assert_int_equal(session->opts.rekey_data, 0);
+    assert_int_equal(session->opts.rekey_time, 9600 * 1000);
+
+}
+
 int torture_run_tests(void) {
     int rc;
     struct CMUnitTest tests[] = {
@@ -648,6 +845,7 @@ int torture_run_tests(void) {
         cmocka_unit_test(torture_config_unknown),
         cmocka_unit_test(torture_config_match),
         cmocka_unit_test(torture_config_proxyjump),
+        cmocka_unit_test(torture_config_rekey),
     };
 
 

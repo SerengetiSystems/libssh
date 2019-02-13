@@ -426,9 +426,6 @@ HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
     return NULL;
   }
 
-#ifndef OLD_CRYPTO
-  HMAC_CTX_reset(ctx); // openssl 0.9.7 requires it.
-#endif
 
   switch(type) {
     case SSH_HMAC_SHA1:
@@ -461,14 +458,14 @@ void hmac_update(HMACCTX ctx, const void *data, unsigned long len) {
 void hmac_final(HMACCTX ctx, unsigned char *hashmacbuf, unsigned int *len) {
   HMAC_Final(ctx,hashmacbuf,len);
 
-#ifndef OLD_CRYPTO
+#if OPENSSL_VERSION_NUMBER > 0x10100000L
   HMAC_CTX_free(ctx);
   ctx = NULL;
 #else
   HMAC_cleanup(ctx);
-#endif
-
   SAFE_FREE(ctx);
+  ctx = NULL;
+#endif
 }
 
 static void evp_cipher_init(struct ssh_cipher_struct *cipher) {
@@ -741,7 +738,8 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
 {
     size_t authlen, aadlen;
     u_char lastiv[1];
-    int outlen = 0;
+    int tmplen = 0;
+    size_t outlen;
     int rc;
 
     (void) seq;
@@ -762,10 +760,11 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
     /* Pass over the authenticated data (not encrypted) */
     rc = EVP_EncryptUpdate(cipher->ctx,
                            NULL,
-                           &outlen,
+                           &tmplen,
                            (unsigned char *)in,
                            (int)aadlen);
-    if (rc == 0 || outlen != (int)aadlen) {
+    outlen = tmplen;
+    if (rc == 0 || outlen != aadlen) {
         SSH_LOG(SSH_LOG_WARNING, "Failed to pass authenticated data");
         return;
     }
@@ -774,9 +773,10 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
     /* Encrypt the rest of the data */
     rc = EVP_EncryptUpdate(cipher->ctx,
                            (unsigned char *)out + aadlen,
-                           &outlen,
+                           &tmplen,
                            (unsigned char *)in + aadlen,
                            (int)len - aadlen);
+    outlen = tmplen;
     if (rc != 1 || outlen != (int)len - aadlen) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_EncryptUpdate failed");
         return;
@@ -785,7 +785,7 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
     /* compute tag */
     rc = EVP_EncryptFinal(cipher->ctx,
                           NULL,
-                          &outlen);
+                          &tmplen);
     if (rc < 0) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_EncryptFinal failed: Failed to create a tag");
         return;
