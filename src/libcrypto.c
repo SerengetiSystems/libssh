@@ -618,7 +618,7 @@ static void evp_cipher_encrypt(struct ssh_cipher_struct *cipher,
     }
     if (outlen != (int)len){
         SSH_LOG(SSH_LOG_WARNING,
-                "EVP_EncryptUpdate: output size %d for %zu in",
+                "EVP_EncryptUpdate: output size %d for " SIZET_SPECIFIER " in",
                 outlen,
                 len);
         return;
@@ -644,7 +644,7 @@ static void evp_cipher_decrypt(struct ssh_cipher_struct *cipher,
     }
     if (outlen != (int)len){
         SSH_LOG(SSH_LOG_WARNING,
-                "EVP_DecryptUpdate: output size %d for %zu in",
+                "EVP_DecryptUpdate: output size %d for " SIZET_SPECIFIER " in",
                 outlen,
                 len);
         return;

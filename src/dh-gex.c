@@ -442,7 +442,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
             if (rc == EOF) {
                 break;
             }
-            SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line %zu", line);
+			SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line " SIZET_SPECIFIER, line);
             do {
                 firstbyte = getc(moduli);
             } while(firstbyte != '\n' && firstbyte != EOF);

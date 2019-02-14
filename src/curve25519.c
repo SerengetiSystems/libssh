@@ -251,7 +251,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_curve25519_init){
     if (ssh_string_len(q_c_string) != CURVE25519_PUBKEY_SIZE){
         ssh_set_error(session,
                       SSH_FATAL,
-                      "Incorrect size for server Curve25519 public key: %zu",
+					  "Incorrect size for server Curve25519 public key:  " SIZET_SPECIFIER,
                       ssh_string_len(q_c_string));
         ssh_string_free(q_c_string);
         goto error;
