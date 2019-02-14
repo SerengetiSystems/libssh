@@ -44,6 +44,8 @@ int ssh_dh_get_next_server_publickey_blob(ssh_session session,
 void ssh_server_dh_init(ssh_session session);
 #endif /* WITH_SERVER */
 
+int ssh_set_moduli(const char *file);
+
 int ssh_dh_init_common(ssh_session session);
 void ssh_dh_cleanup(struct ssh_crypto_struct *crypto);
 int ssh_dh_generate_secret(ssh_session session, bignum dest);

@@ -270,11 +270,67 @@ error:
 
 #ifdef WITH_SERVER
 
-#define MODULI_FILE "/etc/ssh/moduli"
+#define DEFAULT_MODULI_FILE "/etc/ssh/moduli"
 /* 2     "Safe" prime; (p-1)/2 is also prime. */
 #define SAFE_PRIME 2
 /* 0x04  Probabilistic Miller-Rabin primality tests. */
 #define PRIM_TEST_REQUIRED 0x04
+
+static const char *moduli_file = DEFAULT_MODULI_FILE;
+
+//dont' let file go out of scope or this will break
+int ssh_set_moduli(const char *file)
+{
+	char timestamp[32] = { 0 };
+	char generator[32] = { 0 };
+	char modulus[4096] = { 0 };
+	unsigned int type, tests, tries, size;
+	int firstbyte;
+	int rc;
+	size_t line = 0;
+	FILE *moduli = fopen(file, "r");
+	if (moduli == NULL) {
+		SSH_LOG(SSH_LOG_WARNING,
+			"Unable to open moduli file: %s",
+			strerror(errno));
+		return SSH_ERROR;
+	}
+	for (;;) {
+		line++;
+		firstbyte = getc(moduli);
+		if (firstbyte == '#'){
+			do {
+				firstbyte = getc(moduli);
+			} while (firstbyte != '\n' && firstbyte != EOF);
+			continue;
+		}
+		if (firstbyte == EOF) {
+			SSH_LOG(SSH_LOG_WARNING,
+				"Unable to read moduli file");
+			return SSH_ERROR;
+		}
+		ungetc(firstbyte, moduli);
+		rc = fscanf(moduli,
+			"%31s %u %u %u %u %31s %4095s\n",
+			timestamp,
+			&type,
+			&tests,
+			&tries,
+			&size,
+			generator,
+			modulus);
+		if (rc != 7){
+			SSH_LOG(SSH_LOG_WARNING,
+				"Unable to parse moduli file");
+			return SSH_ERROR;
+		}
+		else
+			break;
+	}
+	fclose(moduli);
+	moduli_file = file;
+	return 0;
+}
 
 /**
  * @internal
@@ -354,11 +410,11 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
     char timestamp[32] = {0};
     char generator[32] = {0};
     char modulus[4096] = {0};
-    size_t type, tests, tries, size, proposed_size;
+	uint32_t type, tests, tries, size, proposed_size;
     int firstbyte;
     int rc;
-    size_t line = 0;
-    size_t best_nlines = 0;
+	uint32_t line = 0;
+	uint32_t best_nlines = 0;
 
     for(;;) {
         line++;
@@ -374,7 +430,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
         }
         ungetc(firstbyte, moduli);
         rc = fscanf(moduli,
-                    "%31s %zu %zu %zu %zu %31s %4095s\n",
+			        "%31s %u %u %u %u %31s %4095s\n",
                     timestamp,
                     &type,
                     &tests,
@@ -425,7 +481,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
     }
     if (*best_size != 0) {
         SSH_LOG(SSH_LOG_INFO,
-                "Selected %zu bits modulus out of %zu candidates in %zu lines",
+                "Selected %u bits modulus out of %u candidates in %u lines",
                 *best_size,
                 best_nlines - 1,
                 line);
@@ -462,7 +518,7 @@ static int ssh_retrieve_dhgroup(uint32_t pmin,
     char *modulus = NULL;
     int rc;
 
-    moduli = fopen(MODULI_FILE, "r");
+	moduli = fopen(moduli_file, "r");
     if (moduli == NULL) {
         SSH_LOG(SSH_LOG_WARNING,
                 "Unable to open moduli file: %s",
