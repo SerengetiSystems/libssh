@@ -45,6 +45,14 @@
 # endif
 #endif /* !defined(HAVE_STRTOULL) */
 
+#ifndef SIZET_SPECIFIER
+#ifdef _MSC_VER
+#define SIZET_SPECIFIER "%Iu"
+#else
+#define SIZET_SPECIFIER "%zu"
+#endif
+#endif
+
 #if !defined(HAVE_STRNDUP)
 char *strndup(const char *s, size_t n);
 #endif /* ! HAVE_STRNDUP */
