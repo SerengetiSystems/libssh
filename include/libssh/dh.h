@@ -68,6 +68,12 @@ int ssh_client_dh_init(ssh_session session);
 #ifdef WITH_SERVER
 void ssh_server_dh_init(ssh_session session);
 #endif /* WITH_SERVER */
+
+int ssh_set_moduli(const char *file);
+
+int ssh_dh_init_common(ssh_session session);
+void ssh_dh_cleanup(struct ssh_crypto_struct *crypto);
+int ssh_dh_generate_secret(ssh_session session, bignum dest);
 int ssh_server_dh_process_init(ssh_session session, ssh_buffer packet);
 int ssh_fallback_group(uint32_t pmax, bignum *p, bignum *g);
 bool ssh_dh_is_known_group(bignum modulus, bignum generator);
