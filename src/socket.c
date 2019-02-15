@@ -570,7 +570,8 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
 #else
     s->last_errno = errno;
 #endif
-    s->write_wontblock = 0;
+	if (w < len) // shouldn't assume it will block unless we couldn't send it all
+		s->write_wontblock = 0;
     /* Reactive the POLLOUT detector in the poll multiplexer system */
     if (s->poll_handle) {
         SSH_LOG(SSH_LOG_PACKET, "Enabling POLLOUT for socket");
