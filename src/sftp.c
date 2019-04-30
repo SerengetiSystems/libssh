@@ -298,6 +298,32 @@ int sftp_server_init(sftp_session sftp){
 
   return 0;
 }
+
+void sftp_server_free(sftp_session sftp)
+{
+    sftp_request_queue ptr;
+
+    if (sftp == NULL) {
+        return;
+    }
+
+    ptr = sftp->queue;
+    while(ptr) {
+        sftp_request_queue old;
+        sftp_message_free(ptr->message);
+        old = ptr->next;
+        SAFE_FREE(ptr);
+        ptr = old;
+    }
+
+    SAFE_FREE(sftp->handles);
+    SSH_BUFFER_FREE(sftp->read_packet->payload);
+    SAFE_FREE(sftp->read_packet);
+
+    sftp_ext_free(sftp->ext);
+
+    SAFE_FREE(sftp);
+}
 #endif /* WITH_SERVER */
 
 void sftp_free(sftp_session sftp)
@@ -308,17 +334,20 @@ void sftp_free(sftp_session sftp)
         return;
     }
 
-    ssh_channel_send_eof(sftp->channel);
-    ptr = sftp->queue;
-    while(ptr) {
-        sftp_request_queue old;
-        sftp_message_free(ptr->message);
-        old = ptr->next;
-        SAFE_FREE(ptr);
-        ptr = old;
-    }
+    if (sftp->channel != NULL) {
+        ssh_channel_send_eof(sftp->channel);
+        ptr = sftp->queue;
+        while(ptr) {
+            sftp_request_queue old;
+            sftp_message_free(ptr->message);
+            old = ptr->next;
+            SAFE_FREE(ptr);
+            ptr = old;
+        }
 
-    ssh_channel_free(sftp->channel);
+        ssh_channel_free(sftp->channel);
+        sftp->channel = NULL;
+    }
 
     SAFE_FREE(sftp->handles);
     SSH_BUFFER_FREE(sftp->read_packet->payload);

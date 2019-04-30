@@ -249,6 +249,7 @@ static int pkd_exec_hello(int fd, struct pkd_daemon_args *args)
     const char *default_kex = NULL;
     char *all_kex = NULL;
     size_t kex_len = 0;
+    const uint64_t rekey_data_limit = args->rekey_data_limit;
 
     pkd_state.eof_received = 0;
     pkd_state.close_received  = 0;
@@ -311,6 +312,12 @@ static int pkd_exec_hello(int fd, struct pkd_daemon_args *args)
         goto outclose;
     }
 
+    rc = ssh_options_set(s, SSH_OPTIONS_REKEY_DATA, &rekey_data_limit);
+    if (rc != 0) {
+        pkderr("ssh_options_set rekey data: %s\n", ssh_get_error(s));
+        goto outclose;
+    }
+
     /*
      * ssh_bind_accept loads host key as side-effect.  If this
      * succeeds, the given 'fd' will be closed upon 'ssh_free(s)'.
@@ -368,9 +375,9 @@ static int pkd_exec_hello(int fd, struct pkd_daemon_args *args)
         goto out;
     }
 
-    rc = ssh_channel_write(c, "hello\n", 6); /* XXX: customizable payloads */
-    if (rc != 6) {
-        pkderr("ssh_channel_write partial (%d)\n", rc);
+    rc = ssh_channel_write(c, args->payload.buf, args->payload.len);
+    if (rc != (int)args->payload.len) {
+        pkderr("ssh_channel_write partial (%d != %zd)\n", rc, args->payload.len);
     }
 
     rc = ssh_channel_request_send_exit_status(c, 0);

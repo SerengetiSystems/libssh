@@ -242,7 +242,9 @@ int ssh_get_key_params(ssh_session session, ssh_key *privkey){
       case SSH_KEYTYPE_RSA:
         *privkey = session->srv.rsa_key;
         break;
-      case SSH_KEYTYPE_ECDSA:
+      case SSH_KEYTYPE_ECDSA_P256:
+      case SSH_KEYTYPE_ECDSA_P384:
+      case SSH_KEYTYPE_ECDSA_P521:
         *privkey = session->srv.ecdsa_key;
         break;
       case SSH_KEYTYPE_ED25519:
@@ -314,6 +316,7 @@ static void ssh_server_connection_callback(ssh_session session){
 
             /* from now, the packet layer is handling incoming packets */
             session->socket_callbacks.data=ssh_packet_socket_callback;
+            ssh_packet_register_socket_callback(session, session->socket);
 
             ssh_packet_set_default_callbacks(session);
             set_status(session, 0.5f);
@@ -358,7 +361,22 @@ static void ssh_server_connection_callback(ssh_session session){
                  */
                 if (session->extensions & SSH_EXT_NEGOTIATION &&
                     session->session_state != SSH_SESSION_STATE_AUTHENTICATED) {
-                    ssh_server_send_extensions(session);
+
+                    /*
+                     * Only send an SSH_MSG_EXT_INFO message the first time the client
+                     * undergoes NEWKEYS.  It is unexpected for this message to be sent
+                     * upon rekey, and may cause clients to log error messages.
+                     *
+                     * The session_state can not be used for this purpose because it is
+                     * re-set to SSH_SESSION_STATE_KEXINIT_RECEIVED during rekey.  So,
+                     * use the connected flag which transitions from non-zero below.
+                     *
+                     * See also:
+                     * - https://bugzilla.mindrot.org/show_bug.cgi?id=2929
+                     */
+                    if (session->connected == 0) {
+                        ssh_server_send_extensions(session);
+                    }
                 }
 
                 set_status(session,1.0f);
@@ -892,15 +910,21 @@ int ssh_auth_reply_success(ssh_session session, int partial)
         return ssh_auth_reply_default(session, partial);
     }
 
-    session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
-    session->flags |= SSH_SESSION_FLAG_AUTHENTICATED;
-
     r = ssh_buffer_add_u8(session->out_buffer,SSH2_MSG_USERAUTH_SUCCESS);
     if (r < 0) {
         return SSH_ERROR;
     }
 
     r = ssh_packet_send(session);
+
+    /*
+     * Consider the session as having been authenticated only after sending
+     * the USERAUTH_SUCCESS message.  Setting these flags after ssh_packet_send
+     * ensures that a rekey is not triggered prematurely, causing the message
+     * to be queued.
+     */
+    session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
+    session->flags |= SSH_SESSION_FLAG_AUTHENTICATED;
 
     crypto = ssh_packet_get_current_crypto(session, SSH_DIRECTION_OUT);
     if (crypto != NULL && crypto->delayed_compress_out) {

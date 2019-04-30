@@ -7,11 +7,71 @@
 
 #include "torture.h"
 #include "torture_pki.h"
+#include "torture_key.h"
 #include "pki.c"
-
 
 const unsigned char HASH[] = "1234567890123456789012345678901234567890"
                              "123456789012345678901234";
+
+const char template[] = "temp_dir_XXXXXX";
+
+struct pki_st {
+    char *cwd;
+    char *temp_dir;
+};
+
+static int setup_cert_dir(void **state)
+{
+    struct pki_st *test_state = NULL;
+    char *cwd = NULL;
+    char *tmp_dir = NULL;
+    int rc = 0;
+
+    test_state = (struct pki_st *)malloc(sizeof(struct pki_st));
+    assert_non_null(test_state);
+
+    cwd = torture_get_current_working_dir();
+    assert_non_null(cwd);
+
+    tmp_dir = torture_make_temp_dir(template);
+    assert_non_null(tmp_dir);
+
+    test_state->cwd = cwd;
+    test_state->temp_dir = tmp_dir;
+
+    *state = test_state;
+
+    rc = torture_change_dir(tmp_dir);
+    assert_int_equal(rc, 0);
+
+    printf("Changed directory to: %s\n", tmp_dir);
+
+    return 0;
+}
+
+static int teardown_cert_dir(void **state) {
+
+    struct pki_st *test_state = NULL;
+    int rc = 0;
+
+    test_state = *((struct pki_st **)state);
+
+    assert_non_null(test_state);
+    assert_non_null(test_state->cwd);
+    assert_non_null(test_state->temp_dir);
+
+    rc = torture_change_dir(test_state->cwd);
+    assert_int_equal(rc, 0);
+
+    rc = torture_rmdirs(test_state->temp_dir);
+    assert_int_equal(rc, 0);
+
+    SAFE_FREE(test_state->temp_dir);
+    SAFE_FREE(test_state->cwd);
+    SAFE_FREE(test_state);
+
+    return 0;
+}
 
 static void torture_pki_keytype(void **state) {
     enum ssh_keytypes_e type;
@@ -47,44 +107,39 @@ static void torture_pki_signature(void **state)
     ssh_signature_free(sig);
 }
 
-/* Maps to enum ssh_keytypes_e */
-const char *key_types[] = {
-    "", /* UNKNOWN */
-    "ssh-dss",
-    "ssh-rsa",
-    "",/* RSA1 */
-    "ecdsa-sha2-nistp521",
-    "ssh-ed25519",
+struct key_attrs {
+    int sign;
+    int verify;
+    const char *type_c;
+    int size_arg;
+    int sig_length;
+    const char *sig_type_c;
 };
 
-/* Maps to enum ssh_keytypes_e */
-const int key_sizes[] = {
-    0, /* UNKNOWN */
-    1024,
-    2048,
-    0, /* RSA1 */
-    521,
-    0,
-};
-
-/* Maps to enum ssh_keytypes_e */
-const int sig_lengths[]  = {
-    0, /* UNKNOWN */
-    20,
-    20,
-    0, /* RSA1 */
-    64,
-    33,
-};
-
-/* Maps to enum ssh_keytypes_e */
-const char *signature_types[] = {
-    "", /* UNKNOWN */
-    "ssh-dss",
-    "ssh-rsa",
-    "",/* RSA1 */
-    "ecdsa-sha2-nistp521",
-    "ssh-ed25519",
+struct key_attrs key_attrs_list[] = {
+    {0, 0, "", 0, 0, ""},                                        /* UNKNOWN */
+#ifdef HAVE_DSA
+    {1, 1, "ssh-dss", 1024, 20, "ssh-dss" },                     /* DSS */
+#else
+    {0, 0, "", 0, 0, ""},                                        /* DSS */
+#endif
+    {1, 1, "ssh-rsa", 2048, 20, "ssh-rsa"},                      /* RSA */
+    {0, 0, "", 0, 0, ""},                                        /* RSA1 */
+    {0, 0, "", 0, 0, ""},                                        /* ECDSA */
+    {1, 1, "ssh-ed25519", 0, 33, "ssh-ed25519"},                 /* ED25519 */
+#ifdef HAVE_DSA
+    {0, 1, "", 0, 0, ""},                                        /* DSS CERT */
+#else
+    {0, 0, "", 0, 0, ""},                                        /* DSS CERT */
+#endif
+    {0, 1, "", 0, 0, ""},                                        /* RSA CERT */
+    {1, 1, "ecdsa-sha2-nistp256", 0, 64, "ecdsa-sha2-nistp256"}, /* ECDSA P256 */
+    {1, 1, "ecdsa-sha2-nistp384", 0, 64, "ecdsa-sha2-nistp384"}, /* ECDSA P384 */
+    {1, 1, "ecdsa-sha2-nistp521", 0, 64, "ecdsa-sha2-nistp521"}, /* ECDSA P521 */
+    {0, 1, "", 0, 0, ""},                                        /* ECDSA P256 CERT */
+    {0, 1, "", 0, 0, ""},                                        /* ECDSA P384 CERT */
+    {0, 1, "", 0, 0, ""},                                        /* ECDSA P521 CERT */
+    {0, 1, "", 0, 0, ""},                                        /* ED25519 CERT */
 };
 
 /* Maps to enum ssh_digest_e */
@@ -112,37 +167,33 @@ static void torture_pki_verify_mismatch(void **state)
     ssh_signature sign = NULL, import_sig = NULL, new_sig = NULL;
     ssh_string blob;
     ssh_session session = ssh_new();
-    enum ssh_keytypes_e key_type, sig_type, first_key;
+    enum ssh_keytypes_e key_type, sig_type;
     enum ssh_digest_e hash;
     int hash_length;
+    struct key_attrs skey_attrs, vkey_attrs;
 
     (void) state;
 
     ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
-#ifdef HAVE_DSA
-    first_key = SSH_KEYTYPE_DSS;
-#else
-    first_key = SSH_KEYTYPE_RSA;
-#endif /* HAVE_DSA */
-
-    for (sig_type = first_key;
+    for (sig_type = SSH_KEYTYPE_DSS;
          sig_type <= SSH_KEYTYPE_ED25519;
          sig_type++) {
-        if (sig_type == SSH_KEYTYPE_RSA1) {
+        skey_attrs = key_attrs_list[sig_type];
+        if (!skey_attrs.sign) {
             continue;
         }
-        rc = ssh_pki_generate(sig_type, key_sizes[sig_type], &key);
+        rc = ssh_pki_generate(sig_type, skey_attrs.size_arg, &key);
         assert_true(rc == SSH_OK);
         assert_non_null(key);
         assert_int_equal(key->type, sig_type);
-        assert_string_equal(key->type_c, key_types[sig_type]);
+        assert_string_equal(key->type_c, skey_attrs.type_c);
 
         for (hash = SSH_DIGEST_AUTO;
              hash <= SSH_DIGEST_SHA512;
              hash++) {
             hash_length = ((hash == SSH_DIGEST_AUTO) ?
-                              sig_lengths[sig_type] : hash_lengths[hash]);
+                              skey_attrs.sig_length : hash_lengths[hash]);
 
             SSH_LOG(SSH_LOG_TRACE, "Creating signature %d with hash %d",
                     sig_type, hash);
@@ -153,7 +204,7 @@ static void torture_pki_verify_mismatch(void **state)
             assert_int_equal(sign->type, key->type);
             if (hash == SSH_DIGEST_AUTO) {
                 assert_string_equal(sign->type_c, key->type_c);
-                assert_string_equal(sign->type_c, signature_types[sig_type]);
+                assert_string_equal(sign->type_c, skey_attrs.sig_type_c);
             } else {
                 assert_string_equal(sign->type_c, hash_signatures[hash]);
             }
@@ -172,7 +223,7 @@ static void torture_pki_verify_mismatch(void **state)
             assert_int_equal(import_sig->type, key->type);
             if (hash == SSH_DIGEST_AUTO) {
                 assert_string_equal(import_sig->type_c, key->type_c);
-                assert_string_equal(import_sig->type_c, signature_types[sig_type]);
+                assert_string_equal(import_sig->type_c, skey_attrs.sig_type_c);
             } else {
                 assert_string_equal(import_sig->type_c, hash_signatures[hash]);
             }
@@ -185,16 +236,23 @@ static void torture_pki_verify_mismatch(void **state)
                                       hash_length);
             assert_true(rc == SSH_OK);
 
-            for (key_type = first_key;
-                 key_type <= SSH_KEYTYPE_ED25519;
+            for (key_type = SSH_KEYTYPE_DSS;
+                 key_type <= SSH_KEYTYPE_ED25519_CERT01;
                  key_type++) {
-                if (key_type == SSH_KEYTYPE_RSA1) {
+                vkey_attrs = key_attrs_list[key_type];
+                if (!vkey_attrs.verify) {
                     continue;
                 }
                 SSH_LOG(SSH_LOG_TRACE, "Trying key %d with signature %d",
                         key_type, sig_type);
 
-                rc = ssh_pki_generate(key_type, key_sizes[key_type], &verify_key);
+                if (is_cert_type(key_type)) {
+                    torture_write_file("libssh_testkey-cert.pub",
+                       torture_get_testkey_pub(key_type));
+                    rc = ssh_pki_import_cert_file("libssh_testkey-cert.pub", &verify_key);
+                } else {
+                    rc = ssh_pki_generate(key_type, vkey_attrs.size_arg, &verify_key);
+                }
                 assert_true(rc == SSH_OK);
                 assert_non_null(verify_key);
 
@@ -219,17 +277,16 @@ static void torture_pki_verify_mismatch(void **state)
                                                   blob,
                                                   sig_type,
                                                   import_sig->hash_type);
-                if (sig_type != key_type) {
-                    assert_null(new_sig);
-                } else {
+                if (ssh_key_type_plain(key_type) == sig_type) {
                     /* Importing with the same key type should work */
                     assert_non_null(new_sig);
                     assert_int_equal(new_sig->type, key->type);
-                    if (key_type == SSH_KEYTYPE_RSA && new_sig->hash_type != SSH_DIGEST_AUTO) {
+                    if (ssh_key_type_plain(key_type) == SSH_KEYTYPE_RSA &&
+                    new_sig->hash_type != SSH_DIGEST_AUTO) {
                         assert_string_equal(new_sig->type_c, hash_signatures[new_sig->hash_type]);
                     } else {
                         assert_string_equal(new_sig->type_c, key->type_c);
-                        assert_string_equal(new_sig->type_c, signature_types[sig_type]);
+                        assert_string_equal(new_sig->type_c, skey_attrs.sig_type_c);
                     }
                     /* The verification should not work */
                     rc = pki_signature_verify(session,
@@ -240,6 +297,8 @@ static void torture_pki_verify_mismatch(void **state)
                     assert_true(rc != SSH_OK);
 
                     ssh_signature_free(new_sig);
+                } else {
+                    assert_null(new_sig);
                 }
                 SSH_KEY_FREE(verify_key);
             }
@@ -266,7 +325,9 @@ int torture_run_tests(void) {
     struct CMUnitTest tests[] = {
         cmocka_unit_test(torture_pki_keytype),
         cmocka_unit_test(torture_pki_signature),
-        cmocka_unit_test(torture_pki_verify_mismatch),
+        cmocka_unit_test_setup_teardown(torture_pki_verify_mismatch,
+                                        setup_cert_dir,
+                                        teardown_cert_dir),
     };
 
     ssh_init();

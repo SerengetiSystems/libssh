@@ -19,6 +19,7 @@ set(LIBSSH_UNIT_TESTS
     torture_temp_dir
     torture_temp_file
     torture_push_pop_dir
+    torture_session_keys
 )
 
 set(LIBSSH_THREAD_UNIT_TESTS
@@ -42,10 +43,16 @@ if (UNIX AND NOT WIN32)
         torture_channel
     )
 
-    if (WITH_SERVER AND WITH_GEX)
+    if (WITH_SERVER)
         set(LIBSSH_UNIT_TESTS
             ${LIBSSH_UNIT_TESTS}
-            torture_moduli)
+            torture_bind_config)
+
+        if (WITH_GEX)
+            set(LIBSSH_UNIT_TESTS
+                ${LIBSSH_UNIT_TESTS}
+                torture_moduli)
+        endif()
     endif()
 
 

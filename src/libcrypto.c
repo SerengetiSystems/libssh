@@ -70,15 +70,15 @@
 
 #include "libssh/crypto.h"
 
-struct ssh_mac_ctx_struct {
-  enum ssh_mac_e mac_type;
-  union {
-    SHACTX sha1_ctx;
-    SHA256CTX sha256_ctx;
-    SHA384CTX sha384_ctx;
-    SHA512CTX sha512_ctx;
-  } ctx;
-};
+#ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
+#include <openssl/kdf.h>
+#endif
+
+#ifdef HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT
+#include <openssl/modes.h>
+#endif
+
+#include "libssh/crypto.h"
 
 static int libcrypto_initialized = 0;
 
@@ -353,70 +353,80 @@ void md5_final(unsigned char *md, MD5CTX c)
     EVP_MD_CTX_destroy(c);
 }
 
-ssh_mac_ctx ssh_mac_ctx_init(enum ssh_mac_e type){
-  ssh_mac_ctx ctx = malloc(sizeof(struct ssh_mac_ctx_struct));
-  if (ctx == NULL) {
+#ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
+static const EVP_MD *sshkdf_digest_to_md(enum ssh_kdf_digest digest_type)
+{
+    switch (digest_type) {
+    case SSH_KDF_SHA1:
+        return EVP_sha1();
+    case SSH_KDF_SHA256:
+        return EVP_sha256();
+    case SSH_KDF_SHA384:
+        return EVP_sha384();
+    case SSH_KDF_SHA512:
+        return EVP_sha512();
+    }
     return NULL;
-  }
-
-  ctx->mac_type=type;
-  switch(type){
-    case SSH_MAC_SHA1:
-      ctx->ctx.sha1_ctx = sha1_init();
-      return ctx;
-    case SSH_MAC_SHA256:
-      ctx->ctx.sha256_ctx = sha256_init();
-      return ctx;
-    case SSH_MAC_SHA384:
-      ctx->ctx.sha384_ctx = sha384_init();
-      return ctx;
-    case SSH_MAC_SHA512:
-      ctx->ctx.sha512_ctx = sha512_init();
-      return ctx;
-    default:
-      SAFE_FREE(ctx);
-      return NULL;
-  }
 }
 
-void ssh_mac_update(ssh_mac_ctx ctx, const void *data, unsigned long len) {
-  switch(ctx->mac_type){
-    case SSH_MAC_SHA1:
-      sha1_update(ctx->ctx.sha1_ctx, data, len);
-      break;
-    case SSH_MAC_SHA256:
-      sha256_update(ctx->ctx.sha256_ctx, data, len);
-      break;
-    case SSH_MAC_SHA384:
-      sha384_update(ctx->ctx.sha384_ctx, data, len);
-      break;
-    case SSH_MAC_SHA512:
-      sha512_update(ctx->ctx.sha512_ctx, data, len);
-      break;
-    default:
-      break;
-  }
+int ssh_kdf(struct ssh_crypto_struct *crypto,
+            unsigned char *key, size_t key_len,
+            int key_type, unsigned char *output,
+            size_t requested_len)
+{
+    EVP_KDF_CTX *ctx = EVP_KDF_CTX_new_id(EVP_KDF_SSHKDF);
+    int rc;
+
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_MD,
+                      sshkdf_digest_to_md(crypto->digest_type));
+    if (rc != 1) {
+        goto out;
+    }
+    rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_KEY, key, key_len);
+    if (rc != 1) {
+        goto out;
+    }
+    rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_SSHKDF_XCGHASH,
+                      crypto->secret_hash, crypto->digest_len);
+    if (rc != 1) {
+        goto out;
+    }
+    rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_SSHKDF_TYPE, key_type);
+    if (rc != 1) {
+        goto out;
+    }
+    rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_SSHKDF_SESSION_ID,
+                      crypto->session_id, crypto->digest_len);
+    if (rc != 1) {
+        goto out;
+    }
+    rc = EVP_KDF_derive(ctx, output, requested_len);
+    if (rc != 1) {
+        goto out;
+    }
+
+out:
+    EVP_KDF_CTX_free(ctx);
+    if (rc < 0) {
+        return rc;
+    }
+    return 0;
 }
 
-void ssh_mac_final(unsigned char *md, ssh_mac_ctx ctx) {
-  switch(ctx->mac_type){
-    case SSH_MAC_SHA1:
-      sha1_final(md,ctx->ctx.sha1_ctx);
-      break;
-    case SSH_MAC_SHA256:
-      sha256_final(md,ctx->ctx.sha256_ctx);
-      break;
-    case SSH_MAC_SHA384:
-      sha384_final(md,ctx->ctx.sha384_ctx);
-      break;
-    case SSH_MAC_SHA512:
-      sha512_final(md,ctx->ctx.sha512_ctx);
-      break;
-    default:
-      break;
-  }
-  SAFE_FREE(ctx);
+#else
+int ssh_kdf(struct ssh_crypto_struct *crypto,
+            unsigned char *key, size_t key_len,
+            int key_type, unsigned char *output,
+            size_t requested_len)
+{
+    return sshkdf_derive_key(crypto, key, key_len,
+                             key_type, output, requested_len);
 }
+#endif
 
 HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
   HMACCTX ctx = NULL;
@@ -433,9 +443,6 @@ HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
       break;
     case SSH_HMAC_SHA256:
       HMAC_Init_ex(ctx, key, len, EVP_sha256(), NULL);
-      break;
-    case SSH_HMAC_SHA384:
-      HMAC_Init_ex(ctx, key, len, EVP_sha384(), NULL);
       break;
     case SSH_HMAC_SHA512:
       HMAC_Init_ex(ctx, key, len, EVP_sha512(), NULL);
@@ -552,7 +559,7 @@ static int evp_cipher_set_encrypt_key(struct ssh_cipher_struct *cipher,
         rc = EVP_CIPHER_CTX_ctrl(cipher->ctx,
                                  EVP_CTRL_GCM_SET_IV_FIXED,
                                  -1,
-                                 (u_char *)IV);
+                                 (uint8_t *)IV);
         if (rc != 1) {
             SSH_LOG(SSH_LOG_WARNING, "EVP_CTRL_GCM_SET_IV_FIXED failed");
             return SSH_ERROR;
@@ -585,7 +592,7 @@ static int evp_cipher_set_decrypt_key(struct ssh_cipher_struct *cipher,
         rc = EVP_CIPHER_CTX_ctrl(cipher->ctx,
                                  EVP_CTRL_GCM_SET_IV_FIXED,
                                  -1,
-                                 (u_char *)IV);
+                                 (uint8_t *)IV);
         if (rc != 1) {
             SSH_LOG(SSH_LOG_WARNING, "EVP_CTRL_GCM_SET_IV_FIXED failed");
             return SSH_ERROR;
@@ -737,7 +744,7 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
                         uint64_t seq)
 {
     size_t authlen, aadlen;
-    u_char lastiv[1];
+    uint8_t lastiv[1];
     int tmplen = 0;
     size_t outlen;
     int rc;
@@ -809,7 +816,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
                         uint64_t seq)
 {
     size_t authlen, aadlen;
-    u_char lastiv[1];
+    uint8_t lastiv[1];
     int outlen = 0;
     int rc = 0;
 
@@ -1095,7 +1102,9 @@ int ssh_crypto_init(void)
         OPENSSL_ia32cap &= ~(1LL << 57);
     }
 #endif
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     OpenSSL_add_all_algorithms();
+#endif
 
     for (i = 0; ssh_ciphertab[i].name != NULL; i++) {
         int cmp;
@@ -1124,8 +1133,10 @@ void ssh_crypto_finalize(void)
         return;
     }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
+#endif
 
     libcrypto_initialized = 0;
 }

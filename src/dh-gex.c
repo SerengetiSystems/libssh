@@ -65,7 +65,7 @@ int ssh_client_dhgex_init(ssh_session session)
 {
     int rc;
 
-    rc = ssh_dh_init_common(session);
+    rc = ssh_dh_init_common(session->next_crypto);
     if (rc != SSH_OK){
         goto error;
     }
@@ -107,6 +107,8 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     int blen;
     bignum pmin1 = NULL, one = NULL;
     bignum_CTX ctx = bignum_ctx_new();
+    bignum modulus, generator;
+    const_bignum pubkey;
     (void) type;
     (void) user;
 
@@ -128,21 +130,27 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
         ssh_set_error_oom(session);
         goto error;
     }
-    session->next_crypto->dh_group_is_mutable = 1;
     rc = ssh_buffer_unpack(packet,
                            "BB",
-                           &session->next_crypto->p,
-                           &session->next_crypto->g);
+                           &modulus,
+                           &generator);
     if (rc != SSH_OK) {
         ssh_set_error(session, SSH_FATAL, "Invalid DH_GEX_GROUP packet");
         goto error;
     }
     /* basic checks */
+    if (ssh_fips_mode() &&
+        !ssh_dh_is_known_group(modulus, generator)) {
+        ssh_set_error(session,
+                      SSH_FATAL,
+                      "The received DH group is not FIPS approved");
+        goto error;
+    }
     rc = bignum_set_word(one, 1);
     if (rc != 1) {
         goto error;
     }
-    blen = bignum_num_bits(session->next_crypto->p);
+    blen = bignum_num_bits(modulus);
     if (blen < DH_PMIN || blen > DH_PMAX) {
         ssh_set_error(session,
                 SSH_FATAL,
@@ -152,48 +160,46 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
                 DH_PMAX);
         goto error;
     }
-    if (bignum_cmp(session->next_crypto->p, one) <= 0) {
+    if (bignum_cmp(modulus, one) <= 0) {
         /* p must be positive and preferably bigger than one */
         ssh_set_error(session, SSH_FATAL, "Invalid dh group parameter p");
     }
-    if (!bignum_is_bit_set(session->next_crypto->p, 0)) {
+    if (!bignum_is_bit_set(modulus, 0)) {
         /* p must be a prime and therefore not divisible by 2 */
         ssh_set_error(session, SSH_FATAL, "Invalid dh group parameter p");
         goto error;
     }
-    bignum_sub(pmin1, session->next_crypto->p, one);
-    if (bignum_cmp(session->next_crypto->g, one) <= 0 ||
-        bignum_cmp(session->next_crypto->g, pmin1) > 0) {
+    bignum_sub(pmin1, modulus, one);
+    if (bignum_cmp(generator, one) <= 0 ||
+        bignum_cmp(generator, pmin1) > 0) {
         /* generator must be at least 2 and smaller than p-1*/
         ssh_set_error(session, SSH_FATAL, "Invalid dh group parameter g");
         goto error;
     }
-    /* compute and send DH public parameter */
-    rc = ssh_dh_generate_secret(session, session->next_crypto->x);
-    if (rc == SSH_ERROR) {
-        goto error;
-    }
-    session->next_crypto->e = bignum_new();
-    if (session->next_crypto->e == NULL) {
-        ssh_set_error_oom(session);
-        goto error;
-    }
-    rc = bignum_mod_exp(session->next_crypto->e,
-                        session->next_crypto->g,
-                        session->next_crypto->x,
-                        session->next_crypto->p,
-                        ctx);
-    if (rc != 1) {
-        goto error;
-    }
-
     bignum_ctx_free(ctx);
     ctx = NULL;
 
+    /* all checks passed, set parameters */
+    rc = ssh_dh_set_parameters(session->next_crypto->dh_ctx,
+                               modulus, generator);
+    if (rc != SSH_OK) {
+        bignum_safe_free(modulus);
+        bignum_safe_free(generator);
+        goto error;
+    }
+
+    /* compute and send DH public parameter */
+    rc = ssh_dh_keypair_gen_keys(session->next_crypto->dh_ctx,
+                                 DH_CLIENT_KEYPAIR);
+    if (rc == SSH_ERROR) {
+        goto error;
+    }
+    rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+                                 DH_CLIENT_KEYPAIR, NULL, &pubkey);
     rc = ssh_buffer_pack(session->out_buffer,
                          "bB",
                          SSH2_MSG_KEX_DH_GEX_INIT,
-                         session->next_crypto->e);
+                         pubkey);
     if (rc != SSH_OK) {
         goto error;
     }
@@ -201,10 +207,14 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     session->dh_handshake_state = DH_STATE_INIT_SENT;
 
     rc = ssh_packet_send(session);
+    if (rc == SSH_ERROR) {
+        goto error;
+    }
 
     bignum_safe_free(one);
     bignum_safe_free(pmin1);
     return SSH_PACKET_USED;
+
 error:
     bignum_safe_free(one);
     bignum_safe_free(pmin1);
@@ -222,6 +232,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     struct ssh_crypto_struct *crypto=session->next_crypto;
     int rc;
     ssh_string pubkey_blob = NULL;
+    bignum server_pubkey = NULL;
     (void)type;
     (void)user;
     SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
@@ -229,20 +240,28 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     ssh_packet_remove_callbacks(session, &ssh_dhgex_client_callbacks);
     rc = ssh_buffer_unpack(packet,
                            "SBS",
-                           &pubkey_blob, &crypto->f,
+                           &pubkey_blob, &server_pubkey,
                            &crypto->dh_server_signature);
-
     if (rc == SSH_ERROR) {
         ssh_set_error(session, SSH_FATAL, "Invalid DH_GEX_REPLY packet");
         goto error;
     }
+    rc = ssh_dh_keypair_set_keys(crypto->dh_ctx, DH_SERVER_KEYPAIR,
+                                 NULL, server_pubkey);
+    if (rc != SSH_OK) {
+        bignum_safe_free(server_pubkey);
+        goto error;
+    }
+
     rc = ssh_dh_import_next_pubkey_blob(session, pubkey_blob);
     ssh_string_free(pubkey_blob);
     if (rc != 0) {
         goto error;
     }
 
-    rc = ssh_dh_build_k(session);
+    rc = ssh_dh_compute_shared_secret(session->next_crypto->dh_ctx,
+                                      DH_CLIENT_KEYPAIR, DH_SERVER_KEYPAIR,
+                                      &session->next_crypto->shared_secret);
     if (rc == SSH_ERROR) {
         ssh_set_error(session, SSH_FATAL, "Could not generate shared secret");
         goto error;
@@ -518,12 +537,19 @@ static int ssh_retrieve_dhgroup(uint32_t pmin,
     char *modulus = NULL;
     int rc;
 
-	moduli = fopen(moduli_file, "r");
+    /* In FIPS mode, we can not negotiate arbitrary primes,
+     * but just the approved ones */
+    if (ssh_fips_mode()) {
+        SSH_LOG(SSH_LOG_TRACE, "In FIPS mode, using built-in primes");
+        return ssh_fallback_group(pmax, p, g);
+    }
+
+    moduli = fopen(moduli_file, "r");
     if (moduli == NULL) {
         SSH_LOG(SSH_LOG_WARNING,
                 "Unable to open moduli file: %s",
                 strerror(errno));
-        return SSH_ERROR;
+        return ssh_fallback_group(pmax, p, g);
     }
 
     *size = 0;
@@ -588,12 +614,13 @@ static struct ssh_packet_callbacks_struct ssh_dhgex_server_callbacks = {
 void ssh_server_dhgex_init(ssh_session session){
     /* register the packet callbacks */
     ssh_packet_set_callbacks(session, &ssh_dhgex_server_callbacks);
-    ssh_dh_init_common(session);
+    ssh_dh_init_common(session->next_crypto);
     session->dh_handshake_state = DH_STATE_INIT;
 }
 
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
 {
+    bignum modulus = NULL, generator = NULL;
     uint32_t pmin, pn, pmax;
     size_t size = 0;
     int rc;
@@ -640,8 +667,8 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
                               pn,
                               pmax,
                               &size,
-                              &session->next_crypto->p,
-                              &session->next_crypto->g);
+                              &modulus,
+                              &generator);
     if (rc == SSH_ERROR) {
         ssh_set_error(session,
                       SSH_FATAL,
@@ -651,12 +678,18 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
                       pmax);
         goto error;
     }
-    session->next_crypto->dh_group_is_mutable = 1;
+    rc = ssh_dh_set_parameters(session->next_crypto->dh_ctx,
+                               modulus, generator);
+    if (rc != SSH_OK) {
+        bignum_safe_free(generator);
+        bignum_safe_free(modulus);
+        goto error;
+    }
     rc = ssh_buffer_pack(session->out_buffer,
                          "bBB",
                          SSH2_MSG_KEX_DH_GEX_GROUP,
-                         session->next_crypto->p,
-                         session->next_crypto->g);
+                         modulus,
+                         generator);
     if (rc != SSH_OK) {
         ssh_set_error_invalid(session);
         goto error;
@@ -668,8 +701,8 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
     if (rc == SSH_ERROR) {
         goto error;
     }
-error:
 
+error:
     return SSH_PACKET_USED;
 }
 

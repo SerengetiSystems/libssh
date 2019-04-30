@@ -88,14 +88,6 @@ int ssh_client_curve25519_init(ssh_session session){
 static int ssh_curve25519_build_k(ssh_session session) {
   ssh_curve25519_pubkey k;
 
-#if defined HAVE_LIBMBEDCRYPTO
-  session->next_crypto->k = bignum_new();
-
-  if (session->next_crypto->k == NULL) {
-    return SSH_ERROR;
-  }
-#endif
-
   if (session->server)
 	  crypto_scalarmult(k, session->next_crypto->curve25519_privkey,
 			  session->next_crypto->curve25519_client_pubkey);
@@ -103,13 +95,8 @@ static int ssh_curve25519_build_k(ssh_session session) {
 	  crypto_scalarmult(k, session->next_crypto->curve25519_privkey,
 			  session->next_crypto->curve25519_server_pubkey);
 
-#if defined HAVE_LIBMBEDCRYPTO
-  /* FIXME */
-  bignum_bin2bn(k, CURVE25519_PUBKEY_SIZE, session->next_crypto->k);
-#else
-  bignum_bin2bn(k, CURVE25519_PUBKEY_SIZE, &session->next_crypto->k);
-#endif
-  if (session->next_crypto->k == NULL) {
+  bignum_bin2bn(k, CURVE25519_PUBKEY_SIZE, &session->next_crypto->shared_secret);
+  if (session->next_crypto->shared_secret == NULL) {
     return SSH_ERROR;
   }
 
@@ -118,7 +105,7 @@ static int ssh_curve25519_build_k(ssh_session session) {
                    session->next_crypto->server_kex.cookie, 16);
     ssh_print_hexa("Session client cookie",
                    session->next_crypto->client_kex.cookie, 16);
-    ssh_print_bignum("Shared secret key", session->next_crypto->k);
+    ssh_print_bignum("Shared secret key", session->next_crypto->shared_secret);
 #endif
 
   return 0;

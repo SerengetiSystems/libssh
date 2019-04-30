@@ -59,14 +59,17 @@
 #include "libssh/curve25519.h"
 
 static struct ssh_hmac_struct ssh_hmac_tab[] = {
-  { "hmac-sha1",     SSH_HMAC_SHA1 },
-  { "hmac-sha2-256", SSH_HMAC_SHA256 },
-  { "hmac-sha2-384", SSH_HMAC_SHA384 },
-  { "hmac-sha2-512", SSH_HMAC_SHA512 },
-  { "hmac-md5",      SSH_HMAC_MD5 },
-  { "aead-poly1305", SSH_HMAC_AEAD_POLY1305 },
-  { "aead-gcm",      SSH_HMAC_AEAD_GCM },
-  { NULL,            0}
+  { "hmac-sha1",                     SSH_HMAC_SHA1,          false },
+  { "hmac-sha2-256",                 SSH_HMAC_SHA256,        false },
+  { "hmac-sha2-512",                 SSH_HMAC_SHA512,        false },
+  { "hmac-md5",                      SSH_HMAC_MD5,           false },
+  { "aead-poly1305",                 SSH_HMAC_AEAD_POLY1305, false },
+  { "aead-gcm",                      SSH_HMAC_AEAD_GCM,      false },
+  { "hmac-sha1-etm@openssh.com",     SSH_HMAC_SHA1,          true  },
+  { "hmac-sha2-256-etm@openssh.com", SSH_HMAC_SHA256,        true  },
+  { "hmac-sha2-512-etm@openssh.com", SSH_HMAC_SHA512,        true  },
+  { "hmac-md5-etm@openssh.com",      SSH_HMAC_MD5,           true  },
+  { NULL,                            0,                      false }
 };
 
 struct ssh_hmac_struct *ssh_get_hmactab(void) {
@@ -79,8 +82,6 @@ size_t hmac_digest_len(enum ssh_hmac_e type) {
       return SHA_DIGEST_LEN;
     case SSH_HMAC_SHA256:
       return SHA256_DIGEST_LEN;
-    case SSH_HMAC_SHA384:
-      return SHA384_DIGEST_LEN;
     case SSH_HMAC_SHA512:
       return SHA512_DIGEST_LEN;
     case SSH_HMAC_MD5:
@@ -94,11 +95,13 @@ size_t hmac_digest_len(enum ssh_hmac_e type) {
   }
 }
 
-const char *ssh_hmac_type_to_string(enum ssh_hmac_e hmac_type)
+const char *ssh_hmac_type_to_string(enum ssh_hmac_e hmac_type, bool etm)
 {
   int i = 0;
   struct ssh_hmac_struct *ssh_hmactab = ssh_get_hmactab();
-  while (ssh_hmactab[i].name && (ssh_hmactab[i].hmac_type != hmac_type)) {
+  while (ssh_hmactab[i].name &&
+         ((ssh_hmactab[i].hmac_type != hmac_type) ||
+          (ssh_hmactab[i].etm != etm))) {
     i++;
   }
   return ssh_hmactab[i].name;
@@ -168,11 +171,8 @@ void crypto_free(struct ssh_crypto_struct *crypto)
 
     ssh_key_free(crypto->server_pubkey);
 
-    cipher_free(crypto->in_cipher);
-    cipher_free(crypto->out_cipher);
-
     ssh_dh_cleanup(crypto);
-    bignum_safe_free(crypto->k);
+    bignum_safe_free(crypto->shared_secret);
 #ifdef HAVE_ECDH
     SAFE_FREE(crypto->ecdh_client_pubkey);
     SAFE_FREE(crypto->ecdh_server_pubkey);
@@ -211,13 +211,16 @@ void crypto_free(struct ssh_crypto_struct *crypto)
     SAFE_FREE(crypto->encryptMAC);
     SAFE_FREE(crypto->decryptMAC);
     if (crypto->encryptkey != NULL) {
-        explicit_bzero(crypto->encryptkey, crypto->digest_len);
+        explicit_bzero(crypto->encryptkey, crypto->out_cipher->keysize / 8);
         SAFE_FREE(crypto->encryptkey);
     }
     if (crypto->decryptkey != NULL) {
-        explicit_bzero(crypto->decryptkey, crypto->digest_len);
+        explicit_bzero(crypto->decryptkey, crypto->in_cipher->keysize / 8);
         SAFE_FREE(crypto->decryptkey);
     }
+
+    cipher_free(crypto->in_cipher);
+    cipher_free(crypto->out_cipher);
 
     for (i = 0; i < SSH_KEX_METHODS; i++) {
         SAFE_FREE(crypto->client_kex.methods[i]);
@@ -299,6 +302,7 @@ static int crypt_set_algorithms2(ssh_session session)
     SSH_LOG(SSH_LOG_PACKET, "Set HMAC output algorithm to %s", wanted);
 
     session->next_crypto->out_hmac = ssh_hmactab[i].hmac_type;
+    session->next_crypto->out_hmac_etm = ssh_hmactab[i].etm;
 
     /* in */
     wanted = session->next_crypto->kex_methods[SSH_CRYPT_S_C];
@@ -352,6 +356,7 @@ static int crypt_set_algorithms2(ssh_session session)
     SSH_LOG(SSH_LOG_PACKET, "Set HMAC input algorithm to %s", wanted);
 
     session->next_crypto->in_hmac = ssh_hmactab[i].hmac_type;
+    session->next_crypto->in_hmac_etm = ssh_hmactab[i].etm;
 
     /* compression */
     cmp = strcmp(session->next_crypto->kex_methods[SSH_COMP_C_S], "zlib");
@@ -449,6 +454,7 @@ int crypt_set_algorithms_server(ssh_session session){
     SSH_LOG(SSH_LOG_PACKET, "Set HMAC output algorithm to %s", method);
 
     session->next_crypto->out_hmac = ssh_hmactab[i].hmac_type;
+    session->next_crypto->out_hmac_etm = ssh_hmactab[i].etm;
 
     /* in */
     method = session->next_crypto->kex_methods[SSH_CRYPT_C_S];
@@ -501,6 +507,7 @@ int crypt_set_algorithms_server(ssh_session session){
     SSH_LOG(SSH_LOG_PACKET, "Set HMAC input algorithm to %s", method);
 
     session->next_crypto->in_hmac = ssh_hmactab[i].hmac_type;
+    session->next_crypto->in_hmac_etm = ssh_hmactab[i].etm;
 
     /* compression */
     method = session->next_crypto->kex_methods[SSH_COMP_C_S];

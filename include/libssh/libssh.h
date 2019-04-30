@@ -293,10 +293,17 @@ enum ssh_keytypes_e{
   SSH_KEYTYPE_DSS=1,
   SSH_KEYTYPE_RSA,
   SSH_KEYTYPE_RSA1,
-  SSH_KEYTYPE_ECDSA,
+  SSH_KEYTYPE_ECDSA, /* deprecated */
   SSH_KEYTYPE_ED25519,
   SSH_KEYTYPE_DSS_CERT01,
-  SSH_KEYTYPE_RSA_CERT01
+  SSH_KEYTYPE_RSA_CERT01,
+  SSH_KEYTYPE_ECDSA_P256,
+  SSH_KEYTYPE_ECDSA_P384,
+  SSH_KEYTYPE_ECDSA_P521,
+  SSH_KEYTYPE_ECDSA_P256_CERT01,
+  SSH_KEYTYPE_ECDSA_P384_CERT01,
+  SSH_KEYTYPE_ECDSA_P521_CERT01,
+  SSH_KEYTYPE_ED25519_CERT01,
 };
 
 enum ssh_keycmp_e {
@@ -458,6 +465,8 @@ LIBSSH_API ssh_channel ssh_channel_new(ssh_session session);
 LIBSSH_API int ssh_channel_open_auth_agent(ssh_channel channel);
 LIBSSH_API int ssh_channel_open_forward(ssh_channel channel, const char *remotehost,
     int remoteport, const char *sourcehost, int localport);
+LIBSSH_API int ssh_channel_open_forward_unix(ssh_channel channel, const char *remotepath,
+    const char *sourcehost, int localport);
 LIBSSH_API int ssh_channel_open_session(ssh_channel channel);
 LIBSSH_API int ssh_channel_open_x11(ssh_channel channel, const char *orig_addr, int orig_port);
 LIBSSH_API int ssh_channel_poll(ssh_channel channel, int is_stderr);

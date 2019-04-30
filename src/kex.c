@@ -146,8 +146,8 @@ static const char *default_methods[] = {
   PUBLIC_KEY_ALGORITHMS,
   AES BLOWFISH DES,
   AES BLOWFISH DES,
-  "hmac-sha2-256,hmac-sha2-512,hmac-sha1",
-  "hmac-sha2-256,hmac-sha2-512,hmac-sha1",
+  "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha1-etm@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-sha1",
+  "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha1-etm@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-sha1",
   "none",
   "none",
   "",
@@ -161,8 +161,8 @@ static const char *supported_methods[] = {
   PUBLIC_KEY_ALGORITHMS,
   CHACHA20 AES BLOWFISH DES_SUPPORTED,
   CHACHA20 AES BLOWFISH DES_SUPPORTED,
-  "hmac-sha2-256,hmac-sha2-512,hmac-sha1,hmac-md5",
-  "hmac-sha2-256,hmac-sha2-512,hmac-sha1,hmac-md5",
+  "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha1-etm@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-sha1,hmac-md5",
+  "hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha1-etm@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-sha1,hmac-md5",
   ZLIB,
   ZLIB,
   "",
@@ -1047,6 +1047,10 @@ int ssh_make_sessionid(ssh_session session)
     ssh_buffer client_hash = NULL;
     ssh_buffer buf = NULL;
     ssh_string server_pubkey_blob = NULL;
+    const_bignum client_pubkey, server_pubkey;
+#ifdef WITH_GEX
+    const_bignum modulus, generator;
+#endif
     int rc = SSH_ERROR;
 
     buf = ssh_buffer_new();
@@ -1121,10 +1125,20 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_DH_GROUP14_SHA1:
     case SSH_KEX_DH_GROUP16_SHA512:
     case SSH_KEX_DH_GROUP18_SHA512:
+        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+                                     DH_CLIENT_KEYPAIR, NULL, &client_pubkey);
+        if (rc != SSH_OK) {
+            goto error;
+        }
+        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+                                     DH_SERVER_KEYPAIR, NULL, &server_pubkey);
+        if (rc != SSH_OK) {
+            goto error;
+        }
         rc = ssh_buffer_pack(buf,
                              "BB",
-                             session->next_crypto->e,
-                             session->next_crypto->f);
+                             client_pubkey,
+                             server_pubkey);
         if (rc != SSH_OK) {
             goto error;
         }
@@ -1132,15 +1146,30 @@ int ssh_make_sessionid(ssh_session session)
 #ifdef WITH_GEX
     case SSH_KEX_DH_GEX_SHA1:
     case SSH_KEX_DH_GEX_SHA256:
+        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+                                     DH_CLIENT_KEYPAIR, NULL, &client_pubkey);
+        if (rc != SSH_OK) {
+            goto error;
+        }
+        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+                                     DH_SERVER_KEYPAIR, NULL, &server_pubkey);
+        if (rc != SSH_OK) {
+            goto error;
+        }
+        rc = ssh_dh_get_parameters(session->next_crypto->dh_ctx,
+                                   &modulus, &generator);
+        if (rc != SSH_OK) {
+            goto error;
+        }
         rc = ssh_buffer_pack(buf,
                     "dddBBBB",
                     session->next_crypto->dh_pmin,
                     session->next_crypto->dh_pn,
                     session->next_crypto->dh_pmax,
-                    session->next_crypto->p,
-                    session->next_crypto->g,
-                    session->next_crypto->e,
-                    session->next_crypto->f);
+                    modulus,
+                    generator,
+                    client_pubkey,
+                    server_pubkey);
         if (rc != SSH_OK) {
             goto error;
         }
@@ -1180,7 +1209,7 @@ int ssh_make_sessionid(ssh_session session)
         break;
 #endif
     }
-    rc = ssh_buffer_pack(buf, "B", session->next_crypto->k);
+    rc = ssh_buffer_pack(buf, "B", session->next_crypto->shared_secret);
     if (rc != SSH_OK) {
         goto error;
     }
@@ -1196,7 +1225,7 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_DH_GEX_SHA1:
 #endif /* WITH_GEX */
         session->next_crypto->digest_len = SHA_DIGEST_LENGTH;
-        session->next_crypto->mac_type = SSH_MAC_SHA1;
+        session->next_crypto->digest_type = SSH_KDF_SHA1;
         session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
@@ -1212,7 +1241,7 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_DH_GEX_SHA256:
 #endif /* WITH_GEX */
         session->next_crypto->digest_len = SHA256_DIGEST_LENGTH;
-        session->next_crypto->mac_type = SSH_MAC_SHA256;
+        session->next_crypto->digest_type = SSH_KDF_SHA256;
         session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
@@ -1223,7 +1252,7 @@ int ssh_make_sessionid(ssh_session session)
         break;
     case SSH_KEX_ECDH_SHA2_NISTP384:
         session->next_crypto->digest_len = SHA384_DIGEST_LENGTH;
-        session->next_crypto->mac_type = SSH_MAC_SHA384;
+        session->next_crypto->digest_type = SSH_KDF_SHA384;
         session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
@@ -1236,7 +1265,7 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_DH_GROUP18_SHA512:
     case SSH_KEX_ECDH_SHA2_NISTP521:
         session->next_crypto->digest_len = SHA512_DIGEST_LENGTH;
-        session->next_crypto->mac_type = SSH_MAC_SHA512;
+        session->next_crypto->digest_type = SSH_KDF_SHA512;
         session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
@@ -1346,209 +1375,134 @@ int ssh_hashbufin_add_cookie(ssh_session session, unsigned char *cookie)
     return 0;
 }
 
-static int generate_one_key(ssh_string k,
-                            struct ssh_crypto_struct *crypto,
-                            unsigned char **output,
-                            char letter,
-                            size_t requested_size)
-{
-    ssh_mac_ctx ctx;
-    unsigned char *tmp;
-    size_t size = crypto->digest_len;
-    ctx = ssh_mac_ctx_init(crypto->mac_type);
-
-    if (ctx == NULL) {
-        return -1;
-    }
-
-    ssh_mac_update(ctx, k, ssh_string_len(k) + 4);
-    ssh_mac_update(ctx, crypto->secret_hash, crypto->digest_len);
-    ssh_mac_update(ctx, &letter, 1);
-    ssh_mac_update(ctx, crypto->session_id, crypto->digest_len);
-    ssh_mac_final(*output, ctx);
-
-    while(requested_size > size) {
-        tmp = realloc(*output, size + crypto->digest_len);
-        if (tmp == NULL) {
-            return -1;
-        }
-        *output = tmp;
-
-        ctx = ssh_mac_ctx_init(crypto->mac_type);
-        if (ctx == NULL) {
-            return -1;
-        }
-        ssh_mac_update(ctx, k, ssh_string_len(k) + 4);
-        ssh_mac_update(ctx,
-                       crypto->secret_hash,
-                       crypto->digest_len);
-        ssh_mac_update(ctx, tmp, size);
-        ssh_mac_final(tmp + size, ctx);
-        size += crypto->digest_len;
-    }
-
-    return 0;
-}
-
 int ssh_generate_session_keys(ssh_session session)
 {
     ssh_string k_string = NULL;
     struct ssh_crypto_struct *crypto = session->next_crypto;
+    unsigned char *key = NULL;
+    unsigned char *IV_cli_to_srv = NULL;
+    unsigned char *IV_srv_to_cli = NULL;
+    unsigned char *enckey_cli_to_srv = NULL;
+    unsigned char *enckey_srv_to_cli = NULL;
+    unsigned char *intkey_cli_to_srv = NULL;
+    unsigned char *intkey_srv_to_cli = NULL;
+    size_t key_len = 0;
+    size_t IV_len = 0;
+    size_t enckey_cli_to_srv_len = 0;
+    size_t enckey_srv_to_cli_len = 0;
+    size_t intkey_cli_to_srv_len = 0;
+    size_t intkey_srv_to_cli_len = 0;
     int rc = -1;
 
-    k_string = ssh_make_bignum_string(crypto->k);
+    k_string = ssh_make_bignum_string(crypto->shared_secret);
     if (k_string == NULL) {
         ssh_set_error_oom(session);
         goto error;
     }
+    /* See RFC4251 Section 5 for the definition of mpint which is the
+     * encoding we need to use for key in the SSH KDF */
+    key = (unsigned char *)k_string;
+    key_len = ssh_string_len(k_string) + 4;
 
-    crypto->encryptIV = malloc(crypto->digest_len);
-    crypto->decryptIV = malloc(crypto->digest_len);
-    crypto->encryptkey = malloc(crypto->digest_len);
-    crypto->decryptkey = malloc(crypto->digest_len);
-    crypto->encryptMAC = malloc(crypto->digest_len);
-    crypto->decryptMAC = malloc(crypto->digest_len);
-    if (crypto->encryptIV == NULL ||
-        crypto->decryptIV == NULL ||
-        crypto->encryptkey == NULL || crypto->decryptkey == NULL ||
-        crypto->encryptMAC == NULL || crypto->decryptMAC == NULL){
+    IV_len = crypto->digest_len;
+    if (session->client) {
+        enckey_cli_to_srv_len = crypto->out_cipher->keysize / 8;
+        enckey_srv_to_cli_len = crypto->in_cipher->keysize / 8;
+        intkey_cli_to_srv_len = hmac_digest_len(crypto->out_hmac);
+        intkey_srv_to_cli_len = hmac_digest_len(crypto->in_hmac);
+    } else {
+        enckey_cli_to_srv_len = crypto->in_cipher->keysize / 8;
+        enckey_srv_to_cli_len = crypto->out_cipher->keysize / 8;
+        intkey_cli_to_srv_len = hmac_digest_len(crypto->in_hmac);
+        intkey_srv_to_cli_len = hmac_digest_len(crypto->out_hmac);
+    }
+
+    IV_cli_to_srv = malloc(IV_len);
+    IV_srv_to_cli = malloc(IV_len);
+    enckey_cli_to_srv = malloc(enckey_cli_to_srv_len);
+    enckey_srv_to_cli = malloc(enckey_srv_to_cli_len);
+    intkey_cli_to_srv = malloc(intkey_cli_to_srv_len);
+    intkey_srv_to_cli = malloc(intkey_srv_to_cli_len);
+    if (IV_cli_to_srv == NULL || IV_srv_to_cli == NULL ||
+        enckey_cli_to_srv == NULL || enckey_srv_to_cli == NULL ||
+        intkey_cli_to_srv == NULL || intkey_srv_to_cli == NULL) {
         ssh_set_error_oom(session);
         goto error;
     }
 
     /* IV */
-    if (session->client) {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptIV,
-                              'A',
-                              crypto->digest_len);
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptIV,
-                              'B',
-                              crypto->digest_len);
-        if (rc < 0) {
-            goto error;
-        }
-    } else {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptIV,
-                              'A',
-                              crypto->digest_len);
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptIV,
-                              'B',
-                              crypto->digest_len);
-        if (rc < 0) {
-            goto error;
-        }
+    rc = ssh_kdf(crypto, key, key_len, 'A', IV_cli_to_srv, IV_len);
+    if (rc < 0) {
+        goto error;
     }
-    if (session->client) {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptkey,
-                              'C',
-                              crypto->out_cipher->keysize / 8);
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptkey,
-                              'D',
-                              crypto->in_cipher->keysize / 8);
-        if (rc < 0) {
-            goto error;
-        }
-    } else {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptkey,
-                              'C',
-                              crypto->in_cipher->keysize / 8);
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptkey,
-                              'D',
-                              crypto->out_cipher->keysize / 8);
-        if (rc < 0) {
-            goto error;
-        }
+    rc = ssh_kdf(crypto, key, key_len, 'B', IV_srv_to_cli, IV_len);
+    if (rc < 0) {
+        goto error;
+    }
+    /* Encryption Key */
+    rc = ssh_kdf(crypto, key, key_len, 'C', enckey_cli_to_srv,
+                 enckey_cli_to_srv_len);
+    if (rc < 0) {
+        goto error;
+    }
+    rc = ssh_kdf(crypto, key, key_len, 'D', enckey_srv_to_cli,
+                 enckey_srv_to_cli_len);
+    if (rc < 0) {
+        goto error;
+    }
+    /* Integrity Key */
+    rc = ssh_kdf(crypto, key, key_len, 'E', intkey_cli_to_srv,
+                 intkey_cli_to_srv_len);
+    if (rc < 0) {
+        goto error;
+    }
+    rc = ssh_kdf(crypto, key, key_len, 'F', intkey_srv_to_cli,
+                 intkey_srv_to_cli_len);
+    if (rc < 0) {
+        goto error;
     }
 
-    if(session->client) {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptMAC,
-                              'E',
-                              hmac_digest_len(crypto->out_hmac));
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptMAC,
-                              'F',
-                              hmac_digest_len(crypto->in_hmac));
-        if (rc < 0) {
-            goto error;
-        }
+    if (session->client) {
+        crypto->encryptIV = IV_cli_to_srv;
+        crypto->decryptIV = IV_srv_to_cli;
+        crypto->encryptkey = enckey_cli_to_srv;
+        crypto->decryptkey = enckey_srv_to_cli;
+        crypto->encryptMAC = intkey_cli_to_srv;
+        crypto->decryptMAC = intkey_srv_to_cli;
     } else {
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->decryptMAC,
-                              'E',
-                              hmac_digest_len(crypto->in_hmac));
-        if (rc < 0) {
-            goto error;
-        }
-        rc = generate_one_key(k_string,
-                              crypto,
-                              &crypto->encryptMAC,
-                              'F',
-                              hmac_digest_len(crypto->out_hmac));
-        if (rc < 0) {
-            goto error;
-        }
+        crypto->encryptIV = IV_srv_to_cli;
+        crypto->decryptIV = IV_cli_to_srv;
+        crypto->encryptkey = enckey_srv_to_cli;
+        crypto->decryptkey = enckey_cli_to_srv;
+        crypto->encryptMAC = intkey_srv_to_cli;
+        crypto->decryptMAC = intkey_cli_to_srv;
     }
 
 #ifdef DEBUG_CRYPTO
-    ssh_print_hexa("Encrypt IV",
-                   crypto->encryptIV,
-                   crypto->digest_len);
-    ssh_print_hexa("Decrypt IV",
-                   crypto->decryptIV,
-                   crypto->digest_len);
-    ssh_print_hexa("Encryption key",
-                   crypto->encryptkey,
-                   crypto->out_cipher->keysize / 8);
-    ssh_print_hexa("Decryption key",
-                   crypto->decryptkey,
-                   crypto->in_cipher->keysize / 8);
-    ssh_print_hexa("Encryption MAC",
-                   crypto->encryptMAC,
-                   hmac_digest_len(crypto->out_hmac));
-    ssh_print_hexa("Decryption MAC",
-                   crypto->decryptMAC,
-                   hmac_digest_len(crypto->in_hmac));
+    ssh_print_hexa("Client to Server IV", IV_cli_to_srv, IV_len);
+    ssh_print_hexa("Server to Client IV", IV_srv_to_cli, IV_len);
+    ssh_print_hexa("Client to Server Encryption Key", enckey_cli_to_srv,
+                   enckey_cli_to_srv_len);
+    ssh_print_hexa("Server to Client Encryption Key", enckey_srv_to_cli,
+                   enckey_srv_to_cli_len);
+    ssh_print_hexa("Client to Server Integrity Key", intkey_cli_to_srv,
+                   intkey_cli_to_srv_len);
+    ssh_print_hexa("Server to Client Integrity Key", intkey_srv_to_cli,
+                   intkey_srv_to_cli_len);
 #endif
 
     rc = 0;
 error:
     ssh_string_burn(k_string);
     ssh_string_free(k_string);
+    if (rc != 0) {
+        free(IV_cli_to_srv);
+        free(IV_srv_to_cli);
+        free(enckey_cli_to_srv);
+        free(enckey_srv_to_cli);
+        free(intkey_cli_to_srv);
+        free(intkey_srv_to_cli);
+    }
 
     return rc;
 }

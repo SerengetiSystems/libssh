@@ -130,6 +130,7 @@ set(libssh_SRCS
   error.c
   getpass.c
   init.c
+  kdf.c
   kex.c
   known_hosts.c
   knownhosts.c
@@ -162,6 +163,7 @@ set(libssh_SRCS
   external/poly1305.c
   external/sc25519.c
   chachapoly.c
+  config_parser.c
 )
 
 if (DEFAULT_C_NO_DEPRECATION_FLAGS)
@@ -197,6 +199,7 @@ if (WITH_GCRYPT)
         gcrypt_missing.c
         pki_gcrypt.c
         ecdh_gcrypt.c
+        dh_key.c
        )
 elseif (WITH_MBEDTLS)
     set(libssh_SRCS
@@ -206,6 +209,7 @@ elseif (WITH_MBEDTLS)
         mbedcrypto_missing.c
         pki_mbedcrypto.c
         ecdh_mbedcrypto.c
+        dh_key.c
        )
 else (WITH_GCRYPT)
     set(libssh_SRCS
@@ -214,6 +218,7 @@ else (WITH_GCRYPT)
         pki_crypto.c
         ecdh_crypto.c
         libcrypto.c
+        dh_crypto.c
        )
     if(OPENSSL_VERSION VERSION_LESS "1.1.0")
         set(libssh_SRCS ${libssh_SRCS} libcrypto-compat.c)
@@ -239,6 +244,7 @@ if (WITH_SERVER)
     ${libssh_SRCS}
     server.c
     bind.c
+    bind_config.c
   )
 endif (WITH_SERVER)
 

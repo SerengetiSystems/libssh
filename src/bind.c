@@ -130,18 +130,25 @@ static socket_t bind_socket(ssh_bind sshbind, const char *hostname,
 }
 
 ssh_bind ssh_bind_new(void) {
-  ssh_bind ptr;
+    ssh_bind ptr;
+    int rc;
 
-  ptr = malloc(sizeof(struct ssh_bind_struct));
-  if (ptr == NULL) {
-    return NULL;
-  }
-  ZERO_STRUCTP(ptr);
-  ptr->bindfd = SSH_INVALID_SOCKET;
-  ptr->bindport= 22;
-  ptr->common.log_verbosity = 0;
+    ptr = calloc(1, sizeof(struct ssh_bind_struct));
+    if (ptr == NULL) {
+        return NULL;
+    }
+    ptr->bindfd = SSH_INVALID_SOCKET;
+    ptr->bindport = 22;
+    ptr->common.log_verbosity = 0;
 
-  return ptr;
+    /* Apply global bind configurations */
+    rc = ssh_bind_options_parse_config(ptr, NULL);
+    if (rc != 0) {
+        ssh_bind_free(ptr);
+        ptr = NULL;
+    }
+
+    return ptr;
 }
 
 static int ssh_bind_import_keys(ssh_bind sshbind) {
@@ -169,7 +176,7 @@ static int ssh_bind_import_keys(ssh_bind sshbind) {
           return SSH_ERROR;
       }
 
-      if (ssh_key_type(sshbind->ecdsa) != SSH_KEYTYPE_ECDSA) {
+      if (!is_ecdsa_key_type(ssh_key_type(sshbind->ecdsa))) {
           ssh_set_error(sshbind, SSH_FATAL,
                   "The ECDSA host key has the wrong type");
           ssh_key_free(sshbind->ecdsa);
@@ -394,6 +401,7 @@ void ssh_bind_free(ssh_bind sshbind){
   /* options */
   SAFE_FREE(sshbind->banner);
   SAFE_FREE(sshbind->bindaddr);
+  SAFE_FREE(sshbind->config_dir);
 
   SAFE_FREE(sshbind->dsakey);
   SAFE_FREE(sshbind->rsakey);

@@ -60,6 +60,7 @@ typedef mbedtls_md_context_t *EVPCTX;
 #define EVP_DIGEST_LEN EVP_MAX_MD_SIZE
 
 typedef mbedtls_mpi *bignum;
+typedef const mbedtls_mpi *const_bignum;
 typedef void* bignum_CTX;
 
 /* Constants for curves */
@@ -92,8 +93,12 @@ int ssh_mbedcry_hex2bn(bignum *dest, char *data);
 #define bignum_ctx_invalid(ctx) (ctx == NULL?0:1)
 #define bignum_set_word(bn, n) (mbedtls_mpi_lset(bn, n)==0?1:0) /* TODO fix
                                                           overflow/underflow */
-#define bignum_bin2bn(data, datalen, bn) mbedtls_mpi_read_binary(bn, data, \
-        datalen)
+#define bignum_bin2bn(data, datalen, bn) do { \
+    *(bn) = bignum_new(); \
+    if (*(bn) != NULL) { \
+        mbedtls_mpi_read_binary(*(bn), data, datalen); \
+    } \
+    } while(0)
 #define bignum_bn2dec(num) ssh_mbedcry_bn2num(num, 10)
 #define bignum_dec2bn(data, bn) mbedtls_mpi_read_string(bn, 10, data)
 #define bignum_bn2hex(num, dest) (*dest)=ssh_mbedcry_bn2num(num, 16)
@@ -120,6 +125,8 @@ int ssh_mbedtls_random(void *where, int len, int strong);
 
 ssh_string make_ecpoint_string(const mbedtls_ecp_group *g, const
         mbedtls_ecp_point *p);
+
+#define ssh_fips_mode() false
 
 #endif /* HAVE_LIBMBEDCRYPTO */
 #endif /* LIBMBEDCRYPTO_H_ */
