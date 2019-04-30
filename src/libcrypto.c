@@ -695,7 +695,7 @@ static int aes_ctr_set_key(struct ssh_cipher_struct *cipher, void *key,
 }
 
 static void aes_ctr_encrypt(struct ssh_cipher_struct *cipher, void *in, void *out,
-    unsigned long len) {
+    size_t len) {
   unsigned char tmp_buffer[AES_BLOCK_SIZE];
   unsigned int num=0;
   /* Some things are special with ctr128 :
@@ -712,8 +712,12 @@ static void aes_ctr_encrypt(struct ssh_cipher_struct *cipher, void *in, void *ou
 }
 
 static void aes_ctr_cleanup(struct ssh_cipher_struct *cipher){
-    explicit_bzero(cipher->aes_key, sizeof(*cipher->aes_key));
-    SAFE_FREE(cipher->aes_key);
+    if(cipher->aes_key)
+    {
+        explicit_bzero(cipher->aes_key, sizeof(*cipher->aes_key));
+        free(cipher->aes_key);
+        cipher->aes_key = NULL;
+    }
 }
 
 #endif /* HAVE_OPENSSL_EVP_AES_CTR */
