@@ -1146,33 +1146,49 @@ int ssh_make_sessionid(ssh_session session)
 #ifdef WITH_GEX
     case SSH_KEX_DH_GEX_SHA1:
     case SSH_KEX_DH_GEX_SHA256:
-        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
-                                     DH_CLIENT_KEYPAIR, NULL, &client_pubkey);
-        if (rc != SSH_OK) {
-            goto error;
-        }
-        rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
-                                     DH_SERVER_KEYPAIR, NULL, &server_pubkey);
-        if (rc != SSH_OK) {
-            goto error;
-        }
-        rc = ssh_dh_get_parameters(session->next_crypto->dh_ctx,
-                                   &modulus, &generator);
-        if (rc != SSH_OK) {
-            goto error;
-        }
-        rc = ssh_buffer_pack(buf,
-                    "dddBBBB",
-                    session->next_crypto->dh_pmin,
-                    session->next_crypto->dh_pn,
-                    session->next_crypto->dh_pmax,
-                    modulus,
-                    generator,
-                    client_pubkey,
-                    server_pubkey);
-        if (rc != SSH_OK) {
-            goto error;
-        }
+		rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+			DH_CLIENT_KEYPAIR, NULL, &client_pubkey);
+		if (rc != SSH_OK) {
+			goto error;
+		}
+		rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
+			DH_SERVER_KEYPAIR, NULL, &server_pubkey);
+		if (rc != SSH_OK) {
+			goto error;
+		}
+		rc = ssh_dh_get_parameters(session->next_crypto->dh_ctx,
+			&modulus, &generator);
+		if (rc != SSH_OK) {
+			goto error;
+		}
+		if (session->next_crypto->using_old_gex)
+		{
+			rc = ssh_buffer_pack(buf,
+				"dBBBB",
+				session->next_crypto->dh_pn,
+				modulus,
+				generator,
+				client_pubkey,
+				server_pubkey);
+			if (rc != SSH_OK) {
+				goto error;
+			}
+		}
+		else
+		{
+			rc = ssh_buffer_pack(buf,
+				"dddBBBB",
+				session->next_crypto->dh_pmin,
+				session->next_crypto->dh_pn,
+				session->next_crypto->dh_pmax,
+				modulus,
+				generator,
+				client_pubkey,
+				server_pubkey);
+			if (rc != SSH_OK) {
+				goto error;
+			}
+		}
         break;
 #endif /* WITH_GEX */
 #ifdef HAVE_ECDH
