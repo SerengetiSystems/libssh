@@ -142,7 +142,10 @@ void ssh_log(ssh_session session,
     va_start(va, format);
     vsnprintf(buffer, sizeof(buffer), format, va);
     va_end(va);
-    ssh_log_function(verbosity, "", buffer);
+	if (session->common.callbacks && session->common.callbacks->log_function)
+		session->common.callbacks->log_function(session, verbosity, buffer, session->common.callbacks->userdata);
+	else
+	    ssh_log_function(verbosity, "", buffer);
   }
 }
 
@@ -161,10 +164,17 @@ void ssh_log_common(struct ssh_common_struct *common,
     va_list va;
 
     if (verbosity <= common->log_verbosity) {
-        va_start(va, format);
-        vsnprintf(buffer, sizeof(buffer), format, va);
-        va_end(va);
-        ssh_log_function(verbosity, function, buffer);
+		va_start(va, format);
+		vsnprintf(buffer, sizeof(buffer), format, va);
+		va_end(va);
+		if (common->callbacks && common->callbacks->log_function)
+		{
+			common->callbacks->log_function(common, verbosity, buffer, common->callbacks->userdata);
+		}
+		else
+		{
+			ssh_log_function(verbosity, function, buffer);
+		}
     }
 }
 

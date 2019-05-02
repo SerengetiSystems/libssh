@@ -337,10 +337,13 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
                 ssh_poll_set_events(p, POLLOUT | POLLIN);
             }
 
-            rc = ssh_socket_set_blocking(ssh_socket_get_fd(s));
-            if (rc < 0) {
-                return -1;
-            }
+			if (!(s->io_callbacks && s->io_callbacks->closecb))
+			{   //if socket is externally managed don't try and do this
+				rc = ssh_socket_set_blocking(ssh_socket_get_fd(s));
+				if (rc < 0) {
+					return -1;
+				}
+			}
 
             if (s->callbacks != NULL && s->callbacks->connected != NULL) {
                 s->callbacks->connected(SSH_SOCKET_CONNECTED_OK,

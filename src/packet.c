@@ -1862,10 +1862,11 @@ ssh_packet_set_newkeys(ssh_session session,
     /* Both sides switched: do the actual switch now */
     if (session->next_crypto->used == SSH_DIRECTION_BOTH) {
         size_t digest_len;
+		uint8_t rekey = 0;
 
         if (session->current_crypto != NULL) {
             crypto_free(session->current_crypto);
-            session->current_crypto = NULL;
+			rekey = 1;
         }
 
         session->current_crypto = session->next_crypto;
@@ -1889,7 +1890,32 @@ ssh_packet_set_newkeys(ssh_session session,
                session->current_crypto->session_id,
                digest_len);
 
-        return SSH_OK;
+		if (session->client)
+		{
+			SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+				rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" : 
+				"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+				session->next_crypto->kex_methods[SSH_KEX],
+				session->next_crypto->kex_methods[SSH_HOSTKEYS],
+				session->next_crypto->kex_methods[SSH_CRYPT_C_S],
+				session->next_crypto->kex_methods[SSH_MAC_C_S],
+				session->next_crypto->kex_methods[SSH_CRYPT_S_C],
+				session->next_crypto->kex_methods[SSH_MAC_S_C]);
+		}
+		else
+		{
+			SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+				rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" :
+				"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+				session->next_crypto->kex_methods[SSH_KEX],
+				session->next_crypto->kex_methods[SSH_HOSTKEYS],
+				session->next_crypto->kex_methods[SSH_CRYPT_S_C],
+				session->next_crypto->kex_methods[SSH_MAC_S_C], 
+				session->next_crypto->kex_methods[SSH_CRYPT_C_S],
+				session->next_crypto->kex_methods[SSH_MAC_C_S]);
+		}
+
+		return SSH_OK;
     }
 
     /* Initialize common structures so the next context can be used in

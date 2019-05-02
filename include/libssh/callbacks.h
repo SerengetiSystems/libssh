@@ -66,12 +66,12 @@ typedef int (*ssh_channel_callback_data) (ssh_channel channel, int code, void *d
 
 /**
  * @brief SSH log callback. All logging messages will go through this callback
- * @param session Current session handler
+ * @param common Current comman pointer, common is the first part of both bind and session
  * @param priority Priority of the log, the smaller being the more important
  * @param message the actual message
  * @param userdata Userdata to be passed to the callback function.
  */
-typedef void (*ssh_log_callback) (ssh_session session, int priority,
+typedef void (*ssh_log_callback) (void *common, int priority,
     const char *message, void *userdata);
 
 /**

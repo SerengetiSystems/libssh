@@ -875,7 +875,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
 
     if (outlen != (int)encrypted_size) {
         SSH_LOG(SSH_LOG_WARNING,
-                "EVP_DecryptUpdate: output size %d for %zd in",
+			    "EVP_DecryptUpdate: output size %d for " SIZET_SPECIFIER " in",
                 outlen,
                 encrypted_size);
         return SSH_ERROR;
