@@ -1714,7 +1714,7 @@ ssh_packet_is_kex(unsigned char type)
            type != SSH2_MSG_EXT_INFO;
 }
 
-static bool
+bool
 ssh_packet_in_rekey(ssh_session session)
 {
     /* We know we are rekeying if we are authenticated and the DH
@@ -1722,6 +1722,40 @@ ssh_packet_in_rekey(ssh_session session)
      */
     return (session->flags & SSH_SESSION_FLAG_AUTHENTICATED) &&
            (session->dh_handshake_state != DH_STATE_FINISHED);
+}
+
+int ssh_queue_send(ssh_session session)
+{
+	uint32_t payloadsize;
+	uint8_t type, *payload;
+	int rc;
+	struct ssh_iterator *it;
+
+	for (it = ssh_list_get_iterator(session->out_queue);
+		it != NULL;
+		it = ssh_list_get_iterator(session->out_queue)) {
+		struct ssh_buffer_struct *next_buffer = NULL;
+
+		/* Peek only -- do not remove from queue yet */
+		next_buffer = (struct ssh_buffer_struct *)it->data;
+		payloadsize = ssh_buffer_get_len(next_buffer);
+		if (ssh_packet_need_rekey(session, payloadsize)) {
+			/* Sigh ... we still can not send this packet. Repeat. */
+			SSH_LOG(SSH_LOG_PACKET, "Queued packet triggered rekey");
+			return ssh_send_rekex(session);
+		}
+		ssh_buffer_free(session->out_buffer);
+		session->out_buffer = ssh_list_pop_head(struct ssh_buffer_struct *,
+			session->out_queue);
+		payload = (uint8_t *)ssh_buffer_get(session->out_buffer);
+		type = payload[0];
+		SSH_LOG(SSH_LOG_PACKET, "Dequeue packet type %d", type);
+		rc = packet_send2(session);
+		if (rc != SSH_OK) {
+			return rc;
+		}
+	}
+	return SSH_OK;
 }
 
 int ssh_packet_send(ssh_session session)
@@ -1767,42 +1801,21 @@ int ssh_packet_send(ssh_session session)
              * After that we need to handle the key exchange responses
              * up to the point where we can send the rest of the queue.
              */
-            return ssh_send_rekex(session);
+            ssh_send_rekex(session);
         }
-        return SSH_OK;
+		return SSH_OK;
     }
 
     /* Send the packet normally */
     rc = packet_send2(session);
 
     /* We finished the key exchange so we can try to send our queue now */
-    if (rc == SSH_OK && type == SSH2_MSG_NEWKEYS) {
-        struct ssh_iterator *it;
-
-        for (it = ssh_list_get_iterator(session->out_queue);
-             it != NULL;
-             it = ssh_list_get_iterator(session->out_queue)) {
-            struct ssh_buffer_struct *next_buffer = NULL;
-
-            /* Peek only -- do not remove from queue yet */
-            next_buffer = (struct ssh_buffer_struct *)it->data;
-            payloadsize = ssh_buffer_get_len(next_buffer);
-            if (ssh_packet_need_rekey(session, payloadsize)) {
-                /* Sigh ... we still can not send this packet. Repeat. */
-                SSH_LOG(SSH_LOG_PACKET, "Queued packet triggered rekey");
-                return ssh_send_rekex(session);
-            }
-            ssh_buffer_free(session->out_buffer);
-            session->out_buffer = ssh_list_pop_head(struct ssh_buffer_struct *,
-                                                    session->out_queue);
-            payload = (uint8_t *)ssh_buffer_get(session->out_buffer);
-            type = payload[0];
-            SSH_LOG(SSH_LOG_PACKET, "Dequeue packet type %d", type);
-            rc = packet_send2(session);
-            if (rc != SSH_OK) {
-                return rc;
-            }
-        }
+	/* server has to do this differently */
+    if (rc == SSH_OK && type == SSH2_MSG_NEWKEYS && !session->server) {
+		//not really sure it makes sense to assign this to rc as this is 
+		//not about the packet we are sending now. What if it returns e_again
+		//don't want to send that packet again. 
+		rc = ssh_queue_send(session);
     }
 
     return rc;

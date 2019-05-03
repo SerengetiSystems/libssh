@@ -354,6 +354,8 @@ static void ssh_server_connection_callback(ssh_session session){
                     goto error;
                 }
 
+
+
                 /*
                  * If the client supports extension negotiation, we will send
                  * our supported extensions now. This is the first message after
@@ -380,11 +382,21 @@ static void ssh_server_connection_callback(ssh_session session){
                 }
 
                 set_status(session,1.0f);
-                session->connected = 1;
-                session->session_state=SSH_SESSION_STATE_AUTHENTICATING;
-                if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED)
-                    session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
-
+				if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED)
+				{
+					session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
+					rc = ssh_queue_send(session);
+					if (rc != SSH_OK) {
+						//probably need to handle SSH_AGAIN differently 
+						//not sure how to make it retry this though. 
+						goto error;
+					}
+				}
+				else
+				{
+					session->connected = 1;
+					session->session_state = SSH_SESSION_STATE_AUTHENTICATING;
+				}
             }
             break;
         case SSH_SESSION_STATE_AUTHENTICATING:
