@@ -861,6 +861,11 @@ error:
   return -1;
 }
 
+static int ssh_session_wait_rekey_termination(void *c){
+	ssh_session session = (ssh_session)c;
+	return ssh_packet_in_rekey((ssh_session)c) ? 0 : 1;
+}
+
 /*
  * Key re-exchange (rekey) is triggered by this function.
  * It can not be called again after the rekey is initialized!
@@ -909,7 +914,9 @@ int ssh_send_rekex(ssh_session session)
 
     /* Reset the handshake state */
     session->dh_handshake_state = DH_STATE_INIT_SENT;
-    return SSH_OK;
+
+	//try to finish key exchange.
+	return ssh_handle_packets_termination(session, SSH_TIMEOUT_USER, ssh_session_wait_rekey_termination, session);
 }
 
 /* returns a copy of the provided list if everything is supported,
