@@ -1801,7 +1801,9 @@ int ssh_packet_send(ssh_session session)
              * After that we need to handle the key exchange responses
              * up to the point where we can send the rest of the queue.
              */
-            ssh_send_rekex(session);
+            rc = ssh_send_rekex(session);
+			if (rc == SSH_ERROR)
+				return SSH_ERROR;
         }
 		return SSH_OK;
     }
