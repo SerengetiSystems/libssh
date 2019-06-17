@@ -59,10 +59,24 @@ enum ssh_channel_state_e {
 /* the channel has not yet been bound to a remote one */
 #define SSH_CHANNEL_FLAG_NOT_BOUND 0x0008
 
+/* don't automatically refund used window*/
+#define SSH_CHANNEL_FLAG_WINDOW_MANUAL 0x0010
+
+/*
+* All implementations MUST be able to process packets with an
+* uncompressed payload length of 32768 bytes or less and a total packet
+* size of 35000 bytes or less.
+*/
+#define CHANNEL_MAX_PACKET 32768
+#define CHANNEL_INITIAL_WINDOW 64000
+
+#define WINDOWBASE 1280000
+
 struct ssh_channel_struct {
     ssh_session session; /* SSH_SESSION pointer */
     uint32_t local_channel;
     uint32_t local_window;
+	uint32_t local_refund;
     int local_eof;
     uint32_t local_maxpacket;
 
