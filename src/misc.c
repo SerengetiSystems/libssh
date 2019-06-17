@@ -344,11 +344,16 @@ char *ssh_hostport(const char *host, int port){
  *
  * @see ssh_string_free_char()
  */
+#ifdef _DEBUG
+#define MAX_SHOW 128
+#else
+#define MAX_SHOW 48
+#endif
 char *ssh_get_hexa(const unsigned char *what, size_t len) {
     const char h[] = "0123456789abcdef";
     char *hexa;
     size_t i;
-    size_t hlen = len * 3;
+	size_t hlen = len > MAX_SHOW ? MAX_SHOW * 3 + 3 : len * 3;
 
     if (len > (UINT_MAX - 1) / 3) {
         return NULL;
@@ -359,12 +364,33 @@ char *ssh_get_hexa(const unsigned char *what, size_t len) {
         return NULL;
     }
 
-    for (i = 0; i < len; i++) {
-        hexa[i * 3] = h[(what[i] >> 4) & 0xF];
-        hexa[i * 3 + 1] = h[what[i] & 0xF];
-        hexa[i * 3 + 2] = ':';
-    }
-    hexa[hlen - 1] = '\0';
+	if (len > MAX_SHOW)
+	{
+		int j;
+		for (i = 0; i < MAX_SHOW / 2; i++) {
+			hexa[i * 3] = h[(what[i] >> 4) & 0xF];
+			hexa[i * 3 + 1] = h[what[i] & 0xF];
+			hexa[i * 3 + 2] = ':';
+		}
+		hexa[i * 3] = '.';
+		hexa[i * 3 + 1] = '.';
+		hexa[i * 3 + 2] = '.';
+		for (j = MAX_SHOW / 2 + 1, i = len - MAX_SHOW / 2; i < len; i++, j++) {
+			hexa[j * 3] = ':';
+			hexa[j * 3 + 1] = h[(what[i] >> 4) & 0xF];
+			hexa[j * 3 + 2] = h[what[i] & 0xF];
+		}
+		hexa[hlen] = '\0';
+	}
+	else
+	{
+		for (i = 0; i < len; i++) {
+			hexa[i * 3] = h[(what[i] >> 4) & 0xF];
+			hexa[i * 3 + 1] = h[what[i] & 0xF];
+			hexa[i * 3 + 2] = ':';
+		}
+		hexa[hlen - 1] = '\0';
+	}
 
     return hexa;
 }

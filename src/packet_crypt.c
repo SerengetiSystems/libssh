@@ -196,7 +196,7 @@ unsigned char *ssh_packet_encrypt(ssh_session session, void *data, uint32_t len)
           hmac_final(ctx, crypto->hmacbuf, &finallen);
       }
 #ifdef DEBUG_CRYPTO
-      ssh_print_hexa("mac: ",data,hmac_digest_len(type));
+      ssh_print_hexa("Packet data: ",data, len);
       if (finallen != hmac_digest_len(type)) {
         printf("Final len is %d\n",finallen);
       }
