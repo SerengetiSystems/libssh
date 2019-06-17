@@ -1632,6 +1632,7 @@ static int packet_send2(ssh_session session)
         goto error;
     }
 
+
     rc = ssh_buffer_add_data(session->out_buffer, padding_data, padding_size);
     if (rc < 0) {
         goto error;

@@ -48,7 +48,6 @@
 #include "libssh/server.h"
 #endif
 
-#define WINDOWBASE 1280000
 #define WINDOWLIMIT (WINDOWBASE/2)
 
 /*
@@ -297,6 +296,7 @@ static int channel_open(ssh_channel channel, const char *type, int window,
   }
   channel->local_channel = ssh_channel_new_id(session);
   channel->local_maxpacket = maxpacket;
+  channel->local_refund = 0;
   channel->local_window = window;
 
   SSH_LOG(SSH_LOG_PROTOCOL,
@@ -318,7 +318,6 @@ static int channel_open(ssh_channel channel, const char *type, int window,
   if (payload != NULL) {
     if (ssh_buffer_add_buffer(session->out_buffer, payload) < 0) {
       ssh_set_error_oom(session);
-
       return err;
     }
   }
@@ -415,6 +414,11 @@ error:
   ssh_buffer_reinit(session->out_buffer);
 
   return SSH_ERROR;
+}
+
+int ssh_channel_grow_window(ssh_channel channel)
+{
+	return grow_window(channel->session, channel, 0);
 }
 
 /**
@@ -583,11 +587,13 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   }
   ssh_callbacks_iterate_end();
 
-  if (channel->local_window + ssh_buffer_get_len(buf) < WINDOWLIMIT) {
+  if (!(channel->flags & SSH_CHANNEL_FLAG_WINDOW_MANUAL) && 
+	  channel->local_window + ssh_buffer_get_len(buf) < WINDOWLIMIT) {
       if (grow_window(session, channel, 0) < 0) {
           return -1;
       }
   }
+
   return SSH_PACKET_USED;
 }
 
@@ -2912,7 +2918,8 @@ int ssh_channel_read_timeout(ssh_channel channel,
       channel->counter->in_bytes += len;
   }
   /* Authorize some buffering while userapp is busy */
-  if (channel->local_window < WINDOWLIMIT) {
+  if (!(channel->flags & SSH_CHANNEL_FLAG_WINDOW_MANUAL) &&
+	  channel->local_window < WINDOWLIMIT) {
     if (grow_window(session, channel, 0) < 0) {
       return -1;
     }
