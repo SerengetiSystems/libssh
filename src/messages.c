@@ -148,6 +148,11 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
 
                 return SSH_OK;
             }
+			else if (msg->auth_request.method == SSH_AUTH_METHOD_UNKNOWN)
+			{   // auth messages must always b replied to with auth succeess or auth failure
+				ssh_message_reply_default(msg);
+				return SSH_OK;
+			}
             break;
         case SSH_REQUEST_CHANNEL_OPEN:
             if (msg->channel_request_open.type == SSH_CHANNEL_SESSION &&
@@ -773,7 +778,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     goto end;
   }
 
-  if (strcmp(method, "password") == 0) {
+  else if (strcmp(method, "password") == 0) {
     uint8_t tmp;
 
     msg->auth_request.method = SSH_AUTH_METHOD_PASSWORD;
@@ -784,7 +789,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     goto end;
   }
 
-  if (strcmp(method, "keyboard-interactive") == 0) {
+  else if (strcmp(method, "keyboard-interactive") == 0) {
     ssh_string lang = NULL;
     ssh_string submethods = NULL;
 
@@ -814,7 +819,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     goto end;
   }
 
-  if (strcmp(method, "publickey") == 0) {
+  else if (strcmp(method, "publickey") == 0) {
     ssh_string algo = NULL;
     ssh_string pubkey_blob = NULL;
     uint8_t has_sign;
@@ -834,83 +839,64 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     rc = ssh_pki_import_pubkey_blob(pubkey_blob, &msg->auth_request.pubkey);
     ssh_string_free(pubkey_blob);
     pubkey_blob = NULL;
-    if (rc < 0) {
-        ssh_string_free(algo);
-        algo = NULL;
-        goto error;
-    }
-    msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
-    // has a valid signature ?
-    if(has_sign) {
-        ssh_string sig_blob = NULL;
-        ssh_buffer digest = NULL;
+	if (rc >= 0) {
+		msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
+		// has a valid signature ?
+		if (has_sign) {
+			ssh_string sig_blob = NULL;
+			ssh_buffer digest = NULL;
 
-        sig_blob = ssh_buffer_get_ssh_string(packet);
-        if(sig_blob == NULL) {
-            SSH_LOG(SSH_LOG_PACKET, "Invalid signature packet from peer");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
-            ssh_string_free(algo);
-            algo = NULL;
-            goto error;
-        }
+			sig_blob = ssh_buffer_get_ssh_string(packet);
+			if (sig_blob == NULL) {
+				SSH_LOG(SSH_LOG_PACKET, "Invalid signature packet from peer");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
+				ssh_string_free(algo);
+				algo = NULL;
+				goto error;
+			}
 
-        digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
-        ssh_string_free(algo);
-        algo = NULL;
-        if (digest == NULL) {
-            ssh_string_free(sig_blob);
-            SSH_LOG(SSH_LOG_PACKET, "Failed to get digest");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-            goto error;
-        }
+			digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
+			ssh_string_free(algo);
+			algo = NULL;
+			if (digest == NULL) {
+				ssh_string_free(sig_blob);
+				SSH_LOG(SSH_LOG_PACKET, "Failed to get digest");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+				goto error;
+			}
 
-        rc = ssh_pki_import_signature_blob(sig_blob,
-                                           msg->auth_request.pubkey,
-                                           &sig);
-        if (rc == SSH_OK) {
-            /* Check if the signature from client matches server preferences */
-            if (session->opts.pubkey_accepted_types) {
-                if (!ssh_match_group(session->opts.pubkey_accepted_types,
-                            sig->type_c))
-                {
-                    ssh_set_error(session,
-                            SSH_FATAL,
-                            "Public key from client (%s) doesn't match server "
-                            "preference (%s)",
-                            sig->type_c,
-                            session->opts.pubkey_accepted_types);
-                    rc = SSH_ERROR;
-                }
-            }
+			rc = ssh_pki_import_signature_blob(sig_blob,
+				msg->auth_request.pubkey,
+				&sig);
+			if (rc == SSH_OK) {
+				rc = ssh_pki_signature_verify(session,
+					sig,
+					msg->auth_request.pubkey,
+					ssh_buffer_get(digest),
+					ssh_buffer_get_len(digest));
+			}
+			ssh_string_free(sig_blob);
+			ssh_buffer_free(digest);
+			ssh_signature_free(sig);
+			if (rc < 0) {
+				SSH_LOG(
+					SSH_LOG_PACKET,
+					"Received an invalid signature from peer");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+				goto error;
+			}
 
-            if (rc == SSH_OK) {
-                rc = ssh_pki_signature_verify(session,
-                                              sig,
-                                              msg->auth_request.pubkey,
-                                              ssh_buffer_get(digest),
-                                              ssh_buffer_get_len(digest));
-            }
-        }
-        ssh_string_free(sig_blob);
-        ssh_buffer_free(digest);
-        ssh_signature_free(sig);
-        if (rc < 0) {
-            SSH_LOG(
-                    SSH_LOG_PACKET,
-                    "Received an invalid signature from peer");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-            goto error;
-        }
+			SSH_LOG(SSH_LOG_PACKET, "Valid signature received");
 
-        SSH_LOG(SSH_LOG_PACKET, "Valid signature received");
-
-        msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
-    }
-    ssh_string_free(algo);
-    goto end;
+			msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
+		}
+		goto end;
+	}
+	else
+	    ssh_string_free(algo);
   }
 #ifdef WITH_GSSAPI
-  if (strcmp(method, "gssapi-with-mic") == 0) {
+  else if (strcmp(method, "gssapi-with-mic") == 0) {
      uint32_t n_oid;
      ssh_string *oids;
      ssh_string oid;
@@ -961,7 +947,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
 #endif
 
   msg->auth_request.method = SSH_AUTH_METHOD_UNKNOWN;
-  SAFE_FREE(method);
   goto end;
 error:
   SAFE_FREE(service);
