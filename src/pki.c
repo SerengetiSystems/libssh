@@ -1441,7 +1441,7 @@ int ssh_pki_import_pubkey_blob(const ssh_string key_blob,
 
     type = ssh_key_type_from_name(ssh_string_get_char(type_s));
     if (type == SSH_KEYTYPE_UNKNOWN) {
-        SSH_LOG(SSH_LOG_WARN, "Unknown key type found!");
+		SSH_LOG(SSH_LOG_WARN, "Unknown key type '%s' found!", ssh_string_get_char(type_s));
         goto fail;
     }
     ssh_string_free(type_s);
