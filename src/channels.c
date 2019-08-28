@@ -296,7 +296,6 @@ static int channel_open(ssh_channel channel, const char *type, int window,
   }
   channel->local_channel = ssh_channel_new_id(session);
   channel->local_maxpacket = maxpacket;
-  channel->local_refund = 0;
   channel->local_window = window;
 
   SSH_LOG(SSH_LOG_PROTOCOL,
@@ -362,6 +361,75 @@ ssh_channel ssh_channel_from_local(ssh_session session, uint32_t id) {
   }
 
   return NULL;
+}
+
+/**
+* @brief disables automatic window maintenance for async reply use cases
+* @param channel SSH channel
+**/
+void ssh_channel_set_manual_window_refund(ssh_channel channel)
+{
+  channel->flags |= SSH_CHANNEL_FLAG_WINDOW_MANUAL;
+}
+
+/**
+* @brief refund local window bytes after the associated reply has ben sent
+*        useful for asynchronous use cases where the channel data callback returns
+*        before the associated reply is sent
+* @param channel SSH channel
+* @param bytes How many bytes to refund
+* @return SSH_OK if successful; SSH_ERROR otherwise.
+**/
+int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
+{
+  if (channel->flags & SSH_CHANNEL_FLAG_WINDOW_MANUAL)
+  {
+    channel->local_refund += bytes;
+    if (channel->local_refund >= channel->local_maxpacket)
+    {
+      ssh_session session = channel->session;
+      /* WINDOW_ADJUST packet needs a relative increment rather than an absolute
+      * value, so we give here the missing bytes needed to reach new_window
+      */
+      int rc = ssh_buffer_pack(session->out_buffer,
+        "bdd",
+        SSH2_MSG_CHANNEL_WINDOW_ADJUST,
+        channel->remote_channel,
+        channel->local_refund);
+
+      if (rc != SSH_OK) {
+        ssh_set_error_oom(session);
+        goto error;
+      }
+
+      if (ssh_packet_send(session) == SSH_ERROR) {
+        goto error;
+      }
+
+      channel->local_window += channel->local_refund;
+      channel->local_refund = 0;
+
+      SSH_LOG(SSH_LOG_PROTOCOL,
+        "growing window (channel %d:%d) to %d bytes",
+        channel->local_channel,
+        channel->remote_channel,
+        channel->local_window);
+
+      return SSH_OK;
+    error:
+      ssh_buffer_reinit(session->out_buffer);
+      return SSH_ERROR;
+    }
+    else
+      return SSH_OK;
+  }
+  else
+  {
+    SSH_LOG(SSH_LOG_PROTOCOL,
+      "refunding window only supported with channel flag SSH_CHANNEL_FLAG_WINDOW_MANUAL");
+    ssh_set_error_invalid(channel->session);
+    return SSH_ERROR;
+  }
 }
 
 /**
