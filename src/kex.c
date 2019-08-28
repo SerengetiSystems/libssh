@@ -43,6 +43,7 @@
 #include "libssh/misc.h"
 #include "libssh/pki.h"
 #include "libssh/bignum.h"
+#include "libssh/token.h"
 
 #ifdef WITH_BLOWFISH_CIPHER
 # if defined(HAVE_OPENSSL_BLOWFISH_H) || defined(HAVE_LIBGCRYPT) || defined(HAVE_LIBMBEDCRYPTO)
@@ -106,15 +107,37 @@
 
 #ifdef HAVE_ECDH
 #define ECDH "ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,"
-#define PUBLIC_KEY_ALGORITHMS "ssh-ed25519,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss"
+#define EC_HOSTKEYS "ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,ecdsa-sha2-nistp256,"
+#define EC_PUBLIC_KEY_ALGORITHMS "ecdsa-sha2-nistp521-cert-v01@openssh.com," \
+                                 "ecdsa-sha2-nistp384-cert-v01@openssh.com," \
+                                 "ecdsa-sha2-nistp256-cert-v01@openssh.com,"
 #else
-#ifdef HAVE_DSA
-#define PUBLIC_KEY_ALGORITHMS "ssh-ed25519,ssh-rsa,rsa-sha2-512,rsa-sha2-256,ssh-dss"
-#else
-#define PUBLIC_KEY_ALGORITHMS "ssh-ed25519,ssh-rsa,rsa-sha2-512,rsa-sha2-256"
-#endif
+#define EC_HOSTKEYS ""
+#define EC_PUBLIC_KEY_ALGORITHMS ""
 #define ECDH ""
 #endif
+
+#ifdef HAVE_DSA
+#define DSA_HOSTKEYS ",ssh-dss"
+#define DSA_PUBLIC_KEY_ALGORITHMS ",ssh-dss-cert-v01@openssh.com"
+#else
+#define DSA_HOSTKEYS ""
+#define DSA_PUBLIC_KEY_ALGORITHMS ""
+#endif
+
+#define HOSTKEYS "ssh-ed25519," \
+                 EC_HOSTKEYS \
+                 "rsa-sha2-512," \
+                 "rsa-sha2-256," \
+                 "ssh-rsa" \
+                 DSA_HOSTKEYS
+#define PUBLIC_KEY_ALGORITHMS "ssh-ed25519-cert-v01@openssh.com," \
+                              EC_PUBLIC_KEY_ALGORITHMS \
+                              "rsa-sha2-512-cert-v01@openssh.com," \
+                              "rsa-sha2-256-cert-v01@openssh.com," \
+                              "ssh-rsa-cert-v01@openssh.com" \
+                              DSA_PUBLIC_KEY_ALGORITHMS "," \
+                              HOSTKEYS
 
 #ifdef WITH_GEX
 #define GEX_SHA256 "diffie-hellman-group-exchange-sha256,"
@@ -135,10 +158,57 @@
 #define KEY_EXCHANGE_SUPPORTED \
     GEX_SHA1 \
     KEY_EXCHANGE
+
 #define KEX_METHODS_SIZE 10
 
 /* RFC 8308 */
 #define KEX_EXTENSION_CLIENT "ext-info-c"
+
+/* Allowed algorithms in FIPS mode */
+#define FIPS_ALLOWED_CIPHERS "aes256-gcm@openssh.com,"\
+                             "aes256-ctr,"\
+                             "aes256-cbc,"\
+                             "aes128-gcm@openssh.com,"\
+                             "aes128-ctr,"\
+                             "aes128-cbc"
+
+#define FIPS_ALLOWED_HOSTKEYS EC_HOSTKEYS \
+                              "rsa-sha2-512," \
+                              "rsa-sha2-256"
+
+#define FIPS_ALLOWED_PUBLIC_KEY_ALGORITHMS EC_PUBLIC_KEY_ALGORITHMS \
+                                           "rsa-sha2-512-cert-v01@openssh.com," \
+                                           "rsa-sha2-256-cert-v01@openssh.com," \
+                                           FIPS_ALLOWED_HOSTKEYS
+
+#define FIPS_ALLOWED_KEX "ecdh-sha2-nistp256,"\
+                         "ecdh-sha2-nistp384,"\
+                         "ecdh-sha2-nistp521,"\
+                         "diffie-hellman-group-exchange-sha256,"\
+                         "diffie-hellman-group16-sha512,"\
+                         "diffie-hellman-group18-sha512"
+
+#define FIPS_ALLOWED_MACS "hmac-sha2-256-etm@openssh.com,"\
+                          "hmac-sha1-etm@openssh.com,"\
+                          "hmac-sha2-512-etm@openssh.com,"\
+                          "hmac-sha2-256,"\
+                          "hmac-sha1,"\
+                          "hmac-sha2-512"
+
+/* NOTE: This is a fixed API and the index is defined by ssh_kex_types_e */
+static const char *fips_methods[] = {
+    FIPS_ALLOWED_KEX,
+    FIPS_ALLOWED_PUBLIC_KEY_ALGORITHMS,
+    FIPS_ALLOWED_CIPHERS,
+    FIPS_ALLOWED_CIPHERS,
+    FIPS_ALLOWED_MACS,
+    FIPS_ALLOWED_MACS,
+    ZLIB,
+    ZLIB,
+    "",
+    "",
+    NULL
+};
 
 /* NOTE: This is a fixed API and the index is defined by ssh_kex_types_e */
 static const char *default_methods[] = {
@@ -185,92 +255,6 @@ static const char *ssh_kex_descriptions[] = {
   NULL
 };
 
-/* tokenize will return a token of strings delimited by ",". the first element has to be freed */
-static char **tokenize(const char *chain){
-    char **tokens;
-    size_t n=1;
-    size_t i=0;
-    char *tmp;
-    char *ptr;
-
-    tmp = strdup(chain);
-    if (tmp == NULL) {
-      return NULL;
-    }
-    ptr = tmp;
-    while(*ptr){
-        if(*ptr==','){
-            n++;
-            *ptr=0;
-        }
-        ptr++;
-    }
-    /* now n contains the number of tokens, the first possibly empty if the list was empty too e.g. "" */
-    tokens = calloc(n + 1, sizeof(char *)); /* +1 for the null */
-    if (tokens == NULL) {
-      SAFE_FREE(tmp);
-      return NULL;
-    }
-    ptr=tmp;
-    for(i=0;i<n;i++){
-        tokens[i]=ptr;
-        while(*ptr)
-            ptr++; // find a zero
-        ptr++; // then go one step further
-    }
-    tokens[i]=NULL;
-    return tokens;
-}
-
-/* same as tokenize(), but with spaces instead of ',' */
-/* TODO FIXME rewrite me! */
-char **ssh_space_tokenize(const char *chain){
-    char **tokens;
-    size_t n=1;
-    size_t i=0;
-    char *tmp;
-    char *ptr;
-
-    tmp = strdup(chain);
-    if (tmp == NULL) {
-      return NULL;
-    }
-    ptr = tmp;
-
-    while(*ptr==' ')
-        ++ptr; /* skip initial spaces */
-    while(*ptr){
-        if(*ptr==' '){
-            n++; /* count one token per word */
-            *ptr=0;
-            while(*(ptr+1)==' '){ /* don't count if the tokens have more than 2 spaces */
-                *(ptr++)=0;
-            }
-        }
-        ptr++;
-    }
-    /* now n contains the number of tokens, the first possibly empty if the list was empty too e.g. "" */
-    tokens = calloc(n + 1, sizeof(char *)); /* +1 for the null */
-    if (tokens == NULL) {
-      SAFE_FREE(tmp);
-      return NULL;
-    }
-    ptr=tmp; /* we don't pass the initial spaces because the "tmp" pointer is needed by the caller */
-                    /* function to free the tokens. */
-    for(i=0;i<n;i++){
-        tokens[i]=ptr;
-        if(i!=n-1){
-            while(*ptr)
-                ptr++; // find a zero
-            while(!*(ptr+1))
-                ++ptr; /* if the zero is followed by other zeros, go through them */
-            ptr++; // then go one step further
-        }
-    }
-    tokens[i]=NULL;
-    return tokens;
-}
-
 const char *ssh_kex_get_default_methods(uint32_t algo)
 {
     if (algo >= KEX_METHODS_SIZE) {
@@ -280,12 +264,13 @@ const char *ssh_kex_get_default_methods(uint32_t algo)
     return default_methods[algo];
 }
 
-const char *ssh_kex_get_supported_method(uint32_t algo) {
-  if (algo >= KEX_METHODS_SIZE) {
-    return NULL;
-  }
+const char *ssh_kex_get_supported_method(uint32_t algo)
+{
+    if (algo >= KEX_METHODS_SIZE) {
+        return NULL;
+    }
 
-  return supported_methods[algo];
+    return supported_methods[algo];
 }
 
 const char *ssh_kex_get_description(uint32_t algo) {
@@ -296,115 +281,12 @@ const char *ssh_kex_get_description(uint32_t algo) {
   return ssh_kex_descriptions[algo];
 }
 
-/* find_matching gets 2 parameters : a list of available objects (available_d), separated by colons,*/
-/* and a list of preferred objects (preferred_d) */
-/* it will return a strduped pointer on the first preferred object found in the available objects list */
-
-char *ssh_find_matching(const char *available_d, const char *preferred_d){
-    char ** tok_available, **tok_preferred;
-    int i_avail, i_pref;
-    char *ret;
-
-    if ((available_d == NULL) || (preferred_d == NULL)) {
-      return NULL; /* don't deal with null args */
-    }
-
-    tok_available = tokenize(available_d);
-    if (tok_available == NULL) {
-      return NULL;
-    }
-
-    tok_preferred = tokenize(preferred_d);
-    if (tok_preferred == NULL) {
-      SAFE_FREE(tok_available[0]);
-      SAFE_FREE(tok_available);
-      return NULL;
-    }
-
-    for(i_pref=0; tok_preferred[i_pref] ; ++i_pref){
-      for(i_avail=0; tok_available[i_avail]; ++i_avail){
-        if(strcmp(tok_available[i_avail],tok_preferred[i_pref]) == 0){
-          /* match */
-          ret=strdup(tok_available[i_avail]);
-          /* free the tokens */
-          SAFE_FREE(tok_available[0]);
-          SAFE_FREE(tok_preferred[0]);
-          SAFE_FREE(tok_available);
-          SAFE_FREE(tok_preferred);
-          return ret;
-        }
-      }
-    }
-    SAFE_FREE(tok_available[0]);
-    SAFE_FREE(tok_preferred[0]);
-    SAFE_FREE(tok_available);
-    SAFE_FREE(tok_preferred);
+const char *ssh_kex_get_fips_methods(uint32_t algo) {
+  if (algo >= KEX_METHODS_SIZE) {
     return NULL;
-}
+  }
 
-static char *ssh_find_all_matching(const char *available_d,
-                                   const char *preferred_d)
-{
-    char **tok_available, **tok_preferred;
-    int i_avail, i_pref;
-    char *ret;
-    unsigned max, len, pos = 0;
-
-    if ((available_d == NULL) || (preferred_d == NULL)) {
-        return NULL; /* don't deal with null args */
-    }
-
-    max = MAX(strlen(available_d), strlen(preferred_d));
-
-    ret = malloc(max+1);
-    if (ret == NULL) {
-      return NULL;
-    }
-    ret[0] = 0;
-
-    tok_available = tokenize(available_d);
-    if (tok_available == NULL) {
-        SAFE_FREE(ret);
-        return NULL;
-    }
-
-    tok_preferred = tokenize(preferred_d);
-    if (tok_preferred == NULL) {
-        SAFE_FREE(ret);
-        SAFE_FREE(tok_available[0]);
-        SAFE_FREE(tok_available);
-        return NULL;
-    }
-
-    for (i_pref = 0; tok_preferred[i_pref] ; ++i_pref) {
-        for (i_avail = 0; tok_available[i_avail]; ++i_avail) {
-            int cmp = strcmp(tok_available[i_avail],tok_preferred[i_pref]);
-            if (cmp == 0) {
-                /* match */
-                if (pos != 0) {
-                    ret[pos] = ',';
-                    pos++;
-                }
-
-                len = strlen(tok_available[i_avail]);
-                memcpy(&ret[pos], tok_available[i_avail], len);
-                pos += len;
-                ret[pos] = '\0';
-            }
-        }
-    }
-
-    if (ret[0] == '\0') {
-        SAFE_FREE(ret);
-        ret = NULL;
-    }
-
-    SAFE_FREE(tok_available[0]);
-    SAFE_FREE(tok_preferred[0]);
-    SAFE_FREE(tok_available);
-    SAFE_FREE(tok_preferred);
-
-    return ret;
+  return fips_methods[algo];
 }
 
 /**
@@ -416,37 +298,33 @@ static char *ssh_find_all_matching(const char *available_d,
  */
 static int cmp_first_kex_algo(const char *client_str,
                               const char *server_str) {
+    size_t client_kex_len;
+    size_t server_kex_len;
+
+    char *colon;
+
     int is_wrong = 1;
-    char **server_str_tokens = NULL;
-    char **client_str_tokens = NULL;
 
-    if ((client_str == NULL) || (server_str == NULL)) {
-        goto out;
+    colon = strchr(client_str, ',');
+    if (colon == NULL) {
+        client_kex_len = strlen(client_str);
+    } else {
+        client_kex_len = colon - client_str;
     }
 
-    client_str_tokens = tokenize(client_str);
-
-    if (client_str_tokens == NULL) {
-        goto out;
+    colon = strchr(server_str, ',');
+    if (colon == NULL) {
+        server_kex_len = strlen(server_str);
+    } else {
+        server_kex_len = colon - server_str;
     }
 
-    if (client_str_tokens[0] == NULL) {
-        goto freeout;
+    if (client_kex_len != server_kex_len) {
+        return is_wrong;
     }
 
-    server_str_tokens = tokenize(server_str);
-    if (server_str_tokens == NULL) {
-        goto freeout;
-    }
+    is_wrong = (strncmp(client_str, server_str, client_kex_len) != 0);
 
-    is_wrong = (strcmp(client_str_tokens[0], server_str_tokens[0]) != 0);
-
-    SAFE_FREE(server_str_tokens[0]);
-    SAFE_FREE(server_str_tokens);
-freeout:
-    SAFE_FREE(client_str_tokens[0]);
-    SAFE_FREE(client_str_tokens);
-out:
     return is_wrong;
 }
 
@@ -576,11 +454,29 @@ SSH_PACKET_CALLBACK(ssh_packet_kexinit)
             hostkeys = session->next_crypto->client_kex.methods[SSH_HOSTKEYS];
             ok = ssh_match_group(hostkeys, "rsa-sha2-512");
             if (ok) {
-                session->extensions |= SSH_EXT_SIG_RSA_SHA512;
+                /* Check if rsa-sha2-512 is allowed by config */
+                if (session->opts.wanted_methods[SSH_HOSTKEYS] != NULL) {
+                    char *is_allowed =
+                        ssh_find_matching(session->opts.wanted_methods[SSH_HOSTKEYS],
+                                          "rsa-sha2-512");
+                    if (is_allowed != NULL) {
+                        session->extensions |= SSH_EXT_SIG_RSA_SHA512;
+                    }
+                    SAFE_FREE(is_allowed);
+                }
             }
             ok = ssh_match_group(hostkeys, "rsa-sha2-256");
             if (ok) {
-                session->extensions |= SSH_EXT_SIG_RSA_SHA256;
+                /* Check if rsa-sha2-256 is allowed by config */
+                if (session->opts.wanted_methods[SSH_HOSTKEYS] != NULL) {
+                    char *is_allowed =
+                        ssh_find_matching(session->opts.wanted_methods[SSH_HOSTKEYS],
+                                          "rsa-sha2-256");
+                    if (is_allowed != NULL) {
+                        session->extensions |= SSH_EXT_SIG_RSA_SHA256;
+                    }
+                    SAFE_FREE(is_allowed);
+                }
             }
 
             /*
@@ -651,7 +547,7 @@ void ssh_list_kex(struct ssh_kex_struct *kex) {
   int i = 0;
 
 #ifdef DEBUG_CRYPTO
-  ssh_print_hexa("session cookie", kex->cookie, 16);
+  ssh_log_hexdump("session cookie", kex->cookie, 16);
 #endif
 
   for(i = 0; i < SSH_KEX_METHODS; i++) {
@@ -665,103 +561,94 @@ void ssh_list_kex(struct ssh_kex_struct *kex) {
 
 /**
  * @internal
+ *
  * @brief selects the hostkey mechanisms to be chosen for the key exchange,
- * as some hostkey mechanisms may be present in known_hosts file and preferred
+ * as some hostkey mechanisms may be present in known_hosts files.
+ *
  * @returns a cstring containing a comma-separated list of hostkey methods.
  *          NULL if no method matches
  */
 char *ssh_client_select_hostkeys(ssh_session session)
 {
-    char methods_buffer[128]={0};
-    char tail_buffer[128]={0};
+    const char *wanted = NULL;
+    char *wanted_without_certs = NULL;
+    char *known_hosts_algorithms = NULL;
+    char *known_hosts_ordered = NULL;
     char *new_hostkeys = NULL;
-    static const char *preferred_hostkeys[] = {
-        "ssh-ed25519",
-        "ecdsa-sha2-nistp521",
-        "ecdsa-sha2-nistp384",
-        "ecdsa-sha2-nistp256",
-        "rsa-sha2-512",
-        "rsa-sha2-256",
-        "ssh-rsa",
-#ifdef HAVE_DSA
-        "ssh-dss",
-#endif
-        NULL
-    };
-    struct ssh_list *algo_list = NULL;
-    struct ssh_iterator *it = NULL;
-    size_t algo_count;
-    int needcomma = 0;
-    size_t i, len;
+    char *fips_hostkeys = NULL;
 
-    algo_list = ssh_known_hosts_get_algorithms(session);
-    if (algo_list == NULL) {
+    wanted = session->opts.wanted_methods[SSH_HOSTKEYS];
+    if (wanted == NULL) {
+        if (ssh_fips_mode()) {
+            wanted = ssh_kex_get_fips_methods(SSH_HOSTKEYS);
+        } else {
+            wanted = ssh_kex_get_default_methods(SSH_HOSTKEYS);
+        }
+    }
+
+    /* This removes the certificate types, unsupported for now */
+    wanted_without_certs = ssh_find_all_matching(HOSTKEYS, wanted);
+    if (wanted_without_certs == NULL) {
+        SSH_LOG(SSH_LOG_WARNING,
+                "List of allowed host key algorithms is empty or contains only "
+                "unsupported algorithms");
         return NULL;
     }
 
-    algo_count = ssh_list_count(algo_list);
-    if (algo_count == 0) {
-        ssh_list_free(algo_list);
-        return NULL;
-    }
+    SSH_LOG(SSH_LOG_DEBUG,
+            "Order of wanted host keys: \"%s\"",
+            wanted_without_certs);
 
-    for (i = 0; preferred_hostkeys[i] != NULL; ++i) {
-        bool found = false;
-        /* This is a signature type: We list also the SHA2 extensions */
-        enum ssh_keytypes_e base_preferred =
-            ssh_key_type_from_signature_name(preferred_hostkeys[i]);
-
-        for (it = ssh_list_get_iterator(algo_list);
-             it != NULL;
-             it = it->next) {
-            const char *algo = ssh_iterator_value(const char *, it);
-            /* This is always key type so we do not have to care for the
-             * SHA2 extension */
-            enum ssh_keytypes_e base_algo = ssh_key_type_from_name(algo);
-
-            if (base_preferred == base_algo) {
-                /* Matching the keys already verified it is a known type */
-                if (needcomma) {
-                    strncat(methods_buffer,
-                            ",",
-                            sizeof(methods_buffer) - strlen(methods_buffer) - 1);
-                }
-                strncat(methods_buffer,
-                        preferred_hostkeys[i],
-                        sizeof(methods_buffer) - strlen(methods_buffer) - 1);
-                needcomma = 1;
-                found = true;
-            }
-        }
-        /* Collect the rest of the algorithms in other buffer, that will
-         * follow the preferred buffer. This will signalize all the algorithms
-         * we are willing to accept.
-         */
-        if (!found) {
-            snprintf(tail_buffer + strlen(tail_buffer),
-                     sizeof(tail_buffer) - strlen(tail_buffer),
-                     ",%s", preferred_hostkeys[i]);
-        }
-    }
-    ssh_list_free(algo_list);
-
-    if (strlen(methods_buffer) == 0) {
+    known_hosts_algorithms = ssh_known_hosts_get_algorithms_names(session);
+    if (known_hosts_algorithms == NULL) {
         SSH_LOG(SSH_LOG_DEBUG,
-                "No supported kex method for existing key in known_hosts file");
-        return NULL;
+                "No key found in known_hosts; "
+                "changing host key method to \"%s\"",
+                wanted_without_certs);
+
+        return wanted_without_certs;
     }
 
-    /* Append the supported list to the preferred.
-     * The length is maximum 128 + 128 + 1, which will not overflow
-     */
-    len = strlen(methods_buffer) + strlen(tail_buffer) + 1;
-    new_hostkeys = malloc(len);
+    SSH_LOG(SSH_LOG_DEBUG,
+            "Algorithms found in known_hosts files: \"%s\"",
+            known_hosts_algorithms);
+
+    /* Filter and order the keys from known_hosts according to wanted list */
+    known_hosts_ordered = ssh_find_all_matching(known_hosts_algorithms,
+                                                wanted_without_certs);
+    SAFE_FREE(known_hosts_algorithms);
+    if (known_hosts_ordered == NULL) {
+        SSH_LOG(SSH_LOG_DEBUG,
+                "No key found in known_hosts is allowed; "
+                "changing host key method to \"%s\"",
+                wanted_without_certs);
+
+        return wanted_without_certs;
+    }
+
+    /* Append the other supported keys after the preferred ones
+     * This function tolerates NULL pointers in parameters */
+    new_hostkeys = ssh_append_without_duplicates(known_hosts_ordered,
+                                                 wanted_without_certs);
+    SAFE_FREE(known_hosts_ordered);
+    SAFE_FREE(wanted_without_certs);
     if (new_hostkeys == NULL) {
         ssh_set_error_oom(session);
         return NULL;
     }
-    snprintf(new_hostkeys, len,
-             "%s%s", methods_buffer, tail_buffer);
+
+    if (ssh_fips_mode()) {
+        /* Filter out algorithms not allowed in FIPS mode */
+        fips_hostkeys = ssh_keep_fips_algos(SSH_HOSTKEYS, new_hostkeys);
+        SAFE_FREE(new_hostkeys);
+        if (fips_hostkeys == NULL) {
+            SSH_LOG(SSH_LOG_WARNING,
+                    "None of the wanted host keys or keys in known_hosts files "
+                    "is allowed in FIPS mode.");
+            return NULL;
+        }
+        new_hostkeys = fips_hostkeys;
+    }
 
     SSH_LOG(SSH_LOG_DEBUG,
             "Changing host key method to \"%s\"",
@@ -776,7 +663,7 @@ char *ssh_client_select_hostkeys(ssh_session session)
  */
 int ssh_set_client_kex(ssh_session session)
 {
-    struct ssh_kex_struct *client= &session->next_crypto->client_kex;
+    struct ssh_kex_struct *client = &session->next_crypto->client_kex;
     const char *wanted;
     char *kex = NULL;
     char *kex_tmp = NULL;
@@ -791,17 +678,30 @@ int ssh_set_client_kex(ssh_session session)
     }
 
     memset(client->methods, 0, KEX_METHODS_SIZE * sizeof(char **));
-    /* first check if we have specific host key methods */
-    if (session->opts.wanted_methods[SSH_HOSTKEYS] == NULL) {
-    	/* Only if no override */
-    	session->opts.wanted_methods[SSH_HOSTKEYS] =
-            ssh_client_select_hostkeys(session);
-    }
 
+    /* Set the list of allowed algorithms in order of preference, if it hadn't
+     * been set yet. */
     for (i = 0; i < KEX_METHODS_SIZE; i++) {
+        if (i == SSH_HOSTKEYS) {
+            /* Set the hostkeys in the following order:
+             * - First: keys present in known_hosts files ordered by preference
+             * - Next: other wanted algorithms ordered by preference */
+            client->methods[i] = ssh_client_select_hostkeys(session);
+            if (client->methods[i] == NULL) {
+                ssh_set_error_oom(session);
+                return SSH_ERROR;
+            }
+            continue;
+        }
+
         wanted = session->opts.wanted_methods[i];
-        if (wanted == NULL)
-            wanted = default_methods[i];
+        if (wanted == NULL) {
+            if (ssh_fips_mode()) {
+                wanted = fips_methods[i];
+            } else {
+                wanted = default_methods[i];
+            }
+        }
         client->methods[i] = strdup(wanted);
         if (client->methods[i] == NULL) {
             ssh_set_error_oom(session);
@@ -1011,22 +911,6 @@ int ssh_send_rekex(ssh_session session)
     session->dh_handshake_state = DH_STATE_INIT_SENT;
 	return rc;
 }
-/* returns 1 if at least one of the name algos is in the default algorithms table */
-int ssh_verify_existing_algo(enum ssh_kex_types_e algo, const char *name)
-{
-    char *ptr;
-
-    if (algo > SSH_LANG_S_C) {
-        return -1;
-    }
-
-    ptr=ssh_find_matching(supported_methods[algo],name);
-    if(ptr){
-        free(ptr);
-        return 1;
-    }
-    return 0;
-}
 
 /* returns a copy of the provided list if everything is supported,
  * otherwise a new list of the supported algorithms */
@@ -1037,6 +921,27 @@ char *ssh_keep_known_algos(enum ssh_kex_types_e algo, const char *list)
     }
 
     return ssh_find_all_matching(supported_methods[algo], list);
+}
+
+/**
+ * @internal
+ *
+ * @brief Return a new allocated string containing only the FIPS allowed
+ * algorithms from the list.
+ *
+ * @param[in] algo  The type of the methods to filter
+ * @param[in] list  The list to be filtered
+ *
+ * @return A new allocated list containing only the FIPS allowed algorithms from
+ * the list; NULL in case of error.
+ */
+char *ssh_keep_fips_algos(enum ssh_kex_types_e algo, const char *list)
+{
+    if (algo > SSH_LANG_S_C) {
+        return NULL;
+    }
+
+    return ssh_find_all_matching(fips_methods[algo], list);
 }
 
 int ssh_make_sessionid(ssh_session session)
@@ -1230,7 +1135,7 @@ int ssh_make_sessionid(ssh_session session)
     }
 
 #ifdef DEBUG_CRYPTO
-    ssh_print_hexa("hash buffer", ssh_buffer_get(buf), ssh_buffer_get_len(buf));
+    ssh_log_hexdump("hash buffer", ssh_buffer_get(buf), ssh_buffer_get_len(buf));
 #endif
 
     switch (session->next_crypto->kex_type) {
@@ -1306,8 +1211,8 @@ int ssh_make_sessionid(ssh_session session)
     }
 #ifdef DEBUG_CRYPTO
     printf("Session hash: \n");
-    ssh_print_hexa("secret hash", session->next_crypto->secret_hash, session->next_crypto->digest_len);
-    ssh_print_hexa("session id", session->next_crypto->session_id, session->next_crypto->digest_len);
+    ssh_log_hexdump("secret hash", session->next_crypto->secret_hash, session->next_crypto->digest_len);
+    ssh_log_hexdump("session id", session->next_crypto->session_id, session->next_crypto->digest_len);
 #endif
 
     rc = SSH_OK;
@@ -1494,15 +1399,15 @@ int ssh_generate_session_keys(ssh_session session)
     }
 
 #ifdef DEBUG_CRYPTO
-    ssh_print_hexa("Client to Server IV", IV_cli_to_srv, IV_len);
-    ssh_print_hexa("Server to Client IV", IV_srv_to_cli, IV_len);
-    ssh_print_hexa("Client to Server Encryption Key", enckey_cli_to_srv,
+    ssh_log_hexdump("Client to Server IV", IV_cli_to_srv, IV_len);
+    ssh_log_hexdump("Server to Client IV", IV_srv_to_cli, IV_len);
+    ssh_log_hexdump("Client to Server Encryption Key", enckey_cli_to_srv,
                    enckey_cli_to_srv_len);
-    ssh_print_hexa("Server to Client Encryption Key", enckey_srv_to_cli,
+    ssh_log_hexdump("Server to Client Encryption Key", enckey_srv_to_cli,
                    enckey_srv_to_cli_len);
-    ssh_print_hexa("Client to Server Integrity Key", intkey_cli_to_srv,
+    ssh_log_hexdump("Client to Server Integrity Key", intkey_cli_to_srv,
                    intkey_cli_to_srv_len);
-    ssh_print_hexa("Server to Client Integrity Key", intkey_srv_to_cli,
+    ssh_log_hexdump("Server to Client Integrity Key", intkey_srv_to_cli,
                    intkey_srv_to_cli_len);
 #endif
 

@@ -69,7 +69,7 @@ static int ssh_userauth_request_service(ssh_session session) {
     int rc;
 
     rc = ssh_service_request(session, "ssh-userauth");
-    if (rc != SSH_OK) {
+    if ((rc != SSH_OK) && (rc != SSH_AGAIN)) {
         SSH_LOG(SSH_LOG_WARN,
                 "Failed to request \"ssh-userauth\" service");
     }
@@ -613,6 +613,7 @@ int ssh_userauth_publickey(ssh_session session,
     int rc;
     const char *sig_type_c = NULL;
     enum ssh_keytypes_e key_type;
+    enum ssh_digest_e hash_type;
 
     if (session == NULL) {
         return SSH_AUTH_ERROR;
@@ -681,8 +682,11 @@ int ssh_userauth_publickey(ssh_session session,
     }
     ssh_string_free(str);
 
+    /* Get the hash type to be used in the signature based on the key type */
+    hash_type = ssh_key_type_to_hash(session, privkey->type);
+
     /* sign the buffer with the private key */
-    str = ssh_pki_do_sign(session, session->out_buffer, privkey);
+    str = ssh_pki_do_sign(session, session->out_buffer, privkey, hash_type);
     if (str == NULL) {
         goto fail;
     }
@@ -757,6 +761,7 @@ static int ssh_userauth_agent_publickey(ssh_session session,
     if (sig_type_c == NULL) {
         ssh_set_error(session, SSH_REQUEST_DENIED,
                       "Invalid key type (unknown)");
+        SSH_STRING_FREE(pubkey_s);
         return SSH_AUTH_DENIED;
     }
     if (!ssh_key_algorithm_allowed(session, sig_type_c)) {

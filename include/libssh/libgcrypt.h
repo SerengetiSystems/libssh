@@ -78,7 +78,10 @@ int ssh_gcry_rand_range(bignum rnd, bignum max);
 #define bignum_bin2bn(data,datalen,dest) gcry_mpi_scan(dest,GCRYMPI_FMT_USG,data,datalen,NULL)
 #define bignum_bn2dec(num) ssh_gcry_bn2dec(num)
 #define bignum_dec2bn(num, data) ssh_gcry_dec2bn(data, num)
-#define bignum_bn2hex(num,data) gcry_mpi_aprint(GCRYMPI_FMT_HEX,data,NULL,num)
+
+#define bignum_bn2hex(num, data) \
+    gcry_mpi_aprint(GCRYMPI_FMT_HEX, data, NULL, (const gcry_mpi_t)num)
+
 #define bignum_hex2bn(data, num) (gcry_mpi_scan(num,GCRYMPI_FMT_HEX,data,0,NULL)==0?1:0)
 #define bignum_rand(num,bits) 1,gcry_mpi_randomize(num,bits,GCRY_STRONG_RANDOM),gcry_mpi_set_bit(num,bits-1),gcry_mpi_set_bit(num,0)
 #define bignum_mod_exp(dest,generator,exp,modulo, ctx) 1,gcry_mpi_powm(dest,generator,exp,modulo)
@@ -92,6 +95,13 @@ int ssh_gcry_rand_range(bignum rnd, bignum max);
 #define bignum_sub(dst, a, b) gcry_mpi_sub(dst, a, b)
 #define bignum_mod(dst, a, b, ctx) 1,gcry_mpi_mod(dst, a, b)
 #define bignum_rand_range(rnd, max) ssh_gcry_rand_range(rnd, max);
+#define bignum_dup(orig, dest) do { \
+        if (*(dest) == NULL) { \
+            *(dest) = gcry_mpi_copy(orig); \
+        } else { \
+            gcry_mpi_set(*(dest), orig); \
+        } \
+    } while(0)
 /* Helper functions for data conversions.  */
 
 /* Extract an MPI from the given s-expression SEXP named NAME which is

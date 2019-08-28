@@ -194,8 +194,13 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     if (rc == SSH_ERROR) {
         goto error;
     }
+
     rc = ssh_dh_keypair_get_keys(session->next_crypto->dh_ctx,
                                  DH_CLIENT_KEYPAIR, NULL, &pubkey);
+    if (rc != SSH_OK) {
+        goto error;
+    }
+
     rc = ssh_buffer_pack(session->out_buffer,
                          "bB",
                          SSH2_MSG_KEX_DH_GEX_INIT,
@@ -262,6 +267,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     rc = ssh_dh_compute_shared_secret(session->next_crypto->dh_ctx,
                                       DH_CLIENT_KEYPAIR, DH_SERVER_KEYPAIR,
                                       &session->next_crypto->shared_secret);
+    ssh_dh_debug_crypto(session->next_crypto);
     if (rc == SSH_ERROR) {
         ssh_set_error(session, SSH_FATAL, "Could not generate shared secret");
         goto error;
@@ -710,6 +716,12 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
                          SSH2_MSG_KEX_DH_GEX_GROUP,
                          modulus,
                          generator);
+
+#ifdef HAVE_LIBCRYPTO
+        bignum_safe_free(generator);
+        bignum_safe_free(modulus);
+#endif
+
     if (rc != SSH_OK) {
         ssh_set_error_invalid(session);
         goto error;

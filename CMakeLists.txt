@@ -22,16 +22,16 @@ set(APPLICATION_NAME ${PROJECT_NAME})
 #     Increment AGE. Set REVISION to 0
 #   If the source code was changed, but there were no interface changes:
 #     Increment REVISION.
-set(LIBRARY_VERSION "4.7.4")
+set(LIBRARY_VERSION "4.8.1")
 set(LIBRARY_SOVERSION "4")
 
 # where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
 
 # add definitions
 include(DefinePlatformDefaults)
-include(DefineInstallationPaths)
 include(DefineOptions.cmake)
 include(CPackConfig.cmake)
+include(GNUInstallDirs)
 
 include(CompilerChecks.cmake)
 
@@ -117,7 +117,7 @@ install(
   FILES
     ${CMAKE_CURRENT_BINARY_DIR}/libssh.pc
   DESTINATION
-    ${LIB_INSTALL_DIR}/pkgconfig
+    ${CMAKE_INSTALL_LIBDIR}/pkgconfig
   COMPONENT
     pkgconfig
 )
@@ -133,21 +133,13 @@ write_basic_package_version_file(libssh-config-version.cmake
                                  VERSION ${PROJECT_VERSION}
                                  COMPATIBILITY SameMajorVersion)
 
-# libssh-config.cmake
-configure_package_config_file(${PROJECT_NAME}-config.cmake.in
-                              ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config.cmake
-                              INSTALL_DESTINATION ${CMAKE_INSTALL_DIR}/${PROJECT_NAME}
-                              PATH_VARS INCLUDE_INSTALL_DIR LIB_INSTALL_DIR)
-
 install(
     FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake
     DESTINATION
-        ${CMAKE_INSTALL_DIR}/${PROJECT_NAME}
+        ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
     COMPONENT
-        devel
-)
+        devel)
 
 if (WITH_EXAMPLES)
     add_subdirectory(examples)
@@ -243,6 +235,7 @@ message(STATUS "Benchmarks: ${WITH_BENCHMARKS}")
 message(STATUS "Symbol versioning: ${WITH_SYMBOL_VERSIONING}")
 message(STATUS "Allow ABI break: ${WITH_ABI_BREAK}")
 message(STATUS "Release is final: ${WITH_FINAL}")
+message(STATUS "Global client config: ${GLOBAL_CLIENT_CONFIG}")
 if (WITH_SERVER)
 message(STATUS "Global bind config: ${GLOBAL_BIND_CONFIG}")
 endif()

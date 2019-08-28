@@ -445,6 +445,7 @@ enum ssh_scp_request_types {
 enum ssh_connector_flags_e {
     /** Only the standard stream of the channel */
     SSH_CONNECTOR_STDOUT = 1,
+    SSH_CONNECTOR_STDINOUT = 1,
     /** Only the exception stream of the channel */
     SSH_CONNECTOR_STDERR = 2,
     /** Merge both standard and exception streams */
@@ -592,9 +593,8 @@ LIBSSH_API int ssh_session_export_known_hosts_entry(ssh_session session,
                                                     char **pentry_string);
 LIBSSH_API int ssh_session_update_known_hosts(ssh_session session);
 
-LIBSSH_API enum ssh_known_hosts_e
-ssh_session_get_known_hosts_entry(ssh_session session,
-                                  struct ssh_knownhosts_entry **pentry);
+LIBSSH_API enum ssh_known_hosts_e ssh_session_get_known_hosts_entry(ssh_session session,
+        struct ssh_knownhosts_entry **pentry);
 LIBSSH_API enum ssh_known_hosts_e ssh_session_is_known_server(ssh_session session);
 
 /* LOGGING */
@@ -612,6 +612,7 @@ SSH_DEPRECATED LIBSSH_API void ssh_log(ssh_session session,
                                        const char *format, ...) PRINTF_ATTRIBUTE(3, 4);
 
 LIBSSH_API ssh_channel ssh_message_channel_request_open_reply_accept(ssh_message msg);
+LIBSSH_API int ssh_message_channel_request_open_reply_accept_channel(ssh_message msg, ssh_channel chan);
 LIBSSH_API int ssh_message_channel_request_reply_success(ssh_message msg);
 #define SSH_MESSAGE_FREE(x) \
     do { if ((x) != NULL) { ssh_message_free(x); (x) = NULL; } } while(0)

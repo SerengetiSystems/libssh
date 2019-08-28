@@ -164,6 +164,7 @@ set(libssh_SRCS
   external/sc25519.c
   chachapoly.c
   config_parser.c
+  token.c
 )
 
 if (DEFAULT_C_NO_DEPRECATION_FLAGS)
@@ -318,7 +319,8 @@ target_compile_options(${LIBSSH_SHARED_LIBRARY}
                            ${DEFAULT_C_COMPILE_FLAGS}
                            -D_GNU_SOURCE)
 
-target_link_libraries(${LIBSSH_SHARED_LIBRARY} ${LIBSSH_LINK_LIBRARIES})
+target_link_libraries(${LIBSSH_SHARED_LIBRARY}
+                      PRIVATE ${LIBSSH_LINK_LIBRARIES})
 
 if (WITH_SYMBOL_VERSIONING AND HAVE_LD_VERSION_SCRIPT)
     if (ABIMAP_FOUND)
@@ -353,14 +355,15 @@ if (MINGW)
 endif ()
 
 
-install(
-  TARGETS
-    ${LIBSSH_SHARED_LIBRARY}
-  RUNTIME DESTINATION ${BIN_INSTALL_DIR}
-  LIBRARY DESTINATION ${LIB_INSTALL_DIR}
-  ARCHIVE DESTINATION ${LIB_INSTALL_DIR}
-  COMPONENT libraries
-)
+install(TARGETS ${LIBSSH_SHARED_LIBRARY}
+        EXPORT libssh-config
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT libraries)
+
+install(EXPORT libssh-config
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
 
 if (BUILD_STATIC_LIB)
   add_library(${LIBSSH_STATIC_LIBRARY} STATIC ${libssh_SRCS})
@@ -368,6 +371,9 @@ if (BUILD_STATIC_LIB)
                          PRIVATE
                             ${DEFAULT_C_COMPILE_FLAGS}
                             -D_GNU_SOURCE)
+
+  target_link_libraries(${LIBSSH_STATIC_LIBRARY}
+                        PUBLIC ${LIBSSH_LINK_LIBRARIES})
 
   if (MSVC)
     set(OUTPUT_SUFFIX static)
@@ -400,7 +406,7 @@ if (BUILD_STATIC_LIB)
       install(TARGETS
                 ${LIBSSH_STATIC_LIBRARY}
               DESTINATION
-                ${LIB_INSTALL_DIR}/${OUTPUT_SUFFIX}
+                  ${CMAKE_INSTALL_LIBDIR}/${OUTPUT_SUFFIX}
               COMPONENT
                 libraries)
     endif (WITH_STATIC_LIB)

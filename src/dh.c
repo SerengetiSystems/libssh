@@ -373,6 +373,7 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dh_reply){
   rc = ssh_dh_compute_shared_secret(session->next_crypto->dh_ctx,
                                     DH_CLIENT_KEYPAIR, DH_SERVER_KEYPAIR,
                                     &session->next_crypto->shared_secret);
+  ssh_dh_debug_crypto(session->next_crypto);
   if (rc == SSH_ERROR){
     ssh_set_error(session, SSH_FATAL, "Could not generate shared secret");
     goto error;
@@ -462,6 +463,7 @@ int ssh_server_dh_process_init(ssh_session session, ssh_buffer packet)
     rc = ssh_dh_compute_shared_secret(crypto->dh_ctx,
                                       DH_SERVER_KEYPAIR, DH_CLIENT_KEYPAIR,
                                       &crypto->shared_secret);
+    ssh_dh_debug_crypto(crypto);
     if (rc == SSH_ERROR) {
         ssh_set_error(session, SSH_FATAL, "Could not generate shared secret");
         goto error;
@@ -571,13 +573,21 @@ int ssh_fallback_group(uint32_t pmax,
     *generator = NULL;
 
     if (pmax < 3072) {
-        *modulus = ssh_dh_group14;
+        bignum_dup(ssh_dh_group14, modulus);
     } else if (pmax < 6144) {
-        *modulus = ssh_dh_group16;
+        bignum_dup(ssh_dh_group16, modulus);
     } else {
-        *modulus = ssh_dh_group18;
+        bignum_dup(ssh_dh_group18, modulus);
     }
-    *generator = ssh_dh_generator;
+    if (*modulus == NULL) {
+        return SSH_ERROR;
+    }
+
+    bignum_dup(ssh_dh_generator, generator);
+    if (*generator == NULL) {
+        bignum_safe_free((*modulus));
+        return SSH_ERROR;
+    }
 
     return SSH_OK;
 }

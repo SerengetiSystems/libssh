@@ -223,10 +223,15 @@ int ssh_options_set_algo(ssh_session session,
 {
     char *p = NULL;
 
-    p = ssh_keep_known_algos(algo, list);
+    if (ssh_fips_mode()) {
+        p = ssh_keep_fips_algos(algo, list);
+    } else {
+        p = ssh_keep_known_algos(algo, list);
+    }
+
     if (p == NULL) {
         ssh_set_error(session, SSH_REQUEST_DENIED,
-                "Setting method: no algorithm for method \"%s\" (%s)",
+                "Setting method: no allowed algorithm for method \"%s\" (%s)",
                 ssh_kex_get_description(algo), list);
         return -1;
     }
@@ -796,7 +801,11 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 ssh_set_error_invalid(session);
                 return -1;
             } else {
-                p = ssh_keep_known_algos(SSH_HOSTKEYS, v);
+                if (ssh_fips_mode()) {
+                    p = ssh_keep_fips_algos(SSH_HOSTKEYS, v);
+                } else {
+                    p = ssh_keep_known_algos(SSH_HOSTKEYS, v);
+                }
                 if (p == NULL) {
                     ssh_set_error(session, SSH_REQUEST_DENIED,
                         "Setting method: no known public key algorithm (%s)",
@@ -1399,7 +1408,7 @@ int ssh_options_parse_config(ssh_session session, const char *filename) {
       goto out;
   }
   if (filename == NULL) {
-      r = ssh_config_parse_file(session, "/etc/ssh/ssh_config");
+      r = ssh_config_parse_file(session, GLOBAL_CLIENT_CONFIG);
   }
 
   /* Do not process the default configuration as part of connection again */
@@ -1503,7 +1512,11 @@ static int ssh_bind_set_algo(ssh_bind sshbind,
 {
     char *p = NULL;
 
-    p = ssh_keep_known_algos(algo, list);
+    if (ssh_fips_mode()) {
+        p = ssh_keep_fips_algos(algo, list);
+    } else {
+        p = ssh_keep_known_algos(algo, list);
+    }
     if (p == NULL) {
         ssh_set_error(sshbind, SSH_REQUEST_DENIED,
                       "Setting method: no algorithm for method \"%s\" (%s)",
@@ -1607,6 +1620,26 @@ static int ssh_bind_set_algo(ssh_bind sshbind,
  *                        to be used when the "%d" scape is used when providing
  *                        paths of configuration files to
  *                        ssh_bind_options_parse_config().
+ *
+ *                      - SSH_BIND_OPTIONS_PROCESS_CONFIG
+ *                        Set it to false to disable automatic processing of
+ *                        system-wide configuration files. LibSSH automatically
+ *                        uses these configuration files otherwise. This
+ *                        option will only have effect if set before any call
+ *                        to ssh_bind_options_parse_config() (bool).
+ *
+ *                      - SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES:
+ *                        Set the public key algorithm accepted by the server
+ *                        (const char *, comma-separated list).
+ *
+ *                      - SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS:
+ *                        Set the list of allowed hostkey signatures algorithms
+ *                        to offer to the client, ordered by preference. This
+ *                        list is used as a filter when creating the list of
+ *                        algorithms to offer to the client: first the list of
+ *                        possible algorithms is created from the list of keys
+ *                        set and then filtered against this list.
+ *                        (const char *, comma-separated list).
  *
  * @param  value        The value to set. This is a generic pointer and the
  *                      datatype which should be used is described at the
@@ -1908,6 +1941,49 @@ int ssh_bind_options_set(ssh_bind sshbind, enum ssh_bind_options_e type,
                 ssh_set_error_oom(sshbind);
                 return -1;
             }
+        }
+        break;
+    case SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            if (ssh_fips_mode()) {
+                p = ssh_keep_fips_algos(SSH_HOSTKEYS, v);
+            } else {
+                p = ssh_keep_known_algos(SSH_HOSTKEYS, v);
+            }
+            if (p == NULL) {
+                ssh_set_error(sshbind, SSH_REQUEST_DENIED,
+                    "Setting method: no known public key algorithm (%s)",
+                     v);
+                return -1;
+            }
+
+            SAFE_FREE(sshbind->pubkey_accepted_key_types);
+            sshbind->pubkey_accepted_key_types = p;
+        }
+        break;
+    case SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS:
+        v = value;
+        if (v == NULL || v[0] == '\0') {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            rc = ssh_bind_set_algo(sshbind, SSH_HOSTKEYS, v);
+            if (rc < 0) {
+                return -1;
+            }
+        }
+        break;
+    case SSH_BIND_OPTIONS_PROCESS_CONFIG:
+        if (value == NULL) {
+            ssh_set_error_invalid(sshbind);
+            return -1;
+        } else {
+            bool *x = (bool *)value;
+            sshbind->config_processed = !(*x);
         }
         break;
     default:

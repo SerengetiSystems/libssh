@@ -32,6 +32,7 @@
 #include "libssh/pki_priv.h"
 #include "libssh/buffer.h"
 #include "libssh/bignum.h"
+#include "libssh/misc.h"
 
 #define MAX_PASSPHRASE_SIZE 1024
 #define MAX_KEY_SIZE 32
@@ -873,7 +874,7 @@ static ssh_signature pki_signature_from_rsa_blob(const ssh_key pubkey, const
     }
 #ifdef DEBUG_CRYPTO
     SSH_LOG(SSH_LOG_WARN, "RSA signature len: %lu", (unsigned long)len);
-    ssh_print_hexa("RSA signature", ssh_string_data(sig_blob), len);
+    ssh_log_hexdump("RSA signature", ssh_string_data(sig_blob), len);
 #endif
 
     if (len == rsalen) {
@@ -966,7 +967,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
                 return NULL;
             }
 #ifdef DEBUG_CRYPTO
-            ssh_print_hexa("r", ssh_string_data(r), ssh_string_len(r));
+            ssh_log_hexdump("r", ssh_string_data(r), ssh_string_len(r));
 #endif
             sig->ecdsa_sig.r = ssh_make_string_bn(r);
             ssh_string_burn(r);
@@ -986,7 +987,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
             }
 
 #ifdef DEBUG_CRYPTO
-            ssh_print_hexa("s", ssh_string_data(s), ssh_string_len(s));
+            ssh_log_hexdump("s", ssh_string_data(s), ssh_string_len(s));
 #endif
             sig->ecdsa_sig.s = ssh_make_string_bn(s);
             ssh_string_burn(s);
@@ -1022,10 +1023,15 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
 }
 
 int pki_signature_verify(ssh_session session, const ssh_signature sig, const
-        ssh_key key, const unsigned char *hash, size_t hlen)
+        ssh_key key, const unsigned char *input, size_t input_len)
 {
     int rc;
-    mbedtls_md_type_t md = 0;
+
+    if (session == NULL || sig == NULL || key == NULL || input == NULL) {
+        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+                               "pki_signature_verify()");
+        return SSH_ERROR;
+    }
 
     if (ssh_key_type_plain(key->type) != sig->type) {
         SSH_LOG(SSH_LOG_WARN,
@@ -1035,66 +1041,27 @@ int pki_signature_verify(ssh_session session, const ssh_signature sig, const
         return SSH_ERROR;
     }
 
-    switch (key->type) {
-        case SSH_KEYTYPE_RSA:
-        case SSH_KEYTYPE_RSA_CERT01:
-            switch (sig->hash_type) {
-            case SSH_DIGEST_SHA1:
-            case SSH_DIGEST_AUTO:
-                md = MBEDTLS_MD_SHA1;
-                break;
-            case SSH_DIGEST_SHA256:
-                md = MBEDTLS_MD_SHA256;
-                break;
-            case SSH_DIGEST_SHA512:
-                md = MBEDTLS_MD_SHA512;
-                break;
-            default:
-                SSH_LOG(SSH_LOG_TRACE, "Unknown sig type %d", sig->hash_type);
-                ssh_set_error(session,
-                              SSH_FATAL,
-                              "Unexpected signature hash type %d during RSA verify",
-                              sig->hash_type);
-                return SSH_ERROR;
-            }
-            rc = mbedtls_pk_verify(key->rsa, md, hash, hlen,
-                    ssh_string_data(sig->rsa_sig),
-                    ssh_string_len(sig->rsa_sig));
-            if (rc != 0) {
-                char error_buf[100];
-                mbedtls_strerror(rc, error_buf, 100);
-                ssh_set_error(session, SSH_FATAL, "RSA error: %s", error_buf);
-                return SSH_ERROR;
-            }
-            break;
-        case SSH_KEYTYPE_ECDSA_P256:
-        case SSH_KEYTYPE_ECDSA_P384:
-        case SSH_KEYTYPE_ECDSA_P521:
-        case SSH_KEYTYPE_ECDSA_P256_CERT01:
-        case SSH_KEYTYPE_ECDSA_P384_CERT01:
-        case SSH_KEYTYPE_ECDSA_P521_CERT01:
-            rc = mbedtls_ecdsa_verify(&key->ecdsa->grp, hash, hlen,
-                    &key->ecdsa->Q, sig->ecdsa_sig.r, sig->ecdsa_sig.s);
-            if (rc != 0) {
-                char error_buf[100];
-                mbedtls_strerror(rc, error_buf, 100);
-                ssh_set_error(session, SSH_FATAL, "RSA error: %s", error_buf);
-                return SSH_ERROR;
+    /* Check if public key and hash type are compatible */
+    rc = pki_key_check_hash_compatible(key, sig->hash_type);
+    if (rc != SSH_OK) {
+        return SSH_ERROR;
+    }
 
-            }
-            break;
-        case SSH_KEYTYPE_ED25519:
-        case SSH_KEYTYPE_ED25519_CERT01:
-            rc = pki_ed25519_verify(key, sig, hash, hlen);
-            if (rc != SSH_OK) {
-                ssh_set_error(session, SSH_FATAL,
-                        "ed25519 signature verification error");
-                return SSH_ERROR;
-            }
-            break;
-        default:
-            ssh_set_error(session, SSH_FATAL, "Unknown public key type");
-            return SSH_ERROR;
+    /* For ed25519 keys, verify using the input directly */
+    if (key->type == SSH_KEYTYPE_ED25519 ||
+        key->type == SSH_KEYTYPE_ED25519_CERT01)
+    {
+        rc = pki_ed25519_verify(key, sig, input, input_len);
+    } else {
+        /* For the other key types, calculate the hash and verify the signature */
+        rc = pki_verify_data_signature(sig, key, input, input_len);
+    }
+
+    if (rc != SSH_OK){
+        ssh_set_error(session,
+                      SSH_FATAL,
+                      "Signature verification error");
+        return SSH_ERROR;
     }
 
     return SSH_OK;
@@ -1113,7 +1080,6 @@ static ssh_string rsa_do_sign_hash(const unsigned char *digest,
 
     switch (hash_type) {
     case SSH_DIGEST_SHA1:
-    case SSH_DIGEST_AUTO:
         md = MBEDTLS_MD_SHA1;
         break;
     case SSH_DIGEST_SHA256:
@@ -1122,8 +1088,9 @@ static ssh_string rsa_do_sign_hash(const unsigned char *digest,
     case SSH_DIGEST_SHA512:
         md = MBEDTLS_MD_SHA512;
         break;
+    case SSH_DIGEST_AUTO:
     default:
-        SSH_LOG(SSH_LOG_WARN, "Incomplatible key algorithm");
+        SSH_LOG(SSH_LOG_WARN, "Incompatible key algorithm");
         return NULL;
     }
 
@@ -1167,12 +1134,6 @@ ssh_signature pki_do_sign_hash(const ssh_key privkey,
 {
     ssh_signature sig = NULL;
     int rc;
-
-    /* Only RSA supports different signature algorithm types now */
-    if (privkey->type != SSH_KEYTYPE_RSA && hash_type != SSH_DIGEST_AUTO) {
-        SSH_LOG(SSH_LOG_WARN, "Incompatible signature algorithm passed");
-        return NULL;
-    }
 
     sig = ssh_signature_new();
     if (sig == NULL) {
@@ -1234,74 +1195,172 @@ ssh_signature pki_do_sign_hash(const ssh_key privkey,
     return sig;
 }
 
-#ifdef WITH_SERVER
-ssh_signature pki_do_sign_sessionid_hash(const ssh_key key,
-                                         const unsigned char *hash,
-                                         size_t hlen,
-                                         enum ssh_digest_e hash_type)
+/**
+ * @internal
+ *
+ * @brief Sign the given input data. The digest of to be signed is calculated
+ * internally as necessary.
+ *
+ * @param[in]   privkey     The private key to be used for signing.
+ * @param[in]   hash_type   The digest algorithm to be used.
+ * @param[in]   input       The data to be signed.
+ * @param[in]   input_len   The length of the data to be signed.
+ *
+ * @return  a newly allocated ssh_signature or NULL on error.
+ */
+ssh_signature pki_sign_data(const ssh_key privkey,
+                            enum ssh_digest_e hash_type,
+                            const unsigned char *input,
+                            size_t input_len)
 {
-    ssh_signature sig = NULL;
+    unsigned char hash[SHA512_DIGEST_LEN] = {0};
+    uint32_t hlen = 0;
     int rc;
 
-    /* Only RSA supports different signature algorithm types now */
-    if (key->type != SSH_KEYTYPE_RSA && hash_type != SSH_DIGEST_AUTO) {
-        SSH_LOG(SSH_LOG_WARN, "Incompatible signature algorithm passed");
+    if (privkey == NULL || !ssh_key_is_private(privkey) || input == NULL) {
+        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+                               "pki_sign_data()");
         return NULL;
     }
 
-    sig = ssh_signature_new();
-    if (sig == NULL) {
+    /* Check if public key and hash type are compatible */
+    rc = pki_key_check_hash_compatible(privkey, hash_type);
+    if (rc != SSH_OK) {
         return NULL;
     }
 
-    sig->type = key->type;
-    sig->type_c = ssh_key_signature_to_char(key->type, hash_type);
+    switch (hash_type) {
+    case SSH_DIGEST_SHA256:
+        sha256(input, input_len, hash);
+        hlen = SHA256_DIGEST_LEN;
+        break;
+    case SSH_DIGEST_SHA384:
+        sha384(input, input_len, hash);
+        hlen = SHA384_DIGEST_LEN;
+        break;
+    case SSH_DIGEST_SHA512:
+        sha512(input, input_len, hash);
+        hlen = SHA512_DIGEST_LEN;
+        break;
+    case SSH_DIGEST_SHA1:
+        sha1(input, input_len, hash);
+        hlen = SHA_DIGEST_LEN;
+        break;
+    case SSH_DIGEST_AUTO:
+    default:
+        SSH_LOG(SSH_LOG_TRACE, "Unknown hash algorithm for type: %d",
+                hash_type);
+        return NULL;
+    }
 
-    switch (key->type) {
+    return pki_do_sign_hash(privkey, hash, hlen, hash_type);
+}
+
+/**
+ * @internal
+ *
+ * @brief Verify the signature of a given input. The digest of the input is
+ * calculated internally as necessary.
+ *
+ * @param[in]   signature   The signature to be verified.
+ * @param[in]   pubkey      The public key used to verify the signature.
+ * @param[in]   input       The signed data.
+ * @param[in]   input_len   The length of the signed data.
+ *
+ * @return  SSH_OK if the signature is valid; SSH_ERROR otherwise.
+ */
+int pki_verify_data_signature(ssh_signature signature,
+                              const ssh_key pubkey,
+                              const unsigned char *input,
+                              size_t input_len)
+{
+
+    unsigned char hash[SHA512_DIGEST_LEN] = {0};
+    uint32_t hlen = 0;
+
+    mbedtls_md_type_t md = 0;
+
+    int rc;
+
+    if (pubkey == NULL || ssh_key_is_private(pubkey) || input == NULL ||
+        signature == NULL)
+    {
+        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+                               "pki_verify_data_signature()");
+        return SSH_ERROR;
+    }
+
+    /* Check if public key and hash type are compatible */
+    rc = pki_key_check_hash_compatible(pubkey, signature->hash_type);
+    if (rc != SSH_OK) {
+        return SSH_ERROR;
+    }
+
+    switch (signature->hash_type) {
+    case SSH_DIGEST_SHA256:
+        sha256(input, input_len, hash);
+        hlen = SHA256_DIGEST_LEN;
+        md = MBEDTLS_MD_SHA256;
+        break;
+    case SSH_DIGEST_SHA384:
+        sha384(input, input_len, hash);
+        hlen = SHA384_DIGEST_LEN;
+        md = MBEDTLS_MD_SHA384;
+        break;
+    case SSH_DIGEST_SHA512:
+        sha512(input, input_len, hash);
+        hlen = SHA512_DIGEST_LEN;
+        md = MBEDTLS_MD_SHA512;
+        break;
+    case SSH_DIGEST_SHA1:
+        sha1(input, input_len, hash);
+        hlen = SHA_DIGEST_LEN;
+        md = MBEDTLS_MD_SHA1;
+        break;
+    case SSH_DIGEST_AUTO:
+    default:
+        SSH_LOG(SSH_LOG_TRACE, "Unknown sig->hash_type: %d",
+                signature->hash_type);
+        return SSH_ERROR;
+    }
+
+    switch (pubkey->type) {
         case SSH_KEYTYPE_RSA:
-            sig->rsa_sig = rsa_do_sign_hash(hash, hlen, key->rsa, hash_type);
-            if (sig->rsa_sig == NULL) {
-                ssh_signature_free(sig);
-                return NULL;
+        case SSH_KEYTYPE_RSA_CERT01:
+            rc = mbedtls_pk_verify(pubkey->rsa, md, hash, hlen,
+                    ssh_string_data(signature->rsa_sig),
+                    ssh_string_len(signature->rsa_sig));
+            if (rc != 0) {
+                char error_buf[100];
+                mbedtls_strerror(rc, error_buf, 100);
+                SSH_LOG(SSH_LOG_TRACE, "RSA error: %s", error_buf);
+                return SSH_ERROR;
             }
             break;
         case SSH_KEYTYPE_ECDSA_P256:
         case SSH_KEYTYPE_ECDSA_P384:
         case SSH_KEYTYPE_ECDSA_P521:
-            sig->ecdsa_sig.r = bignum_new();
-            if (sig->ecdsa_sig.r == NULL) {
-                return NULL;
-            }
-
-            sig->ecdsa_sig.s = bignum_new();
-            if (sig->ecdsa_sig.s == NULL) {
-                bignum_safe_free(sig->ecdsa_sig.r);
-                return NULL;
-            }
-
-            rc = mbedtls_ecdsa_sign(&key->ecdsa->grp,
-                                    sig->ecdsa_sig.r,
-                                    sig->ecdsa_sig.s,
-                                    &key->ecdsa->d,
-                                    hash,
-                                    hlen,
-                                    mbedtls_ctr_drbg_random,
-                                    ssh_get_mbedtls_ctr_drbg_context());
+        case SSH_KEYTYPE_ECDSA_P256_CERT01:
+        case SSH_KEYTYPE_ECDSA_P384_CERT01:
+        case SSH_KEYTYPE_ECDSA_P521_CERT01:
+            rc = mbedtls_ecdsa_verify(&pubkey->ecdsa->grp, hash, hlen,
+                    &pubkey->ecdsa->Q, signature->ecdsa_sig.r,
+                    signature->ecdsa_sig.s);
             if (rc != 0) {
-                ssh_signature_free(sig);
-                return NULL;
+                char error_buf[100];
+                mbedtls_strerror(rc, error_buf, 100);
+                SSH_LOG(SSH_LOG_TRACE, "ECDSA error: %s", error_buf);
+                return SSH_ERROR;
+
             }
             break;
-        case SSH_KEYTYPE_ED25519:
-            /* ED25519 handled in caller */
         default:
-            ssh_signature_free(sig);
-            return NULL;
+            SSH_LOG(SSH_LOG_TRACE, "Unknown public key type");
+            return SSH_ERROR;
     }
 
-    return sig;
+    return SSH_OK;
 }
-#endif /* WITH_SERVER */
 
 const char *pki_key_ecdsa_nid_to_name(int nid)
 {

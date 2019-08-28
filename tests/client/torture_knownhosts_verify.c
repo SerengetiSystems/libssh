@@ -33,7 +33,9 @@
 
 #define TORTURE_KNOWN_HOSTS_FILE "libssh_torture_knownhosts"
 
-#define BAD_ED25519 "AAAAC3NzaC1lZDI1NTE5AAAAIE74wHmKKkrxpW/dZ69pKPlMoWG9VvWfrNnUkWRQqaDa"
+#define BAD_RSA "AAAAB3NzaC1yc2EAAAADAQABAAABAQDXvXuawzaArEwkLIXTz/EWywLOCtqQL3P9yKkrhz6AplXP2PhOh5pyxa1VfGKe453jNeYBJ0ROto3BshXgZXbo86oLXTkbe0gO5xi3r5WjXxjOFvRRTLot5fPLNDOv9+TnsPmkNn0iIeyPnfrcPIyjWt5zSWUfkNC8oNHxsiSshjpbJvTXSDipukpUy41d7jg4uWGuonMTF7yu7HfuHqq7lhb0WlwSpfbqAbfYARBddcdcARyhix4RMWZZqVY20H3Vsjq8bjKC+NJXFce1PRg+qcOWQdlXEei4dkzAvHvfQRx1TjzkrBZ6B6thmZtyeb9IsiB0tg2g0JN2VTAGkxqp"
+
+const char template[] = "temp_dir_XXXXXX";
 
 static int sshd_group_setup(void **state)
 {
@@ -204,6 +206,57 @@ static void torture_knownhosts_precheck(void **state)
     ssh_list_free(algo_list);
 }
 
+static void torture_knownhosts_duplicate(void **state)
+{
+    struct torture_state *s = *state;
+    ssh_session session = s->ssh.session;
+    struct ssh_list *algo_list = NULL;
+    struct ssh_iterator *it = NULL;
+    size_t algo_count;
+    const char *algo = NULL;
+    char known_hosts_file[1024] = {0};
+    FILE *file;
+    int rc;
+
+    snprintf(known_hosts_file,
+             sizeof(known_hosts_file),
+             "%s/%s",
+             s->socket_dir,
+             TORTURE_KNOWN_HOSTS_FILE);
+
+    file = fopen(known_hosts_file, "w");
+    assert_non_null(file);
+    fprintf(file,
+            "127.0.0.10 %s\n",
+            torture_get_testkey_pub(SSH_KEYTYPE_RSA));
+
+    fprintf(file,
+            "127.0.0.10 %s\n",
+            torture_get_testkey_pub(SSH_KEYTYPE_RSA));
+
+    fprintf(file,
+            "127.0.0.10 %s\n",
+            torture_get_testkey_pub(SSH_KEYTYPE_RSA));
+
+    fclose(file);
+
+    rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_file);
+    assert_ssh_return_code(session, rc);
+
+    algo_list = ssh_known_hosts_get_algorithms(session);
+    assert_non_null(algo_list);
+
+    algo_count = ssh_list_count(algo_list);
+    assert_int_equal(algo_count, 1);
+
+    it = ssh_list_get_iterator(algo_list);
+    assert_non_null(it);
+    algo = ssh_iterator_value(const char *, it);
+    assert_string_equal(algo, "ssh-rsa");
+
+    ssh_list_free(algo_list);
+}
+
 static void torture_knownhosts_other(void **state)
 {
     struct torture_state *s = *state;
@@ -222,7 +275,7 @@ static void torture_knownhosts_other(void **state)
     rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_file);
     assert_ssh_return_code(session, rc);
 
-    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519");
+    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ecdsa-sha2-nistp521");
     assert_ssh_return_code(session, rc);
 
     file = fopen(known_hosts_file, "w");
@@ -256,7 +309,7 @@ static void torture_knownhosts_unknown(void **state)
     rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_file);
     assert_ssh_return_code(session, rc);
 
-    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519");
+    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ecdsa-sha2-nistp521");
     assert_ssh_return_code(session, rc);
 
     rc = ssh_connect(session);
@@ -317,14 +370,14 @@ static void torture_knownhosts_conflict(void **state)
     assert_non_null(file);
     fprintf(file,
             "127.0.0.10 %s %s\n",
-            "ssh-ed25519",
-            BAD_ED25519);
+            "ssh-rsa",
+            BAD_RSA);
     fclose(file);
 
     rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_file);
     assert_ssh_return_code(session, rc);
 
-    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519");
+    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "rsa-sha2-256");
     assert_ssh_return_code(session, rc);
 
     rc = ssh_connect(session);
@@ -351,7 +404,7 @@ static void torture_knownhosts_conflict(void **state)
     rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, known_hosts_file);
     assert_ssh_return_code(session, rc);
 
-    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "ssh-ed25519");
+    rc = ssh_options_set(session, SSH_OPTIONS_HOSTKEYS, "rsa-sha2-256");
     assert_ssh_return_code(session, rc);
 
     rc = ssh_connect(session);
@@ -361,6 +414,43 @@ static void torture_knownhosts_conflict(void **state)
     assert_int_equal(found, SSH_KNOWN_HOSTS_OK);
 
     /* session will be freed by session_teardown() */
+}
+
+static void torture_knownhosts_new_file(void **state)
+{
+    struct torture_state *s = *state;
+    ssh_session session = s->ssh.session;
+    enum ssh_known_hosts_e found;
+    int rc;
+
+    char new_known_hosts[256];
+    char *tmp_dir = NULL;
+    ssize_t count = 0;
+
+    /* Create a disposable directory */
+    tmp_dir = torture_make_temp_dir(template);
+    assert_non_null(tmp_dir);
+
+    count = snprintf(new_known_hosts, sizeof(new_known_hosts),
+                     "%s/a/b/c/d/known_hosts", tmp_dir);
+    assert_return_code(count, errno);
+
+    rc = ssh_options_set(session, SSH_OPTIONS_KNOWNHOSTS, new_known_hosts);
+    assert_ssh_return_code(session, rc);
+
+    rc = ssh_connect(session);
+    assert_ssh_return_code(session, rc);
+
+    rc = ssh_session_update_known_hosts(session);
+    assert_ssh_return_code(session, rc);
+
+    found = ssh_session_is_known_server(session);
+    assert_int_equal(found, SSH_KNOWN_HOSTS_OK);
+
+    /* Cleanup */
+    torture_rmdirs(tmp_dir);
+
+    SAFE_FREE(tmp_dir);
 }
 
 int torture_run_tests(void) {
@@ -382,6 +472,12 @@ int torture_run_tests(void) {
                                         session_setup,
                                         session_teardown),
         cmocka_unit_test_setup_teardown(torture_knownhosts_conflict,
+                                        session_setup,
+                                        session_teardown),
+        cmocka_unit_test_setup_teardown(torture_knownhosts_duplicate,
+                                        session_setup,
+                                        session_teardown),
+        cmocka_unit_test_setup_teardown(torture_knownhosts_new_file,
                                         session_setup,
                                         session_teardown),
     };

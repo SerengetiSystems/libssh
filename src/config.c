@@ -147,6 +147,7 @@ static struct ssh_config_keyword_table_s ssh_config_keyword_table[] = {
   { "tunnel", SOC_NA},
   { "tunneldevice", SOC_NA},
   { "xauthlocation", SOC_NA},
+  { "pubkeyacceptedkeytypes", SOC_PUBKEYACCEPTEDTYPES},
   { NULL, SOC_UNKNOWN }
 };
 
@@ -394,7 +395,7 @@ ssh_config_parse_line(ssh_session session,
   int i, rv;
   uint8_t *seen = session->opts.options_seen;
   long l;
-  long long ll;
+  int64_t ll;
 
   x = s = strdup(line);
   if (s == NULL) {
@@ -489,8 +490,8 @@ ssh_config_parse_line(ssh_session session,
 
             case MATCH_FINAL:
             case MATCH_CANONICAL:
-                SSH_LOG(SSH_LOG_WARN,
-                        "line %d: Unsupported Match keyword '%s', skipping\n",
+                SSH_LOG(SSH_LOG_INFO,
+                        "line %d: Unsupported Match keyword '%s', skipping",
                         count,
                         p);
                 /* Not set any result here -- the result is dependent on the
@@ -498,19 +499,35 @@ ssh_config_parse_line(ssh_session session,
                 break;
 
             case MATCH_EXEC:
+                /* Skip to the end of line as unsupported */
+                p = ssh_config_get_cmd(&s);
+                if (p == NULL || p[0] == '\0') {
+                    SSH_LOG(SSH_LOG_WARN, "line %d: Match keyword "
+                            "'%s' requires argument", count, p2);
+                    SAFE_FREE(x);
+                    return -1;
+                }
+                args++;
+                SSH_LOG(SSH_LOG_WARN,
+                        "line %d: Unsupported Match keyword '%s', ignoring",
+                        count,
+                        p2);
+                result = 0;
+                break;
+
             case MATCH_ORIGINALHOST:
             case MATCH_LOCALUSER:
                 /* Skip one argument */
                 p = ssh_config_get_str_tok(&s, NULL);
                 if (p == NULL || p[0] == '\0') {
                     SSH_LOG(SSH_LOG_WARN, "line %d: Match keyword "
-                            "'%s' requires argument\n", count, p2);
+                            "'%s' requires argument", count, p2);
                     SAFE_FREE(x);
                     return -1;
                 }
                 args++;
-                SSH_LOG(SSH_LOG_WARN,
-                        "line %d: Unsupported Match keyword '%s', ignoring\n",
+                SSH_LOG(SSH_LOG_INFO,
+                        "line %d: Unsupported Match keyword '%s', ignoring",
                         count,
                         p2);
                 result = 0;
@@ -694,6 +711,10 @@ ssh_config_parse_line(ssh_session session,
       break;
     case SOC_PROXYJUMP:
         p = ssh_config_get_str_tok(&s, NULL);
+        if (p == NULL) {
+            SAFE_FREE(x);
+            return -1;
+        }
         /* We share the seen value with the ProxyCommand */
         rv = ssh_config_parse_proxy_jump(session, p,
                                          (*parsing && !seen[SOC_PROXYCOMMAND]));
@@ -940,11 +961,11 @@ ssh_config_parse_line(ssh_session session,
               keyword, count);
       break;
     case SOC_UNSUPPORTED:
-      SSH_LOG(SSH_LOG_RARE, "Unsupported option: %s, line: %d",
+      SSH_LOG(SSH_LOG_INFO, "Unsupported option: %s, line: %d",
               keyword, count);
       break;
     case SOC_UNKNOWN:
-      SSH_LOG(SSH_LOG_WARN, "Unknown option: %s, line: %d",
+      SSH_LOG(SSH_LOG_INFO, "Unknown option: %s, line: %d",
               keyword, count);
       break;
     default:

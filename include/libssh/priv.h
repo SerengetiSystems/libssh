@@ -90,6 +90,18 @@ char *strndup(const char *s, size_t n);
 #  define PRIu32 "u"
 # endif /* PRIu32 */
 
+# ifndef PRIx64
+#  if __WORDSIZE == 64
+#   define PRIx64 "lx"
+#  else
+#   define PRIx64 "llx"
+#  endif /* __WORDSIZE */
+# endif /* PRIx64 */
+
+# ifndef PRIx32
+#  define PRIx32 "x"
+# endif /* PRIx32 */
+
 # ifdef _MSC_VER
 #  include <stdio.h>
 #  include <stdarg.h> /* va_copy define check */
@@ -271,8 +283,6 @@ int ssh_auth_reply_success(ssh_session session, int partial);
 int ssh_send_banner(ssh_session session, int is_server);
 
 /* connect.c */
-socket_t ssh_connect_host(ssh_session session, const char *host,const char
-        *bind_addr, int port, long timeout, long usec);
 socket_t ssh_connect_host_nonblocking(ssh_session session, const char *host,
 		const char *bind_addr, int port);
 

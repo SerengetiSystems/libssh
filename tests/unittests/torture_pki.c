@@ -10,8 +10,8 @@
 #include "torture_key.h"
 #include "pki.c"
 
-const unsigned char HASH[] = "1234567890123456789012345678901234567890"
-                             "123456789012345678901234";
+const unsigned char INPUT[] = "1234567890123456789012345678901234567890"
+                              "123456789012345678901234";
 
 const char template[] = "temp_dir_XXXXXX";
 
@@ -114,48 +114,137 @@ struct key_attrs {
     int size_arg;
     int sig_length;
     const char *sig_type_c;
+    int expect_success;
 };
 
-struct key_attrs key_attrs_list[] = {
-    {0, 0, "", 0, 0, ""},                                        /* UNKNOWN */
+struct key_attrs key_attrs_list[][5] = {
+    {
+        {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, AUTO */
+        {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA1 */
+        {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA256 */
+        {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA384 */
+        {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA512 */
+    },
 #ifdef HAVE_DSA
-    {1, 1, "ssh-dss", 1024, 20, "ssh-dss" },                     /* DSS */
+    {
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, AUTO */
+        {1, 1, "ssh-dss", 1024, 20, "ssh-dss", 1}, /* DSS, SHA1 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA256 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA384 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA512 */
+    },
 #else
-    {0, 0, "", 0, 0, ""},                                        /* DSS */
-#endif
-    {1, 1, "ssh-rsa", 2048, 20, "ssh-rsa"},                      /* RSA */
-    {0, 0, "", 0, 0, ""},                                        /* RSA1 */
-    {0, 0, "", 0, 0, ""},                                        /* ECDSA */
-    {1, 1, "ssh-ed25519", 0, 33, "ssh-ed25519"},                 /* ED25519 */
+    {
+        {0, 0, "", 0, 0, "", 0}, /* DSS, AUTO */
+        {0, 0, "", 0, 0, "", 0}, /* DSS, SHA1 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS, SHA256 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS, SHA384 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS, SHA512 */
+    },
+#endif /* HAVE_DSA */
+    {
+        {1, 1, "ssh-rsa", 2048, 0, "", 0},              /* RSA, AUTO */
+        {1, 1, "ssh-rsa", 2048, 20, "ssh-rsa", 1},      /* RSA, SHA1 */
+        {1, 1, "ssh-rsa", 2048, 32, "rsa-sha2-256", 1}, /* RSA, SHA256 */
+        {1, 1, "ssh-rsa", 2048, 0, "", 0},              /* RSA, SHA384 */
+        {1, 1, "ssh-rsa", 2048, 64, "rsa-sha2-512", 1}, /* RSA, SHA512 */
+    },
+    {
+        {0, 0, "", 0, 0, "", 0}, /* RSA1, AUTO */
+        {0, 0, "", 0, 0, "", 0}, /* RSA1, SHA1 */
+        {0, 0, "", 0, 0, "", 0}, /* RSA1, SHA256 */
+        {0, 0, "", 0, 0, "", 0}, /* RSA1, SHA384 */
+        {0, 0, "", 0, 0, "", 0}, /* RSA1, SHA512 */
+    },
+    {
+        {0, 1, "", 256, 0, "", 0}, /* ECDSA, AUTO */
+        {0, 1, "", 256, 0, "", 0}, /* ECDSA, SHA1 */
+        {0, 1, "", 256, 0, "", 0}, /* ECDSA, SHA256 */
+        {0, 1, "", 384, 0, "", 0}, /* ECDSA, SHA384 */
+        {0, 1, "", 521, 0, "", 0}, /* ECDSA, SHA512 */
+    },
+    {
+        {1, 1, "ssh-ed25519", 0, 33, "ssh-ed25519", 1}, /* ED25519, AUTO */
+        {1, 1, "ssh-ed25519", 0, 0, "", 0},             /* ED25519, SHA1 */
+        {1, 1, "ssh-ed25519", 0, 0, "", 0},             /* ED25519, SHA256 */
+        {1, 1, "ssh-ed25519", 0, 0, "", 0},             /* ED25519, SHA384 */
+        {1, 1, "ssh-ed25519", 0, 0, "", 0},             /* ED25519, SHA512 */
+    },
 #ifdef HAVE_DSA
-    {0, 1, "", 0, 0, ""},                                        /* DSS CERT */
+    {
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA512 */
+    },
 #else
-    {0, 0, "", 0, 0, ""},                                        /* DSS CERT */
-#endif
-    {0, 1, "", 0, 0, ""},                                        /* RSA CERT */
-    {1, 1, "ecdsa-sha2-nistp256", 0, 64, "ecdsa-sha2-nistp256"}, /* ECDSA P256 */
-    {1, 1, "ecdsa-sha2-nistp384", 0, 64, "ecdsa-sha2-nistp384"}, /* ECDSA P384 */
-    {1, 1, "ecdsa-sha2-nistp521", 0, 64, "ecdsa-sha2-nistp521"}, /* ECDSA P521 */
-    {0, 1, "", 0, 0, ""},                                        /* ECDSA P256 CERT */
-    {0, 1, "", 0, 0, ""},                                        /* ECDSA P384 CERT */
-    {0, 1, "", 0, 0, ""},                                        /* ECDSA P521 CERT */
-    {0, 1, "", 0, 0, ""},                                        /* ED25519 CERT */
-};
-
-/* Maps to enum ssh_digest_e */
-const char *hash_signatures[] = {
-    "", /* Not used here */
-    "ssh-rsa",
-    "rsa-sha2-256",
-    "rsa-sha2-512",
-};
-
-/* Maps to enum ssh_digest_e */
-int hash_lengths[] = {
-    0, /* Not used here */
-    20,
-    32,
-    64,
+    {
+        {0, 0, "", 0, 0, "", 0}, /* DSS CERT, AUTO */
+        {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA1 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA256 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA384 */
+        {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA512 */
+    },
+#endif /* HAVE_DSA */
+    {
+        {0, 1, "", 0, 0, "", 0}, /* RSA CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* RSA CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* RSA CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* RSA CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* RSA CERT, SHA512 */
+    },
+#ifdef HAVE_ECC
+    {
+        {1, 1, "ecdsa-sha2-nistp256", 256, 0, "", 0},                     /* ECDSA P256, AUTO */
+        {1, 1, "ecdsa-sha2-nistp256", 256, 0, "", 0},                     /* ECDSA P256, SHA1 */
+        {1, 1, "ecdsa-sha2-nistp256", 256, 32, "ecdsa-sha2-nistp256", 1}, /* ECDSA P256, SHA256 */
+        {1, 1, "ecdsa-sha2-nistp256", 256, 0, "", 0},                     /* ECDSA P256, SHA384 */
+        {1, 1, "ecdsa-sha2-nistp256", 256, 0, "", 0},                     /* ECDSA P256, SHA512 */
+    },
+    {
+        {1, 1, "ecdsa-sha2-nistp384", 384, 0, "", 0},                     /* ECDSA P384, AUTO */
+        {1, 1, "ecdsa-sha2-nistp384", 384, 0, "", 0},                     /* ECDSA P384, SHA1 */
+        {1, 1, "ecdsa-sha2-nistp384", 384, 0, "", 0},                     /* ECDSA P384, SHA256 */
+        {1, 1, "ecdsa-sha2-nistp384", 384, 48, "ecdsa-sha2-nistp384", 1}, /* ECDSA P384, SHA384 */
+        {1, 1, "ecdsa-sha2-nistp384", 384, 0, "", 0},                     /* ECDSA P384, SHA512 */
+    },
+    {
+        {1, 1, "ecdsa-sha2-nistp521", 521, 0, "", 0},                     /* ECDSA P521, AUTO */
+        {1, 1, "ecdsa-sha2-nistp521", 521, 0, "", 0},                     /* ECDSA P521, SHA1 */
+        {1, 1, "ecdsa-sha2-nistp521", 521, 0, "", 0},                     /* ECDSA P521, SHA256 */
+        {1, 1, "ecdsa-sha2-nistp521", 521, 0, "", 0},                     /* ECDSA P521, SHA384 */
+        {1, 1, "ecdsa-sha2-nistp521", 521, 64, "ecdsa-sha2-nistp521", 1}, /* ECDSA P521, SHA512 */
+    },
+    {
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P256 CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P256 CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P256 CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P256 CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P256 CERT, SHA512 */
+    },
+    {
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P384 CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P384 CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P384 CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P384 CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P384 CERT, SHA512 */
+    },
+    {
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P521 CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P521 CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P521 CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P521 CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* ECDSA P521 CERT, SHA512 */
+    },
+#endif /* HAVE_ECC */
+    {
+        {0, 1, "", 0, 0, "", 0}, /* ED25519 CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* ED25519 CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* ED25519 CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* ED25519 CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* ED25519 CERT, SHA512 */
+    },
 };
 
 /* This tests all the base types and their signatures against each other */
@@ -163,13 +252,13 @@ static void torture_pki_verify_mismatch(void **state)
 {
     int rc;
     int verbosity = torture_libssh_verbosity();
-    ssh_key key = NULL, verify_key = NULL;
+    ssh_key key = NULL, verify_key = NULL, pubkey = NULL, verify_pubkey = NULL;
     ssh_signature sign = NULL, import_sig = NULL, new_sig = NULL;
     ssh_string blob;
     ssh_session session = ssh_new();
     enum ssh_keytypes_e key_type, sig_type;
     enum ssh_digest_e hash;
-    int hash_length;
+    size_t input_length = sizeof(INPUT);
     struct key_attrs skey_attrs, vkey_attrs;
 
     (void) state;
@@ -177,37 +266,56 @@ static void torture_pki_verify_mismatch(void **state)
     ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     for (sig_type = SSH_KEYTYPE_DSS;
-         sig_type <= SSH_KEYTYPE_ED25519;
-         sig_type++) {
-        skey_attrs = key_attrs_list[sig_type];
-        if (!skey_attrs.sign) {
-            continue;
-        }
-        rc = ssh_pki_generate(sig_type, skey_attrs.size_arg, &key);
-        assert_true(rc == SSH_OK);
-        assert_non_null(key);
-        assert_int_equal(key->type, sig_type);
-        assert_string_equal(key->type_c, skey_attrs.type_c);
-
+         sig_type <= SSH_KEYTYPE_ED25519_CERT01;
+         sig_type++)
+    {
         for (hash = SSH_DIGEST_AUTO;
              hash <= SSH_DIGEST_SHA512;
-             hash++) {
-            hash_length = ((hash == SSH_DIGEST_AUTO) ?
-                              skey_attrs.sig_length : hash_lengths[hash]);
+             hash++)
+        {
+            if (ssh_fips_mode()) {
+                if (sig_type == SSH_KEYTYPE_DSS ||
+                    sig_type == SSH_KEYTYPE_ED25519 ||
+                    hash == SSH_DIGEST_SHA1)
+                {
+                    /* In FIPS mode, skip unsupported algorithms */
+                    continue;
+                }
+            }
+
+            skey_attrs = key_attrs_list[sig_type][hash];
+
+            if (!skey_attrs.sign) {
+                continue;
+            }
+
+            rc = ssh_pki_generate(sig_type, skey_attrs.size_arg, &key);
+            assert_true(rc == SSH_OK);
+            assert_non_null(key);
+            assert_int_equal(key->type, sig_type);
+            assert_string_equal(key->type_c, skey_attrs.type_c);
 
             SSH_LOG(SSH_LOG_TRACE, "Creating signature %d with hash %d",
                     sig_type, hash);
 
+            if (skey_attrs.expect_success == 0) {
+                /* Expect error */
+                sign = pki_do_sign(key, INPUT, input_length, hash);
+                assert_null(sign);
+
+                SSH_KEY_FREE(key);
+                continue;
+            }
+
+            rc = ssh_pki_export_privkey_to_pubkey(key, &pubkey);
+            assert_int_equal(rc, SSH_OK);
+            assert_non_null(pubkey);
+
             /* Create a valid signature using this key */
-            sign = pki_do_sign_hash(key, HASH, hash_length, hash);
+            sign = pki_do_sign(key, INPUT, input_length, hash);
             assert_non_null(sign);
             assert_int_equal(sign->type, key->type);
-            if (hash == SSH_DIGEST_AUTO) {
-                assert_string_equal(sign->type_c, key->type_c);
-                assert_string_equal(sign->type_c, skey_attrs.sig_type_c);
-            } else {
-                assert_string_equal(sign->type_c, hash_signatures[hash]);
-            }
+            assert_string_equal(sign->type_c, skey_attrs.sig_type_c);
 
             /* Create a signature blob that can be imported and verified */
             blob = pki_signature_to_blob(sign);
@@ -221,79 +329,83 @@ static void torture_pki_verify_mismatch(void **state)
                                                  hash);
             assert_non_null(import_sig);
             assert_int_equal(import_sig->type, key->type);
-            if (hash == SSH_DIGEST_AUTO) {
-                assert_string_equal(import_sig->type_c, key->type_c);
-                assert_string_equal(import_sig->type_c, skey_attrs.sig_type_c);
-            } else {
-                assert_string_equal(import_sig->type_c, hash_signatures[hash]);
-            }
+            assert_string_equal(import_sig->type_c, skey_attrs.sig_type_c);
 
-            /* Internal API: Should work */
             rc = pki_signature_verify(session,
                                       import_sig,
-                                      key,
-                                      HASH,
-                                      hash_length);
+                                      pubkey,
+                                      INPUT,
+                                      input_length);
             assert_true(rc == SSH_OK);
 
             for (key_type = SSH_KEYTYPE_DSS;
                  key_type <= SSH_KEYTYPE_ED25519_CERT01;
-                 key_type++) {
-                vkey_attrs = key_attrs_list[key_type];
+                 key_type++)
+            {
+                if (ssh_fips_mode()) {
+                    if (key_type == SSH_KEYTYPE_DSS ||
+                        key_type == SSH_KEYTYPE_ED25519)
+                    {
+                        /* In FIPS mode, skip unsupported algorithms */
+                        continue;
+                    }
+                }
+
+                vkey_attrs = key_attrs_list[key_type][hash];
                 if (!vkey_attrs.verify) {
                     continue;
                 }
+
                 SSH_LOG(SSH_LOG_TRACE, "Trying key %d with signature %d",
                         key_type, sig_type);
 
                 if (is_cert_type(key_type)) {
                     torture_write_file("libssh_testkey-cert.pub",
                        torture_get_testkey_pub(key_type));
-                    rc = ssh_pki_import_cert_file("libssh_testkey-cert.pub", &verify_key);
+                    rc = ssh_pki_import_cert_file("libssh_testkey-cert.pub", &verify_pubkey);
+                    verify_key = NULL;
                 } else {
                     rc = ssh_pki_generate(key_type, vkey_attrs.size_arg, &verify_key);
+                    assert_int_equal(rc, SSH_OK);
+                    assert_non_null(verify_key);
+                    rc = ssh_pki_export_privkey_to_pubkey(verify_key, &verify_pubkey);
                 }
-                assert_true(rc == SSH_OK);
-                assert_non_null(verify_key);
+                assert_int_equal(rc, SSH_OK);
+                assert_non_null(verify_pubkey);
 
                 /* Should gracefully fail, but not crash */
                 rc = pki_signature_verify(session,
                                           sign,
-                                          verify_key,
-                                          HASH,
-                                          hash_length);
+                                          verify_pubkey,
+                                          INPUT,
+                                          input_length);
                 assert_true(rc != SSH_OK);
 
                 /* Try the same with the imported signature */
                 rc = pki_signature_verify(session,
                                           import_sig,
-                                          verify_key,
-                                          HASH,
-                                          hash_length);
+                                          verify_pubkey,
+                                          INPUT,
+                                          input_length);
                 assert_true(rc != SSH_OK);
 
                 /* Try to import the signature blob with different key */
-                new_sig = pki_signature_from_blob(verify_key,
+                new_sig = pki_signature_from_blob(verify_pubkey,
                                                   blob,
                                                   sig_type,
                                                   import_sig->hash_type);
-                if (ssh_key_type_plain(key_type) == sig_type) {
+                if (ssh_key_type_plain(verify_pubkey->type) == sig_type) {
                     /* Importing with the same key type should work */
                     assert_non_null(new_sig);
                     assert_int_equal(new_sig->type, key->type);
-                    if (ssh_key_type_plain(key_type) == SSH_KEYTYPE_RSA &&
-                    new_sig->hash_type != SSH_DIGEST_AUTO) {
-                        assert_string_equal(new_sig->type_c, hash_signatures[new_sig->hash_type]);
-                    } else {
-                        assert_string_equal(new_sig->type_c, key->type_c);
-                        assert_string_equal(new_sig->type_c, skey_attrs.sig_type_c);
-                    }
+                    assert_string_equal(new_sig->type_c, skey_attrs.sig_type_c);
+
                     /* The verification should not work */
                     rc = pki_signature_verify(session,
                                               new_sig,
-                                              verify_key,
-                                              HASH,
-                                              hash_length);
+                                              verify_pubkey,
+                                              INPUT,
+                                              input_length);
                     assert_true(rc != SSH_OK);
 
                     ssh_signature_free(new_sig);
@@ -301,20 +413,17 @@ static void torture_pki_verify_mismatch(void **state)
                     assert_null(new_sig);
                 }
                 SSH_KEY_FREE(verify_key);
+                SSH_KEY_FREE(verify_pubkey);
             }
 
             ssh_string_free(blob);
             ssh_signature_free(sign);
             ssh_signature_free(import_sig);
 
-            /* XXX Test all the hash versions only with RSA. */
-            if (sig_type != SSH_KEYTYPE_RSA || hash == SSH_DIGEST_SHA512) {
-                break;
-            }
+            SSH_KEY_FREE(key);
+            SSH_KEY_FREE(pubkey);
+            key = NULL;
         }
-
-        SSH_KEY_FREE(key);
-        key = NULL;
     }
 
     ssh_free(session);

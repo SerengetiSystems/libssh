@@ -21,6 +21,7 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define LIBSSH_TESTCONFIG11 "libssh_testconfig11.tmp"
 #define LIBSSH_TESTCONFIG12 "libssh_testconfig12.tmp"
 #define LIBSSH_TESTCONFIGGLOB "libssh_testc*[36].tmp"
+#define LIBSSH_TEST_PUBKEYACCEPTEDKEYTYPES "libssh_test_PubkeyAcceptedKeyTypes.tmp"
 
 #define USERNAME "testuser"
 #define PROXYCMD "ssh -q -W %h:%p gateway.example.com"
@@ -32,6 +33,8 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define USER_KNOWN_HOSTS "%d/my_known_hosts"
 #define GLOBAL_KNOWN_HOSTS "/etc/ssh/my_ssh_known_hosts"
 #define BIND_ADDRESS "::1"
+
+
 
 static int setup_config_files(void **state)
 {
@@ -50,6 +53,7 @@ static int setup_config_files(void **state)
     unlink(LIBSSH_TESTCONFIG10);
     unlink(LIBSSH_TESTCONFIG11);
     unlink(LIBSSH_TESTCONFIG12);
+    unlink(LIBSSH_TEST_PUBKEYACCEPTEDKEYTYPES);
 
     torture_write_file(LIBSSH_TESTCONFIG1,
                        "User "USERNAME"\nInclude "LIBSSH_TESTCONFIG2"\n\n");
@@ -180,6 +184,9 @@ static int setup_config_files(void **state)
                        "\tRekeyLimit default 9600\n"
                        "");
 
+    torture_write_file(LIBSSH_TEST_PUBKEYACCEPTEDKEYTYPES,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES"\n");
+
     session = ssh_new();
 
     verbosity = torture_libssh_verbosity();
@@ -204,6 +211,7 @@ static int teardown(void **state)
     unlink(LIBSSH_TESTCONFIG10);
     unlink(LIBSSH_TESTCONFIG11);
     unlink(LIBSSH_TESTCONFIG12);
+    unlink(LIBSSH_TEST_PUBKEYACCEPTEDKEYTYPES);
 
     ssh_free(*state);
 
@@ -216,7 +224,8 @@ static int teardown(void **state)
 static void torture_config_from_file(void **state) {
     ssh_session session = *state;
     int ret;
-    char *v;
+    char *v = NULL;
+    char *fips_algos = NULL;
 
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG1);
     assert_true(ret == 0);
@@ -244,14 +253,39 @@ static void torture_config_from_file(void **state) {
     assert_string_equal(v, USERNAME);
     SSH_STRING_FREE_CHAR(v);
 
-    assert_string_equal(session->opts.wanted_methods[SSH_KEX], KEXALGORITHMS);
-
-    assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS);
-
-    assert_string_equal(session->opts.pubkey_accepted_types, PUBKEYACCEPTEDTYPES);
-
-    assert_string_equal(session->opts.wanted_methods[SSH_MAC_C_S], MACS);
-    assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C], MACS);
+    if (ssh_fips_mode()) {
+        fips_algos = ssh_keep_fips_algos(SSH_KEX, KEXALGORITHMS);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.wanted_methods[SSH_KEX], fips_algos);
+        SAFE_FREE(fips_algos);
+        fips_algos = ssh_keep_fips_algos(SSH_HOSTKEYS, HOSTKEYALGORITHMS);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS], fips_algos);
+        SAFE_FREE(fips_algos);
+        fips_algos = ssh_keep_fips_algos(SSH_HOSTKEYS, PUBKEYACCEPTEDTYPES);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.pubkey_accepted_types, fips_algos);
+        SAFE_FREE(fips_algos);
+        fips_algos = ssh_keep_fips_algos(SSH_MAC_C_S, MACS);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.wanted_methods[SSH_MAC_C_S], fips_algos);
+        SAFE_FREE(fips_algos);
+        fips_algos = ssh_keep_fips_algos(SSH_MAC_S_C, MACS);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C], fips_algos);
+        SAFE_FREE(fips_algos);
+    } else {
+        assert_non_null(session->opts.wanted_methods[SSH_KEX]);
+        assert_string_equal(session->opts.wanted_methods[SSH_KEX], KEXALGORITHMS);
+        assert_non_null(session->opts.wanted_methods[SSH_HOSTKEYS]);
+        assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS);
+        assert_non_null(session->opts.pubkey_accepted_types);
+        assert_string_equal(session->opts.pubkey_accepted_types, PUBKEYACCEPTEDTYPES);
+        assert_non_null(session->opts.wanted_methods[SSH_MAC_S_C]);
+        assert_string_equal(session->opts.wanted_methods[SSH_MAC_C_S], MACS);
+        assert_non_null(session->opts.wanted_methods[SSH_MAC_S_C]);
+        assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C], MACS);
+    }
 }
 
 /**
@@ -266,16 +300,16 @@ static void torture_config_double_ports(void **state) {
 static void torture_config_glob(void **state) {
     ssh_session session = *state;
     int ret;
-#ifdef HAVE_GLOB
+#if defined(HAVE_GLOB) && defined(HAVE_GLOB_GL_FLAGS_MEMBER)
     char *v;
-#endif
+#endif /* HAVE_GLOB && HAVE_GLOB_GL_FLAGS_MEMBER */
 
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG5);
     assert_true(ret == 0); /* non-existing files should not error */
 
     /* Test the variable presence */
 
-#ifdef HAVE_GLOB
+#if defined(HAVE_GLOB) && defined(HAVE_GLOB_GL_FLAGS_MEMBER)
     ret = ssh_options_get(session, SSH_OPTIONS_PROXYCOMMAND, &v);
     assert_true(ret == 0);
     assert_non_null(v);
@@ -289,7 +323,7 @@ static void torture_config_glob(void **state) {
 
     assert_string_equal(v, ID_FILE);
     SSH_STRING_FREE_CHAR(v);
-#endif /* HAVE_GLOB */
+#endif /* HAVE_GLOB && HAVE_GLOB_GL_FLAGS_MEMBER */
 }
 
 /**
@@ -393,6 +427,8 @@ static void torture_config_unknown(void **state) {
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG9);
     assert_true(ret == 0);
     ret = ssh_config_parse_file(session, "/etc/ssh/ssh_config");
+    assert_true(ret == 0);
+    ret = ssh_config_parse_file(session, GLOBAL_CLIENT_CONFIG);
     assert_true(ret == 0);
 }
 
@@ -781,7 +817,7 @@ static void torture_config_rekey(void **state)
     ssh_options_set(session, SSH_OPTIONS_HOST, "data1");
     ret = ssh_config_parse_file(session, LIBSSH_TESTCONFIG12);
     assert_ssh_return_code(session, ret);
-    assert_int_equal(session->opts.rekey_data, (long long) 42 * 1024 * 1024 * 1024);
+    assert_int_equal(session->opts.rekey_data, (uint64_t) 42 * 1024 * 1024 * 1024);
     assert_int_equal(session->opts.rekey_time, 0);
 
     /* 41 MB */
@@ -834,6 +870,28 @@ static void torture_config_rekey(void **state)
 
 }
 
+/**
+ * @brief test ssh_config_parse_file with PubkeyAcceptedKeyTypes
+ */
+static void torture_config_pubkeyacceptedkeytypes(void **state)
+{
+    ssh_session session = *state;
+    int rc;
+    char *fips_algos;
+
+    rc = ssh_config_parse_file(session, LIBSSH_TEST_PUBKEYACCEPTEDKEYTYPES);
+    assert_int_equal(rc, SSH_OK);
+
+    if (ssh_fips_mode()) {
+        fips_algos = ssh_keep_fips_algos(SSH_HOSTKEYS, PUBKEYACCEPTEDTYPES);
+        assert_non_null(fips_algos);
+        assert_string_equal(session->opts.pubkey_accepted_types, fips_algos);
+        SAFE_FREE(fips_algos);
+    } else {
+        assert_string_equal(session->opts.pubkey_accepted_types, PUBKEYACCEPTEDTYPES);
+    }
+}
+
 int torture_run_tests(void) {
     int rc;
     struct CMUnitTest tests[] = {
@@ -846,6 +904,7 @@ int torture_run_tests(void) {
         cmocka_unit_test(torture_config_match),
         cmocka_unit_test(torture_config_proxyjump),
         cmocka_unit_test(torture_config_rekey),
+        cmocka_unit_test(torture_config_pubkeyacceptedkeytypes),
     };
 
 

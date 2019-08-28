@@ -839,61 +839,80 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     rc = ssh_pki_import_pubkey_blob(pubkey_blob, &msg->auth_request.pubkey);
     ssh_string_free(pubkey_blob);
     pubkey_blob = NULL;
-	if (rc >= 0) {
-		msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
-		// has a valid signature ?
-		if (has_sign) {
-			ssh_string sig_blob = NULL;
-			ssh_buffer digest = NULL;
+    if (rc < 0) {
+        ssh_string_free(algo);
+        algo = NULL;
+        goto error;
+    }
+    msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
+    // has a valid signature ?
+    if(has_sign) {
+        ssh_string sig_blob = NULL;
+        ssh_buffer digest = NULL;
 
-			sig_blob = ssh_buffer_get_ssh_string(packet);
-			if (sig_blob == NULL) {
-				SSH_LOG(SSH_LOG_PACKET, "Invalid signature packet from peer");
-				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
-				ssh_string_free(algo);
-				algo = NULL;
-				goto error;
-			}
+        sig_blob = ssh_buffer_get_ssh_string(packet);
+        if(sig_blob == NULL) {
+            SSH_LOG(SSH_LOG_PACKET, "Invalid signature packet from peer");
+            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
+            ssh_string_free(algo);
+            algo = NULL;
+            goto error;
+        }
 
-			digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
-			ssh_string_free(algo);
-			algo = NULL;
-			if (digest == NULL) {
-				ssh_string_free(sig_blob);
-				SSH_LOG(SSH_LOG_PACKET, "Failed to get digest");
-				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-				goto error;
-			}
+        digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
+        ssh_string_free(algo);
+        algo = NULL;
+        if (digest == NULL) {
+            ssh_string_free(sig_blob);
+            SSH_LOG(SSH_LOG_PACKET, "Failed to get digest");
+            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+            goto error;
+        }
 
-			rc = ssh_pki_import_signature_blob(sig_blob,
-				msg->auth_request.pubkey,
-				&sig);
-			if (rc == SSH_OK) {
-				rc = ssh_pki_signature_verify(session,
-					sig,
-					msg->auth_request.pubkey,
-					ssh_buffer_get(digest),
-					ssh_buffer_get_len(digest));
-			}
-			ssh_string_free(sig_blob);
-			ssh_buffer_free(digest);
-			ssh_signature_free(sig);
-			if (rc < 0) {
-				SSH_LOG(
-					SSH_LOG_PACKET,
-					"Received an invalid signature from peer");
-				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-				goto error;
-			}
+        rc = ssh_pki_import_signature_blob(sig_blob,
+                                           msg->auth_request.pubkey,
+                                           &sig);
+        if (rc == SSH_OK) {
+            /* Check if the signature from client matches server preferences */
+            if (session->opts.pubkey_accepted_types) {
+                if (!ssh_match_group(session->opts.pubkey_accepted_types,
+                            sig->type_c))
+                {
+                    ssh_set_error(session,
+                            SSH_FATAL,
+                            "Public key from client (%s) doesn't match server "
+                            "preference (%s)",
+                            sig->type_c,
+                            session->opts.pubkey_accepted_types);
+                    rc = SSH_ERROR;
+                }
+            }
 
-			SSH_LOG(SSH_LOG_PACKET, "Valid signature received");
+            if (rc == SSH_OK) {
+                rc = ssh_pki_signature_verify(session,
+                                              sig,
+                                              msg->auth_request.pubkey,
+                                              ssh_buffer_get(digest),
+                                              ssh_buffer_get_len(digest));
+            }
+        }
+        ssh_string_free(sig_blob);
+        ssh_buffer_free(digest);
+        ssh_signature_free(sig);
+        if (rc < 0) {
+            SSH_LOG(
+                    SSH_LOG_PACKET,
+                    "Received an invalid signature from peer");
+            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+            goto error;
+        }
 
-			msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
-		}
-		goto end;
-	}
-	else
-	    ssh_string_free(algo);
+        SSH_LOG(SSH_LOG_PACKET, "Valid signature received");
+
+        msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
+    }
+    ssh_string_free(algo);
+    goto end;
   }
 #ifdef WITH_GSSAPI
   else if (strcmp(method, "gssapi-with-mic") == 0) {
@@ -1203,6 +1222,17 @@ end:
   return SSH_PACKET_USED;
 }
 
+/**
+ * @internal
+ *
+ * @brief This function accepts a channel open request for the specified channel.
+ *
+ * @param[in]  msg      The message.
+ *
+ * @param[in]  chan     The channel the request is made on.
+ *
+ * @returns             SSH_OK on success, SSH_ERROR if an error occured.
+ */
 int ssh_message_channel_request_open_reply_accept_channel(ssh_message msg, ssh_channel chan) {
     ssh_session session;
     int rc;
@@ -1243,7 +1273,17 @@ int ssh_message_channel_request_open_reply_accept_channel(ssh_message msg, ssh_c
     return rc;
 }
 
-
+/**
+ * @internal
+ *
+ * @brief This function accepts a channel open request.
+ *
+ * @param[in]  msg      The message.
+ *
+ * @returns a valid ssh_channel handle if the request is to be allowed
+ *
+ * @returns NULL in case of error
+ */
 ssh_channel ssh_message_channel_request_open_reply_accept(ssh_message msg) {
 	ssh_channel chan;
 	int rc;
@@ -1455,12 +1495,18 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
     msg->type = SSH_REQUEST_GLOBAL;
 
     if (strcmp(request, "tcpip-forward") == 0) {
+
+        /* According to RFC4254, the client SHOULD reject this message */
+        if (session->client) {
+            goto reply_with_failure;
+        }
+
         r = ssh_buffer_unpack(packet, "sd",
                 &msg->global_request.bind_address,
                 &msg->global_request.bind_port
                 );
         if (r != SSH_OK){
-            goto error;
+            goto reply_with_failure;
         }
         msg->global_request.type = SSH_GLOBAL_REQUEST_TCPIP_FORWARD;
         msg->global_request.want_reply = want_reply;
@@ -1480,11 +1526,17 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
             return rc;
         }
     } else if (strcmp(request, "cancel-tcpip-forward") == 0) {
+
+        /* According to RFC4254, the client SHOULD reject this message */
+        if (session->client) {
+            goto reply_with_failure;
+        }
+
         r = ssh_buffer_unpack(packet, "sd",
                 &msg->global_request.bind_address,
                 &msg->global_request.bind_port);
         if (r != SSH_OK){
-            goto error;
+            goto reply_with_failure;
         }
         msg->global_request.type = SSH_GLOBAL_REQUEST_CANCEL_TCPIP_FORWARD;
         msg->global_request.want_reply = want_reply;
@@ -1510,18 +1562,41 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
             ssh_message_global_request_reply_success(msg, 0);
         }
     } else {
-        SSH_LOG(SSH_LOG_PROTOCOL, "UNKNOWN SSH_MSG_GLOBAL_REQUEST %s %d", request, want_reply);
-        rc = SSH_PACKET_NOT_USED;
+        SSH_LOG(SSH_LOG_PROTOCOL, "UNKNOWN SSH_MSG_GLOBAL_REQUEST %s, "
+                "want_reply = %d", request, want_reply);
+        goto reply_with_failure;
     }
 
     SAFE_FREE(msg);
     SAFE_FREE(request);
     return rc;
+
+reply_with_failure:
+    /* Only report the failure if requested */
+    if (want_reply) {
+        r = ssh_buffer_add_u8(session->out_buffer,
+                SSH2_MSG_REQUEST_FAILURE);
+        if (r < 0) {
+            ssh_set_error_oom(session);
+            goto error;
+        }
+
+        r = ssh_packet_send(session);
+        if (r != SSH_OK) {
+            goto error;
+        }
+    } else {
+        SSH_LOG(SSH_LOG_PACKET,
+                "The requester doesn't want to know the request failed!");
+    }
+
+    /* Consume the message to avoid sending UNIMPLEMENTED later */
+    rc = SSH_PACKET_USED;
 error:
     SAFE_FREE(msg);
     SAFE_FREE(request);
     SSH_LOG(SSH_LOG_WARNING, "Invalid SSH_MSG_GLOBAL_REQUEST packet");
-    return SSH_PACKET_NOT_USED;
+    return rc;
 }
 
 #endif /* WITH_SERVER */

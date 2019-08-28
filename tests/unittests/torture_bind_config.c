@@ -46,9 +46,11 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define CIPHERS "aes128-ctr,aes192-ctr,aes256-ctr"
 #define CIPHERS2 "aes256-ctr"
 #define HOSTKEYALGORITHMS "ssh-ed25519,ecdsa-sha2-nistp521,ssh-rsa"
-#define HOSTKEYALGORITHMS2 "ssh-rsa"
+#define HOSTKEYALGORITHMS_UNKNOWN "ssh-ed25519,ecdsa-sha2-nistp521,unknown,ssh-rsa"
+#define HOSTKEYALGORITHMS2 "rsa-sha2-256"
 #define PUBKEYACCEPTEDTYPES "rsa-sha2-512,ssh-rsa,ecdsa-sha2-nistp521"
-#define PUBKEYACCEPTEDTYPES2 "ssh-rsa"
+#define PUBKEYACCEPTEDTYPES_UNKNOWN "rsa-sha2-512,ssh-rsa,unknown,ecdsa-sha2-nistp521"
+#define PUBKEYACCEPTEDTYPES2 "rsa-sha2-256,ssh-rsa"
 #define MACS "hmac-sha1,hmac-sha2-256,hmac-sha2-512,hmac-sha1-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com"
 #define MACS2 "hmac-sha1"
 
@@ -102,6 +104,18 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define LIBSSH_TEST_BIND_CONFIG_MATCH_CORNER_CASES "libssh_test_bind_config_match_corner_cases"
 #define LIBSSH_TEST_BIND_CONFIG_MATCH_INVALID "libssh_test_bind_config_match_invalid"
 #define LIBSSH_TEST_BIND_CONFIG_MATCH_INVALID2 "libssh_test_bind_config_match_invalid2"
+
+#define LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED "libssh_test_bind_config_pubkey"
+#define LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED2 "libssh_test_bind_config_pubkey2"
+#define LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE "libssh_test_bind_config_pubkey_twice"
+#define LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE_REC "libssh_test_bind_config_pubkey_twice_rec"
+#define LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_UNKNOWN "libssh_test_bind_config_pubkey_unknown"
+
+#define LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS "libssh_test_bind_config_hostkey_alg"
+#define LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS2 "libssh_test_bind_config_hostkey_alg2"
+#define LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE "libssh_test_bind_config_hostkey_alg_twice"
+#define LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE_REC "libssh_test_bind_config_hostkey_alg_twice_rec"
+#define LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_UNKNOWN "libssh_test_bind_config_hostkey_alg_unknown"
 
 const char template[] = "temp_dir_XXXXXX";
 
@@ -176,14 +190,14 @@ static int setup_config_files(void **state)
                        "Include "LIBSSH_TEST_BIND_CONFIG_PORT2"\n");
 
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY,
-                       "HostKey "LIBSSH_ED25519_TESTKEY"\n");
+                       "HostKey "LIBSSH_ECDSA_521_TESTKEY"\n");
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY2,
                        "HostKey "LIBSSH_RSA_TESTKEY"\n");
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_TWICE,
-                       "HostKey "LIBSSH_ED25519_TESTKEY"\n"
+                       "HostKey "LIBSSH_ECDSA_521_TESTKEY"\n"
                        "HostKey "LIBSSH_RSA_TESTKEY"\n");
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_TWICE_REC,
-                       "HostKey "LIBSSH_ED25519_TESTKEY"\n"
+                       "HostKey "LIBSSH_ECDSA_521_TESTKEY"\n"
                        "Include "LIBSSH_TEST_BIND_CONFIG_HOSTKEY2"\n");
 
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_LOGLEVEL,
@@ -233,7 +247,7 @@ static int setup_config_files(void **state)
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_FULL,
                        "ListenAddress "LISTEN_ADDRESS"\n"
                        "Port 123\n"
-                       "HostKey "LIBSSH_ED25519_TESTKEY"\n"
+                       "HostKey "LIBSSH_ECDSA_521_TESTKEY"\n"
                        "LogLevel "LOGLEVEL"\n"
                        "Ciphers "CIPHERS"\n"
                        "MACs "MACS"\n"
@@ -257,7 +271,7 @@ static int setup_config_files(void **state)
                        "# comment line\n"
                        "  # comment line not starting with hash\n"
                        "UnknownConfigurationOption yes\n"
-                       "Ciphers "CIPHERS"\n");
+                       "Ciphers "CIPHERS2"\n");
 
     torture_write_file(LIBSSH_TEST_BIND_CONFIG_MATCH_ALL,
                        "Include "LIBSSH_TEST_BIND_CONFIG_FULL"\n"
@@ -319,6 +333,31 @@ static int setup_config_files(void **state)
                        "Match All\n"
                        "\tLogLevel "LOGLEVEL4"\n");
 
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED2,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES2"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES"\n"
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES2"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE_REC,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES2"\n"
+                       "Include "LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_UNKNOWN,
+                       "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES_UNKNOWN"\n");
+
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS,
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS2,
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS2"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE,
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS"\n"
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS2"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE_REC,
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS2"\n"
+                       "Include "LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS"\n");
+    torture_write_file(LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_UNKNOWN,
+                       "HostKeyAlgorithms "HOSTKEYALGORITHMS_UNKNOWN"\n");
     return 0;
 }
 
@@ -448,14 +487,14 @@ static void torture_bind_config_hostkey(void **state)
 
     rc = ssh_bind_config_parse_file(bind, LIBSSH_TEST_BIND_CONFIG_HOSTKEY);
     assert_int_equal(rc, 0);
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_HOSTKEY_TWICE);
     assert_int_equal(rc, 0);
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
     assert_non_null(bind->rsakey);
     assert_string_equal(bind->rsakey, LIBSSH_RSA_TESTKEY);
 }
@@ -475,8 +514,8 @@ static void torture_bind_config_hostkey_twice_rec(void **state)
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_HOSTKEY_TWICE_REC);
     assert_int_equal(rc, 0);
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
     assert_non_null(bind->rsakey);
     assert_string_equal(bind->rsakey, LIBSSH_RSA_TESTKEY);
 }
@@ -495,15 +534,15 @@ static void torture_bind_config_hostkey_separately(void **state)
 
     rc = ssh_bind_config_parse_file(bind, LIBSSH_TEST_BIND_CONFIG_HOSTKEY);
     assert_int_equal(rc, 0);
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
 
     rc = ssh_bind_config_parse_file(bind, LIBSSH_TEST_BIND_CONFIG_HOSTKEY2);
     assert_int_equal(rc, 0);
     assert_non_null(bind->rsakey);
     assert_string_equal(bind->rsakey, LIBSSH_RSA_TESTKEY);
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
 }
 
 static void torture_bind_config_loglevel(void **state)
@@ -556,6 +595,8 @@ static void torture_bind_config_ciphers(void **state)
     struct bind_st *test_state;
     ssh_bind bind;
     int rc;
+    char *fips_ciphers = NULL;
+    char *fips_ciphers2 = NULL;
 
     assert_non_null(state);
     test_state = *((struct bind_st **)state);
@@ -563,44 +604,67 @@ static void torture_bind_config_ciphers(void **state)
     assert_non_null(test_state->bind);
     bind = test_state->bind;
 
+    if (ssh_fips_mode()) {
+        fips_ciphers = ssh_keep_fips_algos(SSH_CRYPT_C_S, CIPHERS);
+        assert_non_null(fips_ciphers);
+        fips_ciphers2 = ssh_keep_fips_algos(SSH_CRYPT_C_S, CIPHERS2);
+        assert_non_null(fips_ciphers2);
+    }
+
     rc = ssh_bind_config_parse_file(bind, LIBSSH_TEST_BIND_CONFIG_CIPHERS);
     assert_int_equal(rc, 0);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], fips_ciphers);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], fips_ciphers);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    }
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_CIPHERS_TWICE);
     assert_int_equal(rc, 0);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], fips_ciphers);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], fips_ciphers);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    }
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_CIPHERS_TWICE_REC);
     assert_int_equal(rc, 0);
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], fips_ciphers);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], fips_ciphers);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    }
 
     rc = ssh_bind_config_parse_file(bind, LIBSSH_TEST_BIND_CONFIG_CIPHERS2);
     assert_int_equal(rc, 0);
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS2);
-
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS2);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], fips_ciphers2);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], fips_ciphers2);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS2);
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS2);
+    }
 
+    SAFE_FREE(fips_ciphers);
+    SAFE_FREE(fips_ciphers2);
 }
 
 static void torture_bind_config_macs(void **state)
@@ -658,7 +722,16 @@ static void torture_bind_config_kexalgorithms(void **state)
 {
     struct bind_st *test_state;
     ssh_bind bind;
+    char *fips_kex = NULL;
+    char *fips_kex2 = NULL;
     int rc;
+
+    if (ssh_fips_mode()) {
+        fips_kex = ssh_keep_fips_algos(SSH_KEX, KEXALGORITHMS);
+        assert_non_null(fips_kex);
+        fips_kex2 = ssh_keep_fips_algos(SSH_KEX, KEXALGORITHMS2);
+        assert_non_null(fips_kex2);
+    }
 
     assert_non_null(state);
     test_state = *((struct bind_st **)state);
@@ -670,26 +743,195 @@ static void torture_bind_config_kexalgorithms(void **state)
             LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS);
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], fips_kex);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    }
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS_TWICE);
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], fips_kex);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    }
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS_TWICE_REC);
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], fips_kex);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    }
 
     rc = ssh_bind_config_parse_file(bind,
             LIBSSH_TEST_BIND_CONFIG_KEXALGORITHMS2);
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS2);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], fips_kex2);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS2);
+    }
 
+    SAFE_FREE(fips_kex);
+    SAFE_FREE(fips_kex2);
+}
+
+static void torture_bind_config_pubkey_accepted(void **state)
+{
+    struct bind_st *test_state;
+    ssh_bind bind;
+    int rc;
+    char *fips_pubkeys = NULL;
+    char *fips_pubkeys2 = NULL;
+
+    if (ssh_fips_mode()) {
+        fips_pubkeys = ssh_keep_fips_algos(SSH_HOSTKEYS, PUBKEYACCEPTEDTYPES);
+        assert_non_null(fips_pubkeys);
+        fips_pubkeys2 = ssh_keep_fips_algos(SSH_HOSTKEYS, PUBKEYACCEPTEDTYPES2);
+        assert_non_null(fips_pubkeys2);
+    }
+
+    assert_non_null(state);
+    test_state = *((struct bind_st **)state);
+    assert_non_null(test_state);
+    assert_non_null(test_state->bind);
+    bind = test_state->bind;
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types, fips_pubkeys);
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types, PUBKEYACCEPTEDTYPES);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED2);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types, fips_pubkeys2);
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types, PUBKEYACCEPTEDTYPES2);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types, fips_pubkeys);
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types, PUBKEYACCEPTEDTYPES);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_TWICE_REC);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types, fips_pubkeys2);
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types, PUBKEYACCEPTEDTYPES2);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_PUBKEY_ACCEPTED_UNKNOWN);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types, fips_pubkeys);
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types, PUBKEYACCEPTEDTYPES);
+    }
+
+    SAFE_FREE(fips_pubkeys);
+    SAFE_FREE(fips_pubkeys2);
+}
+
+static void torture_bind_config_hostkey_algorithms(void **state)
+{
+    struct bind_st *test_state;
+    ssh_bind bind;
+    int rc;
+
+    char *fips_hostkeys = NULL;
+    char *fips_hostkeys2 = NULL;
+
+    if (ssh_fips_mode()) {
+        fips_hostkeys = ssh_keep_fips_algos(SSH_HOSTKEYS, HOSTKEYALGORITHMS);
+        assert_non_null(fips_hostkeys);
+        fips_hostkeys2 = ssh_keep_fips_algos(SSH_HOSTKEYS, HOSTKEYALGORITHMS2);
+        assert_non_null(fips_hostkeys2);
+    }
+
+    assert_non_null(state);
+    test_state = *((struct bind_st **)state);
+    assert_non_null(test_state);
+    assert_non_null(test_state->bind);
+    bind = test_state->bind;
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], fips_hostkeys);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS2);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], fips_hostkeys2);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS2);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], fips_hostkeys);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_TWICE_REC);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], fips_hostkeys2);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS2);
+    }
+
+    rc = ssh_bind_config_parse_file(bind,
+            LIBSSH_TEST_BIND_CONFIG_HOSTKEY_ALGORITHMS_UNKNOWN);
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], fips_hostkeys);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS], HOSTKEYALGORITHMS);
+    }
+
+    SAFE_FREE(fips_hostkeys);
+    SAFE_FREE(fips_hostkeys2);
 }
 
 static int assert_full_bind_config(void **state)
@@ -697,6 +939,16 @@ static int assert_full_bind_config(void **state)
     struct bind_st *test_state;
     ssh_bind bind;
     int new_level;
+
+    char *fips_ciphers = NULL;
+    char *fips_kex = NULL;
+
+    if (ssh_fips_mode()) {
+        fips_ciphers = ssh_keep_fips_algos(SSH_CRYPT_C_S, CIPHERS);
+        assert_non_null(fips_ciphers);
+        fips_kex = ssh_keep_fips_algos(SSH_KEX, KEXALGORITHMS);
+        assert_non_null(fips_kex);
+    }
 
     assert_non_null(state);
     test_state = *((struct bind_st **)state);
@@ -712,14 +964,22 @@ static int assert_full_bind_config(void **state)
 
     assert_int_equal(bind->bindport, 123);
 
-    assert_non_null(bind->ed25519key);
-    assert_string_equal(bind->ed25519key, LIBSSH_ED25519_TESTKEY);
+    assert_non_null(bind->ecdsakey);
+    assert_string_equal(bind->ecdsakey, LIBSSH_ECDSA_521_TESTKEY);
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], fips_ciphers);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+    }
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], fips_ciphers);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    }
 
     assert_non_null(bind->wanted_methods[SSH_MAC_S_C]);
     assert_string_equal(bind->wanted_methods[SSH_MAC_S_C], MACS);
@@ -728,7 +988,14 @@ static int assert_full_bind_config(void **state)
     assert_string_equal(bind->wanted_methods[SSH_MAC_C_S], MACS);
 
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], fips_kex);
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX], KEXALGORITHMS);
+    }
+
+    SAFE_FREE(fips_ciphers);
+    SAFE_FREE(fips_kex);
 
     return 0;
 }
@@ -829,10 +1096,10 @@ static void torture_bind_config_corner_cases(void **state)
     assert_int_equal(rc, 0);
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS);
+    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S], CIPHERS2);
 
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS);
+    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C], CIPHERS2);
 }
 
 static void torture_bind_config_match_all(void **state)
@@ -1033,6 +1300,10 @@ int torture_run_tests(void)
         cmocka_unit_test_setup_teardown(torture_bind_config_match_corner_cases,
                 sshbind_setup, sshbind_teardown),
         cmocka_unit_test_setup_teardown(torture_bind_config_match_invalid,
+                sshbind_setup, sshbind_teardown),
+        cmocka_unit_test_setup_teardown(torture_bind_config_pubkey_accepted,
+                sshbind_setup, sshbind_teardown),
+        cmocka_unit_test_setup_teardown(torture_bind_config_hostkey_algorithms,
                 sshbind_setup, sshbind_teardown),
     };
 

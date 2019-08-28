@@ -4,16 +4,15 @@
 /* Version number of package */
 #cmakedefine VERSION "${PROJECT_VERSION}"
 
-#cmakedefine LOCALEDIR "${LOCALE_INSTALL_DIR}"
-#cmakedefine DATADIR "${DATADIR}"
-#cmakedefine LIBDIR "${LIBDIR}"
-#cmakedefine PLUGINDIR "${PLUGINDIR}"
 #cmakedefine SYSCONFDIR "${SYSCONFDIR}"
 #cmakedefine BINARYDIR "${BINARYDIR}"
 #cmakedefine SOURCEDIR "${SOURCEDIR}"
 
 /* Global bind configuration file path */
 #cmakedefine GLOBAL_BIND_CONFIG "${GLOBAL_BIND_CONFIG}"
+
+/* Global client configuration file path */
+#cmakedefine GLOBAL_CLIENT_CONFIG "${GLOBAL_CLIENT_CONFIG}"
 
 /************************** HEADER FILES *************************/
 
@@ -123,6 +122,9 @@
 
 /* Define to 1 if you have the `EVP_KDF_CTX_new_id' function. */
 #cmakedefine HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID 1
+
+/* Define to 1 if you have the `FIPS_mode' function. */
+#cmakedefine HAVE_OPENSSL_FIPS_MODE 1
 
 /* Define to 1 if you have the `OPENSSL_ia32cap_loc' function. */
 #cmakedefine HAVE_OPENSSL_IA32CAP_LOC 1

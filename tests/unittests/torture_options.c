@@ -36,6 +36,8 @@ static int setup(void **state)
     verbosity = torture_libssh_verbosity();
     ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
+    session->client = 1;
+
     *state = session;
 
     return 0;
@@ -54,11 +56,14 @@ static void torture_options_set_host(void **state) {
 
     rc = ssh_options_set(session, SSH_OPTIONS_HOST, "localhost");
     assert_true(rc == 0);
+    assert_non_null(session->opts.host);
     assert_string_equal(session->opts.host, "localhost");
 
     rc = ssh_options_set(session, SSH_OPTIONS_HOST, "guru@meditation");
     assert_true(rc == 0);
+    assert_non_null(session->opts.host);
     assert_string_equal(session->opts.host, "meditation");
+    assert_non_null(session->opts.username);
     assert_string_equal(session->opts.username, "guru");
 }
 
@@ -67,17 +72,29 @@ static void torture_options_set_ciphers(void **state) {
     int rc;
 
     /* Test known ciphers */
-    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S, "aes128-ctr,aes192-ctr,aes256-ctr");
+    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S,
+                         "aes128-ctr,aes192-ctr,aes256-ctr");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.wanted_methods[SSH_CRYPT_C_S], "aes128-ctr,aes192-ctr,aes256-ctr");
+    assert_non_null(session->opts.wanted_methods[SSH_CRYPT_C_S]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(session->opts.wanted_methods[SSH_CRYPT_C_S],
+                            "aes128-ctr,aes256-ctr");
+    } else {
+        assert_string_equal(session->opts.wanted_methods[SSH_CRYPT_C_S],
+                            "aes128-ctr,aes192-ctr,aes256-ctr");
+    }
 
     /* Test one unknown cipher */
-    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S, "aes128-ctr,unknown-crap@example.com,aes192-ctr,aes256-ctr");
+    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S,
+                         "aes128-ctr,unknown-crap@example.com,aes256-ctr");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.wanted_methods[SSH_CRYPT_C_S], "aes128-ctr,aes192-ctr,aes256-ctr");
+    assert_non_null(session->opts.wanted_methods[SSH_CRYPT_C_S]);
+    assert_string_equal(session->opts.wanted_methods[SSH_CRYPT_C_S],
+                        "aes128-ctr,aes256-ctr");
 
     /* Test all unknown ciphers */
-    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S, "unknown-crap@example.com,more-crap@example.com");
+    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S,
+                         "unknown-crap@example.com,more-crap@example.com");
     assert_false(rc == 0);
 }
 
@@ -89,18 +106,35 @@ static void torture_options_set_key_exchange(void **state)
     /* Test known kexes */
     rc = ssh_options_set(session,
                          SSH_OPTIONS_KEY_EXCHANGE,
-                         "curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                         "curve25519-sha256,curve25519-sha256@libssh.org,"
+                         "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                         "diffie-hellman-group18-sha512,"
+                         "diffie-hellman-group14-sha1");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.wanted_methods[SSH_KEX],
-                        "curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+    assert_non_null(session->opts.wanted_methods[SSH_KEX]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(session->opts.wanted_methods[SSH_KEX],
+                            "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                            "diffie-hellman-group18-sha512");
+    } else {
+        assert_string_equal(session->opts.wanted_methods[SSH_KEX],
+                            "curve25519-sha256,curve25519-sha256@libssh.org,"
+                            "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                            "diffie-hellman-group18-sha512,"
+                            "diffie-hellman-group14-sha1");
+    }
 
     /* Test one unknown kex */
     rc = ssh_options_set(session,
                          SSH_OPTIONS_KEY_EXCHANGE,
-                         "curve25519-sha256,curve25519-sha256@libssh.org,unknown-crap@example.com,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                         "diffie-hellman-group16-sha512,"
+                         "unknown-crap@example.com,"
+                         "diffie-hellman-group18-sha512");
     assert_true(rc == 0);
+    assert_non_null(session->opts.wanted_methods[SSH_KEX]);
     assert_string_equal(session->opts.wanted_methods[SSH_KEX],
-                        "curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                        "diffie-hellman-group16-sha512,"
+                        "diffie-hellman-group18-sha512");
 
     /* Test all unknown kexes */
     rc = ssh_options_set(session,
@@ -118,16 +152,26 @@ static void torture_options_set_hostkey(void **state) {
                          SSH_OPTIONS_HOSTKEYS,
                          "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS],
-                        "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    assert_non_null(session->opts.wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS],
+                "ecdsa-sha2-nistp384");
+    } else {
+        assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS],
+                "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    }
 
     /* Test one unknown host key */
     rc = ssh_options_set(session,
                          SSH_OPTIONS_HOSTKEYS,
-                         "ssh-ed25519,unknown-crap@example.com,ssh-rsa");
+                         "ecdsa-sha2-nistp521,"
+                         "unknown-crap@example.com,"
+                         "rsa-sha2-256");
     assert_true(rc == 0);
+    assert_non_null(session->opts.wanted_methods[SSH_HOSTKEYS]);
     assert_string_equal(session->opts.wanted_methods[SSH_HOSTKEYS],
-                        "ssh-ed25519,ssh-rsa");
+                        "ecdsa-sha2-nistp521,"
+                        "rsa-sha2-256");
 
     /* Test all unknown host keys */
     rc = ssh_options_set(session,
@@ -146,31 +190,40 @@ static void torture_options_set_pubkey_accepted_types(void **state) {
                          SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
                          "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.pubkey_accepted_types,
-                        "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    assert_non_null(session->opts.pubkey_accepted_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(session->opts.pubkey_accepted_types,
+                            "ecdsa-sha2-nistp384");
+    } else {
+        assert_string_equal(session->opts.pubkey_accepted_types,
+                            "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    }
 
-    /* Test one unknown public key algorithms */
-    rc = ssh_options_set(session,
-                         SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
-                         "ssh-ed25519,unknown-crap@example.com,ssh-rsa");
-    assert_true(rc == 0);
-    assert_string_equal(session->opts.pubkey_accepted_types,
-                        "ssh-ed25519,ssh-rsa");
+    if (!ssh_fips_mode()) {
+        /* Test one unknown public key algorithms */
+        rc = ssh_options_set(session,
+                             SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
+                             "ssh-ed25519,unknown-crap@example.com,ssh-rsa");
+        assert_true(rc == 0);
+        assert_non_null(session->opts.pubkey_accepted_types);
+        assert_string_equal(session->opts.pubkey_accepted_types,
+                            "ssh-ed25519,ssh-rsa");
 
-    /* Test all unknown public key algorithms */
-    rc = ssh_options_set(session,
-                         SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
-                         "unknown-crap@example.com,more-crap@example.com");
-    assert_false(rc == 0);
+        /* Test all unknown public key algorithms */
+        rc = ssh_options_set(session,
+                             SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
+                             "unknown-crap@example.com,more-crap@example.com");
+        assert_false(rc == 0);
 
-    /* Test that the option affects the algorithm selection for RSA keys */
-    /* simulate the SHA2 extension was negotiated */
-    session->extensions = SSH_EXT_SIG_RSA_SHA256;
+        /* Test that the option affects the algorithm selection for RSA keys */
+        /* simulate the SHA2 extension was negotiated */
+        session->extensions = SSH_EXT_SIG_RSA_SHA256;
 
-    /* previous configuration did not list the SHA2 extension algoritms, so
-     * it should not be used */
-    type = ssh_key_type_to_hash(session, SSH_KEYTYPE_RSA);
-    assert_int_equal(type, SSH_DIGEST_SHA1);
+        /* previous configuration did not list the SHA2 extension algoritms, so
+         * it should not be used */
+        type = ssh_key_type_to_hash(session, SSH_KEYTYPE_RSA);
+        assert_int_equal(type, SSH_DIGEST_SHA1);
+    }
 
     /* now, lets allow the signature from SHA2 extension and expect
      * it to be used */
@@ -178,8 +231,19 @@ static void torture_options_set_pubkey_accepted_types(void **state) {
                          SSH_OPTIONS_PUBLICKEY_ACCEPTED_TYPES,
                          "rsa-sha2-256,ssh-rsa");
     assert_true(rc == 0);
-    assert_string_equal(session->opts.pubkey_accepted_types,
-                        "rsa-sha2-256,ssh-rsa");
+    assert_non_null(session->opts.pubkey_accepted_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(session->opts.pubkey_accepted_types,
+                "rsa-sha2-256");
+    } else {
+        assert_string_equal(session->opts.pubkey_accepted_types,
+                "rsa-sha2-256,ssh-rsa");
+    }
+
+    /* Test that the option affects the algorithm selection for RSA keys */
+    /* simulate the SHA2 extension was negotiated */
+    session->extensions = SSH_EXT_SIG_RSA_SHA256;
+
     type = ssh_key_type_to_hash(session, SSH_KEYTYPE_RSA);
     assert_int_equal(type, SSH_DIGEST_SHA256);
 }
@@ -191,6 +255,7 @@ static void torture_options_set_macs(void **state) {
     /* Test known MACs */
     rc = ssh_options_set(session, SSH_OPTIONS_HMAC_S_C, "hmac-sha1");
     assert_true(rc == 0);
+    assert_non_null(session->opts.wanted_methods[SSH_MAC_S_C]);
     assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C], "hmac-sha1");
 
     /* Test multiple known MACs */
@@ -198,12 +263,14 @@ static void torture_options_set_macs(void **state) {
                          SSH_OPTIONS_HMAC_S_C,
                          "hmac-sha1-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha1,hmac-sha2-256");
     assert_true(rc == 0);
+    assert_non_null(session->opts.wanted_methods[SSH_MAC_S_C]);
     assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C],
                         "hmac-sha1-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha1,hmac-sha2-256");
 
     /* Test unknown MACs */
     rc = ssh_options_set(session, SSH_OPTIONS_HMAC_S_C, "unknown-crap@example.com,hmac-sha1-etm@openssh.com,unknown@example.com");
     assert_true(rc == 0);
+    assert_non_null(session->opts.wanted_methods[SSH_MAC_S_C]);
     assert_string_equal(session->opts.wanted_methods[SSH_MAC_S_C], "hmac-sha1-etm@openssh.com");
 
     /* Test all unknown MACs */
@@ -632,6 +699,40 @@ static void torture_options_config_match(void **state)
 
     session->opts.port = 0;
 
+    /* The Match exec keyword can accept more arguments */
+    torture_reset_config(session);
+    config = fopen("test_config", "w");
+    assert_non_null(config);
+    fputs("Match exec /bin/true 1 \n"
+          "\tPort 33\n"
+          "Match all\n"
+          "\tPort 34\n",
+          config);
+    fclose(config);
+
+    rv = ssh_options_parse_config(session, "test_config");
+    assert_ssh_return_code(session, rv);
+    assert_int_equal(session->opts.port, 34);
+
+    session->opts.port = 0;
+
+    /* Commands containing whitespace characters must be quoted. */
+    torture_reset_config(session);
+    config = fopen("test_config", "w");
+    assert_non_null(config);
+    fputs("Match exec \"/bin/true 1\"\n"
+          "\tPort 33\n"
+          "Match all\n"
+          "\tPort 34\n",
+          config);
+    fclose(config);
+
+    rv = ssh_options_parse_config(session, "test_config");
+    assert_ssh_return_code(session, rv);
+    assert_int_equal(session->opts.port, 34);
+
+    session->opts.port = 0;
+
     unlink("test_config");
 }
 
@@ -662,12 +763,12 @@ static void torture_options_copy(void **state)
           "BindAddress 127.0.0.2\n"
           "GlobalKnownHostsFile /etc/ssh/known_hosts2\n"
           "UserKnownHostsFile ~/.ssh/known_hosts2\n"
-          "KexAlgorithms curve25519-sha256\n"
+          "KexAlgorithms curve25519-sha256,ecdh-sha2-nistp521\n"
           "Ciphers aes256-ctr\n"
           "MACs hmac-sha2-256\n"
-          "HostKeyAlgorithms ssh-ed25519\n"
+          "HostKeyAlgorithms ssh-ed25519,ecdsa-sha2-nistp521\n"
           "Compression yes\n"
-          "PubkeyAcceptedTypes ssh-ed25519\n"
+          "PubkeyAcceptedTypes ssh-ed25519,ecdsa-sha2-nistp521\n"
           "ProxyCommand nc 127.0.0.10 22\n"
           /* ops.custombanner */
           "ConnectTimeout 42\n"
@@ -1153,16 +1254,21 @@ static void torture_bind_options_set_ciphers(void **state)
                               "aes128-ctr,aes192-ctr,aes256-ctr");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S],
-                        "aes128-ctr,aes192-ctr,aes256-ctr");
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S],
+                            "aes128-ctr,aes256-ctr");
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S],
+                            "aes128-ctr,aes192-ctr,aes256-ctr");
+    }
 
     /* Test one unknown cipher */
     rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_C_S,
-                         "aes128-ctr,unknown-crap@example.com,aes192-ctr,aes256-ctr");
+                         "aes128-ctr,unknown-crap@example.com,aes256-ctr");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_CRYPT_C_S]);
     assert_string_equal(bind->wanted_methods[SSH_CRYPT_C_S],
-                        "aes128-ctr,aes192-ctr,aes256-ctr");
+                        "aes128-ctr,aes256-ctr");
 
     /* Test all unknown ciphers */
     rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_C_S,
@@ -1174,16 +1280,21 @@ static void torture_bind_options_set_ciphers(void **state)
                               "aes128-ctr,aes192-ctr,aes256-ctr");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
-    assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C],
-                        "aes128-ctr,aes192-ctr,aes256-ctr");
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C],
+                            "aes128-ctr,aes256-ctr");
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C],
+                            "aes128-ctr,aes192-ctr,aes256-ctr");
+    }
 
     /* Test one unknown cipher */
     rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_S_C,
-                         "aes128-ctr,unknown-crap@example.com,aes192-ctr,aes256-ctr");
+                         "aes128-ctr,unknown-crap@example.com,aes256-ctr");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_CRYPT_S_C]);
     assert_string_equal(bind->wanted_methods[SSH_CRYPT_S_C],
-                        "aes128-ctr,aes192-ctr,aes256-ctr");
+                        "aes128-ctr,aes256-ctr");
 
     /* Test all unknown ciphers */
     rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_S_C,
@@ -1207,20 +1318,35 @@ static void torture_bind_options_set_key_exchange(void **state)
     /* Test known kexes */
     rc = ssh_bind_options_set(bind,
                               SSH_BIND_OPTIONS_KEY_EXCHANGE,
-                              "curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                              "curve25519-sha256,curve25519-sha256@libssh.org,"
+                              "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                              "diffie-hellman-group18-sha512,"
+                              "diffie-hellman-group14-sha1");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
-    assert_string_equal(bind->wanted_methods[SSH_KEX],
-                        "curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_KEX],
+                            "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                            "diffie-hellman-group18-sha512");
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_KEX],
+                            "curve25519-sha256,curve25519-sha256@libssh.org,"
+                            "ecdh-sha2-nistp256,diffie-hellman-group16-sha512,"
+                            "diffie-hellman-group18-sha512,"
+                            "diffie-hellman-group14-sha1");
+    }
 
     /* Test one unknown kex */
     rc = ssh_bind_options_set(bind,
                               SSH_BIND_OPTIONS_KEY_EXCHANGE,
-                              "curve25519-sha256,curve25519-sha256@libssh.org,unknown-crap@example.com,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                         "diffie-hellman-group16-sha512,"
+                         "unknown-crap@example.com,"
+                         "diffie-hellman-group18-sha512");
     assert_int_equal(rc, 0);
     assert_non_null(bind->wanted_methods[SSH_KEX]);
     assert_string_equal(bind->wanted_methods[SSH_KEX],
-                        "curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha1");
+                        "diffie-hellman-group16-sha512,"
+                        "diffie-hellman-group18-sha512");
 
     /* Test all unknown kexes */
     rc = ssh_bind_options_set(bind,
@@ -1356,6 +1482,125 @@ static void torture_bind_options_config_dir(void **state)
     assert_string_equal(bind->config_dir, replacement_dir);
 }
 
+static void torture_bind_options_set_pubkey_accepted_key_types(void **state)
+{
+    struct bind_st *test_state;
+    ssh_bind bind;
+    int rc;
+
+    assert_non_null(state);
+    test_state = *((struct bind_st **)state);
+    assert_non_null(test_state);
+    assert_non_null(test_state->bind);
+    bind = test_state->bind;
+
+    /* Test known Pubkey Types */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES,
+        "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->pubkey_accepted_key_types,
+                            "ecdsa-sha2-nistp384");
+    } else {
+        assert_string_equal(bind->pubkey_accepted_key_types,
+                            "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    }
+
+    SAFE_FREE(bind->pubkey_accepted_key_types);
+
+    /* Test with some unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES,
+        "ecdsa-sha2-nistp384,unknown-type,rsa-sha2-256");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    assert_string_equal(bind->pubkey_accepted_key_types,
+        "ecdsa-sha2-nistp384,rsa-sha2-256");
+
+    SAFE_FREE(bind->pubkey_accepted_key_types);
+
+    /* Test with only unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES,
+        "unknown-type");
+    assert_int_equal(rc, -1);
+    assert_null(bind->pubkey_accepted_key_types);
+
+    /* Test with something set and then try unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES,
+        "ecdsa-sha2-nistp384");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->pubkey_accepted_key_types);
+    assert_string_equal(bind->pubkey_accepted_key_types,
+        "ecdsa-sha2-nistp384");
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES,
+        "unknown-type");
+    assert_int_equal(rc, -1);
+
+    /* Check that nothing changed */
+    assert_non_null(bind->pubkey_accepted_key_types);
+    assert_string_equal(bind->pubkey_accepted_key_types,
+        "ecdsa-sha2-nistp384");
+}
+
+static void torture_bind_options_set_hostkey_algorithms(void **state)
+{
+    struct bind_st *test_state;
+    ssh_bind bind;
+    int rc;
+
+    assert_non_null(state);
+    test_state = *((struct bind_st **)state);
+    assert_non_null(test_state);
+    assert_non_null(test_state->bind);
+    bind = test_state->bind;
+
+    /* Test known Pubkey Types */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS,
+                              "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    if (ssh_fips_mode()) {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS],
+                "ecdsa-sha2-nistp384");
+    } else {
+        assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS],
+                "ssh-ed25519,ecdsa-sha2-nistp384,ssh-rsa");
+    }
+
+    SAFE_FREE(bind->wanted_methods[SSH_HOSTKEYS]);
+
+    /* Test with some unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS,
+        "ecdsa-sha2-nistp384,unknown-type");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS],
+        "ecdsa-sha2-nistp384");
+
+    SAFE_FREE(bind->wanted_methods[SSH_HOSTKEYS]);
+
+    /* Test with only unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS,
+        "unknown-type");
+    assert_int_equal(rc, -1);
+    assert_null(bind->wanted_methods[SSH_HOSTKEYS]);
+
+    /* Test with something set and then try unknown type */
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS,
+        "ecdsa-sha2-nistp384");
+    assert_int_equal(rc, 0);
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS],
+        "ecdsa-sha2-nistp384");
+    rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS,
+        "unknown-type");
+    assert_int_equal(rc, -1);
+
+    /* Check that nothing changed */
+    assert_non_null(bind->wanted_methods[SSH_HOSTKEYS]);
+    assert_string_equal(bind->wanted_methods[SSH_HOSTKEYS],
+        "ecdsa-sha2-nistp384");
+}
 
 #endif /* WITH_SERVER */
 
@@ -1385,7 +1630,7 @@ int torture_run_tests(void) {
         cmocka_unit_test_setup_teardown(torture_options_copy, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_options_config_host, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_options_config_match,
-                                        setup, teardown)
+                                        setup, teardown),
     };
 
 #ifdef WITH_SERVER
@@ -1426,6 +1671,10 @@ int torture_run_tests(void) {
                 sshbind_setup, sshbind_teardown),
         cmocka_unit_test_setup_teardown(torture_bind_options_config_dir,
                 sshbind_setup, sshbind_teardown),
+        cmocka_unit_test_setup_teardown(torture_bind_options_set_pubkey_accepted_key_types,
+                                        sshbind_setup, sshbind_teardown),
+        cmocka_unit_test_setup_teardown(torture_bind_options_set_hostkey_algorithms,
+                                        sshbind_setup, sshbind_teardown),
     };
 #endif /* WITH_SERVER */
 
