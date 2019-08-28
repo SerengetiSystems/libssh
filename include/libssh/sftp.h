@@ -983,6 +983,26 @@ LIBSSH_API void sftp_handle_remove(sftp_session sftp, void *handle);
 #define SSH_FX_WRITE_PROTECT 12
 /** No media in remote drive */
 #define SSH_FX_NO_MEDIA 13
+#define SSH_FX_NO_SPACE_ON_FILESYSTEM   14
+#define SSH_FX_QUOTA_EXCEEDED           15
+#define SSH_FX_UNKNOWN_PRINCIPLE        16 /* Initial mis-spelling */
+#define SSH_FX_UNKNOWN_PRINCIPAL        16
+#define SSH_FX_LOCK_CONFlICT            17 /* Initial mis-spelling */
+#define SSH_FX_LOCK_CONFLICT            17
+#define SSH_FX_DIR_NOT_EMPTY            18
+#define SSH_FX_NOT_A_DIRECTORY          19
+#define SSH_FX_INVALID_FILENAME         20
+#define SSH_FX_LINK_LOOP                21
+#define SSH_FX_CANNOT_DELETE 22
+#define SSH_FX_INVALID_PARAMETER 23
+#define SSH_FX_IS_DIRECTORY 24
+#define SSH_FX_RANGE_LOCK_CONFLICT 25
+#define SSH_FX_RANGE_LOCK_REFUSED 26
+#define SSH_FX_DELETE_PENDING 27
+#define SSH_FX_FILE_CORRUPT 28
+#define SSH_FX_OWNER_INVALID 29
+#define SSH_FX_GROUP_INVALID 30
+#define SSH_FX_LOCK_OUT_OF_RANGE 31
 
 /** @} */
 
