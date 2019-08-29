@@ -68,9 +68,9 @@ enum ssh_channel_state_e {
 * size of 35000 bytes or less.
 */
 #define CHANNEL_MAX_PACKET 32768
-#define CHANNEL_INITIAL_WINDOW 64000
+#define CHANNEL_INITIAL_WINDOW CHANNEL_MAX_PACKET * 4
 
-#define WINDOWBASE 1280000
+#define WINDOWBASE CHANNEL_INITIAL_WINDOW
 
 struct ssh_channel_struct {
     ssh_session session; /* SSH_SESSION pointer */
