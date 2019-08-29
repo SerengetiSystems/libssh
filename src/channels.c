@@ -50,14 +50,6 @@
 
 #define WINDOWLIMIT (WINDOWBASE/2)
 
-/*
- * All implementations MUST be able to process packets with an
- * uncompressed payload length of 32768 bytes or less and a total packet
- * size of 35000 bytes or less.
- */
-#define CHANNEL_MAX_PACKET 32768
-#define CHANNEL_INITIAL_WINDOW 64000
-
 /**
  * @defgroup libssh_channel The SSH channel functions
  * @ingroup libssh
@@ -420,8 +412,15 @@ int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
       ssh_buffer_reinit(session->out_buffer);
       return SSH_ERROR;
     }
-    else
-      return SSH_OK;
+	else
+	{
+		SSH_LOG(SSH_LOG_PROTOCOL,
+			"refunding window (channel %d:%d) to %d bytes",
+			channel->local_channel,
+			channel->remote_channel,
+			bytes);
+		return SSH_OK;
+	}
   }
   else
   {
