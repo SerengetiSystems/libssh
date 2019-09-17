@@ -80,6 +80,10 @@ target_link_libraries(keygen ${LIBSSH_SHARED_LIBRARY})
 
 add_executable(libsshpp libsshpp.cpp)
 target_link_libraries(libsshpp ${LIBSSH_SHARED_LIBRARY})
+# libsshpp.hpp uses `noexcept` which is a keyword since C++11, so explicitly
+# required C++11 here for this build
+set_property(TARGET libsshpp PROPERTY CXX_STANDARD 11)
+set_property(TARGET libsshpp PROPERTY CXX_STANDARD_REQUIRED ON)
 
 add_executable(libsshpp_noexcept libsshpp_noexcept.cpp)
 target_link_libraries(libsshpp_noexcept ${LIBSSH_SHARED_LIBRARY})
