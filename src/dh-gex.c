@@ -59,13 +59,17 @@ static struct ssh_packet_callbacks_struct ssh_dhgex_client_callbacks = {
     .user = NULL
 };
 
-int min(int a, int b) {
+#ifndef min
+static int min(int a, int b) {
     return a > b ? b : a;
 }
+#endif
 
-int max(int a, int b) {
+#ifndef max
+static int max(int a, int b) {
     return a > b ? a : b;
 }
+#endif
 
 /** @internal
  * @brief initiates a diffie-hellman-group-exchange kex
