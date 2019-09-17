@@ -55,7 +55,7 @@
 #include <openssl/des.h>
 #endif
 
-#ifdef HAVE_OPENSSL_MODES_H
+#if defined(HAVE_OPENSSL_MODES_H) || defined(HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT)
 #include <openssl/modes.h>
 #endif
 
@@ -72,10 +72,6 @@
 
 #ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
 #include <openssl/kdf.h>
-#endif
-
-#ifdef HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT
-#include <openssl/modes.h>
 #endif
 
 #include "libssh/crypto.h"
