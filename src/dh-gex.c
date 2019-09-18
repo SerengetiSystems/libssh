@@ -24,9 +24,10 @@
 #include "config.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <stdbool.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "libssh/priv.h"
 #include "libssh/dh-gex.h"
@@ -37,7 +38,7 @@
 #include "libssh/buffer.h"
 #include "libssh/session.h"
 
-/* Minimum, recommanded and maximum size of DH group */
+/* Minimum, recommended and maximum size of DH group */
 #define DH_PMIN 2048
 #define DH_PREQ 2048
 #define DH_PMAX 8192
@@ -57,6 +58,18 @@ static struct ssh_packet_callbacks_struct ssh_dhgex_client_callbacks = {
     .callbacks = dhgex_client_callbacks,
     .user = NULL
 };
+
+#ifndef min
+static int min(int a, int b) {
+    return a > b ? b : a;
+}
+#endif
+
+#ifndef max
+static int max(int a, int b) {
+    return a > b ? a : b;
+}
+#endif
 
 /** @internal
  * @brief initiates a diffie-hellman-group-exchange kex

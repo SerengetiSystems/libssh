@@ -460,7 +460,7 @@ void ssh_print_hexa(const char *descr, const unsigned char *what, size_t len) {
     if (hexa == NULL) {
       return;
     }
-	_ssh_log(SSH_LOG_CRYPTO, descr, hexa);
+	_ssh_log(SSH_LOG_CRYPTO, descr, "%s", hexa);
 
     free(hexa);
 }
