@@ -107,7 +107,7 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     int blen;
     bignum pmin1 = NULL, one = NULL;
     bignum_CTX ctx = bignum_ctx_new();
-    bignum modulus, generator;
+    bignum modulus = NULL, generator = NULL;
     const_bignum pubkey;
     (void) type;
     (void) user;
@@ -179,14 +179,18 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     bignum_ctx_free(ctx);
     ctx = NULL;
 
-    /* all checks passed, set parameters */
+    /* all checks passed, set parameters (the BNs are copied in openssl backend) */
     rc = ssh_dh_set_parameters(session->next_crypto->dh_ctx,
                                modulus, generator);
     if (rc != SSH_OK) {
-        bignum_safe_free(modulus);
-        bignum_safe_free(generator);
         goto error;
     }
+#ifdef HAVE_LIBCRYPTO
+    bignum_safe_free(modulus);
+    bignum_safe_free(generator);
+#endif
+    modulus = NULL;
+    generator = NULL;
 
     /* compute and send DH public parameter */
     rc = ssh_dh_keypair_gen_keys(session->next_crypto->dh_ctx,
@@ -221,6 +225,8 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     return SSH_PACKET_USED;
 
 error:
+    bignum_safe_free(modulus);
+    bignum_safe_free(generator);
     bignum_safe_free(one);
     bignum_safe_free(pmin1);
     if(!bignum_ctx_invalid(ctx)) {
@@ -259,7 +265,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     }
 
     rc = ssh_dh_import_next_pubkey_blob(session, pubkey_blob);
-    ssh_string_free(pubkey_blob);
+    SSH_STRING_FREE(pubkey_blob);
     if (rc != 0) {
         goto error;
     }
@@ -718,8 +724,8 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
                          generator);
 
 #ifdef HAVE_LIBCRYPTO
-        bignum_safe_free(generator);
-        bignum_safe_free(modulus);
+    bignum_safe_free(generator);
+    bignum_safe_free(modulus);
 #endif
 
     if (rc != SSH_OK) {

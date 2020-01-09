@@ -196,6 +196,7 @@ torture_read_pidfile(const char *pidfile)
 {
     char buf[8] = {0};
     long int tmp;
+    pid_t ret;
     ssize_t rc;
     int fd;
 
@@ -213,11 +214,16 @@ torture_read_pidfile(const char *pidfile)
     buf[sizeof(buf) - 1] = '\0';
 
     tmp = strtol(buf, NULL, 10);
-    if (tmp == 0 || tmp > 0xFFFF || errno == ERANGE) {
+    if (tmp == 0 || errno == ERANGE) {
+        return -1;
+    }
+    ret = (pid_t)tmp;
+    /* Check if we are out of pid_t range on this system */
+    if ((long)ret != tmp) {
         return -1;
     }
 
-    return (pid_t)(tmp & 0xFFFF);
+    return ret;
 }
 
 int torture_terminate_process(const char *pidfile)
@@ -262,6 +268,8 @@ ssh_session torture_ssh_session(struct torture_state *s,
     int method;
     int rc;
 
+    bool process_config = false;
+
     if (host == NULL) {
         return NULL;
     }
@@ -276,6 +284,10 @@ ssh_session torture_ssh_session(struct torture_state *s,
         ssh_set_pcap_file(session, s->plain_pcap);
     }
 #endif /* WITH_PCAP */
+
+    if (ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity) < 0) {
+        goto failed;
+    }
 
     if (ssh_options_set(session, SSH_OPTIONS_HOST, host) < 0) {
         goto failed;
@@ -293,7 +305,8 @@ ssh_session torture_ssh_session(struct torture_state *s,
         }
     }
 
-    if (ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity) < 0) {
+    if (ssh_options_set(session, SSH_OPTIONS_PROCESS_CONFIG,
+                        &process_config) < 0) {
         goto failed;
     }
 
@@ -581,7 +594,7 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
     char rsa_hostkey[1024];
     char ecdsa_hostkey[1024];
     char trusted_ca_pubkey[1024];
-    char sshd_config[2048];
+    char sshd_config[4096];
     char sshd_path[1024];
     const char *additional_config = NULL;
     struct stat sb;

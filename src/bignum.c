@@ -29,9 +29,9 @@
 
 ssh_string ssh_make_bignum_string(bignum num) {
   ssh_string ptr = NULL;
-  int pad = 0;
-  unsigned int len = bignum_num_bytes(num);
-  unsigned int bits = bignum_num_bits(num);
+  size_t pad = 0;
+  size_t len = bignum_num_bytes(num);
+  size_t bits = bignum_num_bits(num);
 
   if (len == 0) {
       return NULL;
@@ -43,7 +43,7 @@ ssh_string ssh_make_bignum_string(bignum num) {
   }
 
 #ifdef DEBUG_CRYPTO
-  SSH_LOG(SSH_LOG_CRYPTO, "%d bits, %d bytes, %d padding", bits, len, pad);
+  SSH_LOG(SSH_LOG_CRYPTO, SIZET_SPECIFIER " bits, " SIZET_SPECIFIER " bytes, " SIZET_SPECIFIER " padding", bits, len, pad);
 #endif /* DEBUG_CRYPTO */
 
   ptr = ssh_string_new(len + pad);
@@ -67,7 +67,7 @@ bignum ssh_make_string_bn(ssh_string string)
     size_t len = ssh_string_len(string);
 
 #ifdef DEBUG_CRYPTO
-  SSH_LOG(SSH_LOG_CRYPTO, "Importing a %d bits, %d bytes object ...",
+  SSH_LOG(SSH_LOG_CRYPTO, "Importing a " SIZET_SPECIFIER " bits, " SIZET_SPECIFIER " bytes object ...",
       len * 8, len);
 #endif /* DEBUG_CRYPTO */
 

@@ -10,7 +10,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 include(DefineCMakeDefaults)
 include(DefineCompilerFlags)
 
-project(libssh VERSION 0.9.0 LANGUAGES C)
+project(libssh VERSION 0.9.3 LANGUAGES C)
 
 # global needed variable
 set(APPLICATION_NAME ${PROJECT_NAME})
@@ -22,7 +22,7 @@ set(APPLICATION_NAME ${PROJECT_NAME})
 #     Increment AGE. Set REVISION to 0
 #   If the source code was changed, but there were no interface changes:
 #     Increment REVISION.
-set(LIBRARY_VERSION "4.8.1")
+set(LIBRARY_VERSION "4.8.4")
 set(LIBRARY_SOVERSION "4")
 
 # where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
@@ -205,6 +205,11 @@ endif (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
 
 add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET})
 
+# Link compile database for clangd
+execute_process(COMMAND cmake -E create_symlink
+                "${CMAKE_BINARY_DIR}/compile_commands.json"
+                "${CMAKE_SOURCE_DIR}/compile_commands.json")
+
 message(STATUS "********************************************")
 message(STATUS "********** ${PROJECT_NAME} build options : **********")
 
@@ -217,7 +222,7 @@ message(STATUS "Server support : ${WITH_SERVER}")
 message(STATUS "GSSAPI support : ${WITH_GSSAPI}")
 message(STATUS "GEX support : ${WITH_GEX}")
 message(STATUS "Pcap debugging support : ${WITH_PCAP}")
-message(STATUS "With static library: ${WITH_STATIC_LIB}")
+message(STATUS "Build shared library: ${BUILD_SHARED_LIBS}")
 message(STATUS "Unit testing: ${UNIT_TESTING}")
 message(STATUS "Client code testing: ${CLIENT_TESTING}")
 message(STATUS "Blowfish cipher support: ${WITH_BLOWFISH_CIPHER}")

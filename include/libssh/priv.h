@@ -229,7 +229,17 @@ int gettimeofday(struct timeval *__p, void *__t);
 struct ssh_common_struct;
 struct ssh_kex_struct;
 
-int ssh_get_key_params(ssh_session session, ssh_key *privkey);
+enum ssh_digest_e {
+    SSH_DIGEST_AUTO=0,
+    SSH_DIGEST_SHA1=1,
+    SSH_DIGEST_SHA256,
+    SSH_DIGEST_SHA384,
+    SSH_DIGEST_SHA512,
+};
+
+int ssh_get_key_params(ssh_session session,
+                       ssh_key *privkey,
+                       enum ssh_digest_e *digest);
 
 /* LOGGING */
 void ssh_log_function(int verbosity,
@@ -288,7 +298,7 @@ socket_t ssh_connect_host_nonblocking(ssh_session session, const char *host,
 
 /* in base64.c */
 ssh_buffer base64_to_bin(const char *source);
-unsigned char *bin_to_base64(const unsigned char *source, int len);
+uint8_t *bin_to_base64(const uint8_t *source, size_t len);
 
 /* gzip.c */
 int compress_buffer(ssh_session session,ssh_buffer buf);
@@ -406,20 +416,20 @@ void explicit_bzero(void *s, size_t n);
 # endif /* HAVE_FALLTHROUGH_ATTRIBUTE */
 #endif /* FALL_THROUGH */
 
-#ifndef __unused__
+#ifndef __attr_unused__
 # ifdef HAVE_UNUSED_ATTRIBUTE
-#  define __unused__ __attribute__((unused))
+#  define __attr_unused__ __attribute__((unused))
 # else /* HAVE_UNUSED_ATTRIBUTE */
-#  define __unused__
+#  define __attr_unused__
 # endif /* HAVE_UNUSED_ATTRIBUTE */
-#endif /* __unused__ */
+#endif /* __attr_unused__ */
 
 #ifndef UNUSED_PARAM
-#define UNUSED_PARAM(param) param __unused__
+#define UNUSED_PARAM(param) param __attr_unused__
 #endif /* UNUSED_PARAM */
 
 #ifndef UNUSED_VAR
-#define UNUSED_VAR(var) __unused__ var
+#define UNUSED_VAR(var) __attr_unused__ var
 #endif /* UNUSED_VAR */
 
 void ssh_agent_state_free(void *data);
