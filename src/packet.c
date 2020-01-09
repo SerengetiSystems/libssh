@@ -1923,32 +1923,32 @@ ssh_packet_set_newkeys(ssh_session session,
                session->current_crypto->session_id,
                digest_len);
 
-		if (session->client)
-		{
-			SSH_LOG_COMMON(session, SSH_LOG_INFO, 
-				rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" : 
-				"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
-				session->next_crypto->kex_methods[SSH_KEX],
-				session->next_crypto->kex_methods[SSH_HOSTKEYS],
-				session->next_crypto->kex_methods[SSH_CRYPT_C_S],
-				session->next_crypto->kex_methods[SSH_MAC_C_S],
-				session->next_crypto->kex_methods[SSH_CRYPT_S_C],
-				session->next_crypto->kex_methods[SSH_MAC_S_C]);
-		}
-		else
-		{
-			SSH_LOG_COMMON(session, SSH_LOG_INFO, 
-				rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" :
-				"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
-				session->next_crypto->kex_methods[SSH_KEX],
-				session->next_crypto->kex_methods[SSH_HOSTKEYS],
-				session->next_crypto->kex_methods[SSH_CRYPT_S_C],
-				session->next_crypto->kex_methods[SSH_MAC_S_C], 
-				session->next_crypto->kex_methods[SSH_CRYPT_C_S],
-				session->next_crypto->kex_methods[SSH_MAC_C_S]);
-		}
+  	if (session->client)
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+			rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" : 
+			"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+			session->current_crypto->kex_methods[SSH_KEX],
+			session->current_crypto->kex_methods[SSH_HOSTKEYS],
+			session->current_crypto->kex_methods[SSH_CRYPT_C_S],
+			session->current_crypto->kex_methods[SSH_MAC_C_S],
+			session->current_crypto->kex_methods[SSH_CRYPT_S_C],
+			session->current_crypto->kex_methods[SSH_MAC_S_C]);
+	}
+	else
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+			rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" :
+			"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+			session->current_crypto->kex_methods[SSH_KEX],
+			session->current_crypto->kex_methods[SSH_HOSTKEYS],
+			session->current_crypto->kex_methods[SSH_CRYPT_S_C],
+			session->current_crypto->kex_methods[SSH_MAC_S_C],
+			session->current_crypto->kex_methods[SSH_CRYPT_C_S],
+			session->current_crypto->kex_methods[SSH_MAC_C_S]);
+	}
 
-		return SSH_OK;
+	return SSH_OK;
     }
 
     /* Initialize common structures so the next context can be used in
