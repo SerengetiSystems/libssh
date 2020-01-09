@@ -130,6 +130,9 @@ struct ssh_socket_struct {
 	ssh_socket_callbacks callbacks;
 	ssh_socket_io_callbacks io_callbacks;
 	ssh_poll_handle poll_handle;
+#ifndef _WIN32
+        pid_t proxy_pid;
+#endif
 };
 
 struct ssh_session_struct {
