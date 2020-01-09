@@ -43,6 +43,7 @@
 #include <openssl/hmac.h>
 #include <openssl/opensslv.h>
 #include <openssl/rand.h>
+#include <openssl/engine.h>
 
 #include "libcrypto-compat.h"
 
@@ -1137,6 +1138,7 @@ void ssh_crypto_finalize(void)
         return;
     }
 
+    ENGINE_cleanup();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();

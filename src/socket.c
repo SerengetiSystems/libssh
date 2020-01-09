@@ -42,8 +42,10 @@
 #else /* _WIN32 */
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <signal.h>
 #endif /* _WIN32 */
 
 #include "libssh/priv.h"
@@ -137,7 +139,7 @@ ssh_socket ssh_socket_new(ssh_session session)
     s->out_buffer=ssh_buffer_new();
     if (s->out_buffer == NULL) {
         ssh_set_error_oom(session);
-        ssh_buffer_free(s->in_buffer);
+        SSH_BUFFER_FREE(s->in_buffer);
         SAFE_FREE(s);
         return NULL;
     }
@@ -167,6 +169,9 @@ void ssh_socket_reset(ssh_socket s)
     s->data_except = 0;
     s->poll_handle = NULL;
     s->state=SSH_SOCKET_NONE;
+#ifndef _WIN32
+    s->proxy_pid = 0;
+#endif
 }
 
 /**
@@ -398,8 +403,8 @@ void ssh_socket_free(ssh_socket s)
         return;
     }
     ssh_socket_close(s);
-    ssh_buffer_free(s->in_buffer);
-    ssh_buffer_free(s->out_buffer);
+    SSH_BUFFER_FREE(s->in_buffer);
+    SSH_BUFFER_FREE(s->out_buffer);
     SAFE_FREE(s);
 }
 
@@ -464,6 +469,28 @@ void ssh_socket_close(ssh_socket s){
     }
 
     s->state = SSH_SOCKET_CLOSED;
+
+#ifndef _WIN32
+    /* If the proxy command still runs try to kill it */
+    if (s->proxy_pid != 0) {
+        int status;
+        pid_t pid = s->proxy_pid;
+
+        s->proxy_pid = 0;
+        kill(pid, SIGTERM);
+        while (waitpid(pid, &status, 0) == -1) {
+            if (errno != EINTR) {
+                SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
+                return;
+            }
+        }
+        if (!WIFEXITED(status)) {
+            SSH_LOG(SSH_LOG_WARN, "Proxy command exitted abnormally");
+            return;
+        }
+        SSH_LOG(SSH_LOG_TRACE, "Proxy command returned %d", WEXITSTATUS(status));
+    }
+#endif
 }
 
 /**
@@ -821,9 +848,10 @@ int ssh_socket_set_blocking(socket_t fd)
  * @bug It only tries connecting to one of the available AI's
  * which is problematic for hosts having DNS fail-over.
  */
-
-int
-ssh_socket_connect(ssh_socket s, const char *host, int port, const char *bind_addr)
+int ssh_socket_connect(ssh_socket s,
+                       const char *host,
+                       uint16_t port,
+                       const char *bind_addr)
 {
     socket_t fd;
     
@@ -853,13 +881,25 @@ ssh_socket_connect(ssh_socket s, const char *host, int port, const char *bind_ad
 void
 ssh_execute_command(const char *command, socket_t in, socket_t out)
 {
-    const char *args[] = {"/bin/sh", "-c", command, NULL};
+    const char *shell = NULL;
+    const char *args[] = {NULL/*shell*/, "-c", command, NULL};
+    int devnull;
+
     /* Prepare /dev/null socket for the stderr redirection */
-    int devnull = open("/dev/null", O_WRONLY);
+    devnull = open("/dev/null", O_WRONLY);
     if (devnull == -1) {
-        SSH_LOG(SSH_LOG_WARNING, "Failed to open stderr");
+        SSH_LOG(SSH_LOG_WARNING, "Failed to open /dev/null");
         exit(1);
     }
+
+    /* By default, use the current users shell */
+    shell = getenv("SHELL");
+    if (shell == NULL || shell[0] == '\0') {
+        /* Fall back to bash. There are issues with dash or
+         * whatever people tend to link to /bin/sh */
+        shell = "/bin/bash";
+    }
+    args[0] = shell;
 
     /* redirect in and out to stdin, stdout */
     dup2(in, 0);
@@ -900,9 +940,11 @@ ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
 
     SSH_LOG(SSH_LOG_PROTOCOL, "Executing proxycommand '%s'", command);
     pid = fork();
-    if(pid == 0) {
+    if (pid == 0) {
         ssh_execute_command(command, pair[0], pair[0]);
+        /* Does not return */
     }
+    s->proxy_pid = pid;
     close(pair[0]);
     SSH_LOG(SSH_LOG_PROTOCOL, "ProxyCommand connection pipe: [%d,%d]",pair[0],pair[1]);
     ssh_socket_set_fd(s, pair[1]);

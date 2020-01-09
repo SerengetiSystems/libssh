@@ -43,6 +43,12 @@ int bcrypt_pbkdf(const char *pass,
 /* Magic defined in OpenSSH/PROTOCOL.key */
 #define OPENSSH_AUTH_MAGIC      "openssh-key-v1"
 
+/* Determine type of ssh key. */
+enum ssh_key_e {
+  SSH_KEY_PUBLIC = 0,
+  SSH_KEY_PRIVATE
+};
+
 int pki_key_ecdsa_nid_from_name(const char *name);
 const char *pki_key_ecdsa_nid_to_name(int nid);
 const char *ssh_key_signature_to_char(enum ssh_keytypes_e type,
@@ -124,11 +130,6 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
                                       const ssh_string sig_blob,
                                       enum ssh_keytypes_e type,
                                       enum ssh_digest_e hash_type);
-int pki_signature_verify(ssh_session session,
-                         const ssh_signature sig,
-                         const ssh_key key,
-                         const unsigned char *input,
-                         size_t input_len);
 
 /* SSH Signing Functions */
 ssh_signature pki_do_sign(const ssh_key privkey,
@@ -148,8 +149,8 @@ int pki_ed25519_key_cmp(const ssh_key k1,
                 enum ssh_keycmp_e what);
 int pki_ed25519_key_dup(ssh_key new, const ssh_key key);
 int pki_ed25519_public_key_to_blob(ssh_buffer buffer, ssh_key key);
-ssh_string pki_ed25519_sig_to_blob(ssh_signature sig);
-int pki_ed25519_sig_from_blob(ssh_signature sig, ssh_string sig_blob);
+ssh_string pki_ed25519_signature_to_blob(ssh_signature sig);
+int pki_signature_from_ed25519_blob(ssh_signature sig, ssh_string sig_blob);
 int pki_privkey_build_ed25519(ssh_key key,
                               ssh_string pubkey,
                               ssh_string privkey);
@@ -160,5 +161,8 @@ ssh_key ssh_pki_openssh_privkey_import(const char *text_key,
         const char *passphrase, ssh_auth_callback auth_fn, void *auth_data);
 ssh_string ssh_pki_openssh_privkey_export(const ssh_key privkey,
         const char *passphrase, ssh_auth_callback auth_fn, void *auth_data);
+
+/* URI Function */
+int pki_uri_import(const char *uri_name, ssh_key *key, enum ssh_key_e key_type);
 
 #endif /* PKI_PRIV_H_ */

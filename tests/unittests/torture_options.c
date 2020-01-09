@@ -6,6 +6,7 @@
 #define _POSIX_PTHREAD_SEMANTICS
 # include <pwd.h>
 #endif
+#include <sys/stat.h>
 
 #include "torture.h"
 #include "torture_key.h"
@@ -571,6 +572,7 @@ static void torture_options_config_host(void **state) {
 static void torture_options_config_match(void **state)
 {
     ssh_session session = *state;
+    char *localuser = NULL;
     FILE *config = NULL;
     int rv;
 
@@ -665,11 +667,16 @@ static void torture_options_config_match(void **state)
 
     session->opts.port = 0;
 
-    /* The Match localuser keyword is ignored */
+    /* The Match localuser keyword */
     torture_reset_config(session);
     config = fopen("test_config", "w");
     assert_non_null(config);
-    fputs("Match originalhost origin\n"
+    fputs("Match localuser ", config);
+    localuser = ssh_get_local_username();
+    assert_non_null(localuser);
+    fputs(localuser, config);
+    free(localuser);
+    fputs("\n"
           "\tPort 33\n"
           "Match all\n"
           "\tPort 34\n",
@@ -678,15 +685,15 @@ static void torture_options_config_match(void **state)
 
     rv = ssh_options_parse_config(session, "test_config");
     assert_ssh_return_code(session, rv);
-    assert_int_equal(session->opts.port, 34);
+    assert_int_equal(session->opts.port, 33);
 
     session->opts.port = 0;
 
-    /* The Match exec keyword is ignored */
+    /* The Match exec keyword */
     torture_reset_config(session);
     config = fopen("test_config", "w");
     assert_non_null(config);
-    fputs("Match exec /bin/true\n"
+    fputs("Match exec true\n"
           "\tPort 33\n"
           "Match all\n"
           "\tPort 34\n",
@@ -695,24 +702,12 @@ static void torture_options_config_match(void **state)
 
     rv = ssh_options_parse_config(session, "test_config");
     assert_ssh_return_code(session, rv);
+#ifdef _WIN32
+    /* The match exec is not supported on windows at this moment */
     assert_int_equal(session->opts.port, 34);
-
-    session->opts.port = 0;
-
-    /* The Match exec keyword can accept more arguments */
-    torture_reset_config(session);
-    config = fopen("test_config", "w");
-    assert_non_null(config);
-    fputs("Match exec /bin/true 1 \n"
-          "\tPort 33\n"
-          "Match all\n"
-          "\tPort 34\n",
-          config);
-    fclose(config);
-
-    rv = ssh_options_parse_config(session, "test_config");
-    assert_ssh_return_code(session, rv);
-    assert_int_equal(session->opts.port, 34);
+#else
+    assert_int_equal(session->opts.port, 33);
+#endif
 
     session->opts.port = 0;
 
@@ -720,7 +715,42 @@ static void torture_options_config_match(void **state)
     torture_reset_config(session);
     config = fopen("test_config", "w");
     assert_non_null(config);
-    fputs("Match exec \"/bin/true 1\"\n"
+    fputs("Match exec \"true 1\"\n"
+          "\tPort 33\n"
+          "Match all\n"
+          "\tPort 34\n",
+          config);
+    fclose(config);
+
+    rv = ssh_options_parse_config(session, "test_config");
+    assert_ssh_return_code(session, rv);
+#ifdef _WIN32
+    /* The match exec is not supported on windows at this moment */
+    assert_int_equal(session->opts.port, 34);
+#else
+    assert_int_equal(session->opts.port, 33);
+#endif
+
+    session->opts.port = 0;
+
+    unlink("test_config");
+}
+
+static void torture_options_config_match_multi(void **state)
+{
+    ssh_session session = *state;
+    FILE *config = NULL;
+    struct stat sb;
+    int rv;
+
+    /* Required for options_parse_config() */
+    ssh_options_set(session, SSH_OPTIONS_HOST, "testhost1");
+
+    /* Exec is not executed when it can not be matched */
+    torture_reset_config(session);
+    config = fopen("test_config", "w");
+    assert_non_null(config);
+    fputs("Match host wronghost exec \"touch test_config_wrong\"\n"
           "\tPort 33\n"
           "Match all\n"
           "\tPort 34\n",
@@ -730,8 +760,44 @@ static void torture_options_config_match(void **state)
     rv = ssh_options_parse_config(session, "test_config");
     assert_ssh_return_code(session, rv);
     assert_int_equal(session->opts.port, 34);
+    assert_int_equal(stat("test_config_wrong", &sb), -1);
 
     session->opts.port = 0;
+
+    /* After matching exec, other conditions can be used */
+    torture_reset_config(session);
+    config = fopen("test_config", "w");
+    assert_non_null(config);
+    fputs("Match exec true host testhost1\n"
+          "\tPort 33\n"
+          "Match all\n"
+          "\tPort 34\n",
+          config);
+    fclose(config);
+
+    rv = ssh_options_parse_config(session, "test_config");
+    assert_ssh_return_code(session, rv);
+#ifdef _WIN32
+    /* The match exec is not supported on windows at this moment */
+    assert_int_equal(session->opts.port, 34);
+#else
+    assert_int_equal(session->opts.port, 33);
+#endif
+
+    /* After matching exec, other conditions can be used */
+    torture_reset_config(session);
+    config = fopen("test_config", "w");
+    assert_non_null(config);
+    fputs("Match exec true host otherhost\n"
+          "\tPort 33\n"
+          "Match all\n"
+          "\tPort 34\n",
+          config);
+    fclose(config);
+
+    rv = ssh_options_parse_config(session, "test_config");
+    assert_ssh_return_code(session, rv);
+    assert_int_equal(session->opts.port, 34);
 
     unlink("test_config");
 }
@@ -810,7 +876,7 @@ static void torture_options_copy(void **state)
     assert_string_equal(session->opts.knownhosts, new->opts.knownhosts);
     assert_string_equal(session->opts.global_knownhosts,
                         new->opts.global_knownhosts);
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < SSH_KEX_METHODS; i++) {
         if (session->opts.wanted_methods[i] == NULL) {
             assert_null(new->opts.wanted_methods[i]);
         } else {
@@ -1630,6 +1696,8 @@ int torture_run_tests(void) {
         cmocka_unit_test_setup_teardown(torture_options_copy, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_options_config_host, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_options_config_match,
+                                        setup, teardown),
+        cmocka_unit_test_setup_teardown(torture_options_config_match_multi,
                                         setup, teardown),
     };
 

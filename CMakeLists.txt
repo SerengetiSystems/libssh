@@ -83,6 +83,13 @@ if (WITH_GSSAPI)
     find_package(GSSAPI)
 endif (WITH_GSSAPI)
 
+if (WITH_PKCS11_URI)
+    find_package(softhsm)
+    if (NOT SOFTHSM_FOUND)
+        message(SEND_ERROR "Could not find softhsm module!")
+     endif (NOT SOFTHSM_FOUND)
+endif (WITH_PKCS11_URI)
+
 if (WITH_NACL)
     find_package(NaCl)
     if (NOT NACL_FOUND)
@@ -205,6 +212,11 @@ endif (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
 
 add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET})
 
+# Link compile database for clangd
+execute_process(COMMAND cmake -E create_symlink
+                "${CMAKE_BINARY_DIR}/compile_commands.json"
+                "${CMAKE_SOURCE_DIR}/compile_commands.json")
+
 message(STATUS "********************************************")
 message(STATUS "********** ${PROJECT_NAME} build options : **********")
 
@@ -217,10 +229,11 @@ message(STATUS "Server support : ${WITH_SERVER}")
 message(STATUS "GSSAPI support : ${WITH_GSSAPI}")
 message(STATUS "GEX support : ${WITH_GEX}")
 message(STATUS "Pcap debugging support : ${WITH_PCAP}")
-message(STATUS "With static library: ${WITH_STATIC_LIB}")
+message(STATUS "Build shared library: ${BUILD_SHARED_LIBS}")
 message(STATUS "Unit testing: ${UNIT_TESTING}")
 message(STATUS "Client code testing: ${CLIENT_TESTING}")
 message(STATUS "Blowfish cipher support: ${WITH_BLOWFISH_CIPHER}")
+message(STATUS "PKCS #11 URI support: ${WITH_PKCS11_URI}")
 set(_SERVER_TESTING OFF)
 if (WITH_SERVER)
     set(_SERVER_TESTING ${SERVER_TESTING})

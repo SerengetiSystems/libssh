@@ -32,6 +32,14 @@
 #endif
 #include <stdbool.h>
 #include <limits.h>
+#ifndef _WIN32
+# include <sys/types.h>
+# include <sys/stat.h>
+# include <fcntl.h>
+# include <errno.h>
+# include <signal.h>
+# include <sys/wait.h>
+#endif
 
 #include "libssh/config_parser.h"
 #include "libssh/config.h"
@@ -274,10 +282,8 @@ static int
 ssh_config_match(char *value, const char *pattern, bool negate)
 {
     int ok, result = 0;
-    char *lowervalue;
 
-    lowervalue = (value) ? ssh_lowercase(value) : NULL;
-    ok = match_pattern_list(lowervalue, pattern, strlen(pattern), 0);
+    ok = match_pattern_list(value, pattern, strlen(pattern), 0);
     if (ok <= 0 && negate == true) {
         result = 1;
     } else if (ok > 0 && negate == false) {
@@ -286,9 +292,127 @@ ssh_config_match(char *value, const char *pattern, bool negate)
     SSH_LOG(SSH_LOG_TRACE, "%s '%s' against pattern '%s'%s (ok=%d)",
             result == 1 ? "Matched" : "Not matched", value, pattern,
             negate == true ? " (negated)" : "", ok);
-    SAFE_FREE(lowervalue);
     return result;
 }
+
+#ifdef _WIN32
+static int
+ssh_match_exec(ssh_session session, const char *command, bool negate)
+{
+    (void) session;
+    (void) command;
+    (void) negate;
+
+    SSH_LOG(SSH_LOG_TRACE, "Unsupported 'exec' command on Windows '%s'",
+            command);
+    return 0;
+}
+#else /* _WIN32 */
+
+static int
+ssh_exec_shell(char *cmd)
+{
+    char *shell = NULL;
+    pid_t pid;
+    int status, devnull, rc;
+
+    shell = getenv("SHELL");
+    if (shell == NULL || shell[0] == '\0') {
+        shell = (char *)"/bin/sh";
+    }
+
+    rc = access(shell, X_OK);
+    if (rc != 0) {
+        SSH_LOG(SSH_LOG_WARN, "The shell '%s' is not executable", shell);
+        return -1;
+    }
+
+    /* Need this to redirect subprocess stdin/out */
+    devnull = open("/dev/null", O_RDWR);
+    if (devnull == -1) {
+        SSH_LOG(SSH_LOG_WARN, "Failed to open(/dev/null): %s", strerror(errno));
+        return -1;
+    }
+
+    SSH_LOG(SSH_LOG_DEBUG, "Running command '%s'", cmd);
+    pid = fork();
+    if (pid == 0) { /* Child */
+        char *argv[4];
+
+        /* Redirect child stdin and stdout. Leave stderr */
+        rc = dup2(devnull, STDIN_FILENO);
+        if (rc == -1) {
+            SSH_LOG(SSH_LOG_WARN, "dup2: %s", strerror(errno));
+            exit(1);
+        }
+        rc = dup2(devnull, STDOUT_FILENO);
+        if (rc == -1) {
+            SSH_LOG(SSH_LOG_WARN, "dup2: %s", strerror(errno));
+	    exit(1);
+        }
+        if (devnull > STDERR_FILENO) {
+            close(devnull);
+        }
+
+        argv[0] = shell;
+        argv[1] = (char *) "-c";
+        argv[2] = strdup(cmd);
+        argv[3] = NULL;
+
+        rc = execv(argv[0], argv);
+        if (rc == -1) {
+            SSH_LOG(SSH_LOG_WARN, "Failed to execute command '%s': %s", cmd,
+                    strerror(errno));
+            /* Die with signal to make this error apparent to parent. */
+            signal(SIGTERM, SIG_DFL);
+            kill(getpid(), SIGTERM);
+            _exit(1);
+        }
+    }
+
+    /* Parent */
+    close(devnull);
+    if (pid == -1) { /* Error */
+        SSH_LOG(SSH_LOG_WARN, "Failed to fork child: %s", strerror(errno));
+        return -1;
+
+    }
+
+    while (waitpid(pid, &status, 0) == -1) {
+        if (errno != EINTR) {
+            SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
+            return -1;
+        }
+    }
+    if (!WIFEXITED(status)) {
+        SSH_LOG(SSH_LOG_WARN, "Command %s exitted abnormally", cmd);
+        return -1;
+    }
+    SSH_LOG(SSH_LOG_TRACE, "Command '%s' returned %d", cmd, WEXITSTATUS(status));
+    return WEXITSTATUS(status);
+}
+
+static int
+ssh_match_exec(ssh_session session, const char *command, bool negate)
+{
+    int rv, result = 0;
+    char *cmd = NULL;
+
+    /* TODO There should be more supported expansions */
+    cmd = ssh_path_expand_escape(session, command);
+    rv = ssh_exec_shell(cmd);
+    if (rv > 0 && negate == true) {
+        result = 1;
+    } else if (rv == 0 && negate == false) {
+        result = 1;
+    }
+    SSH_LOG(SSH_LOG_TRACE, "%s 'exec' command '%s'%s (rv=%d)",
+            result == 1 ? "Matched" : "Not matched", cmd,
+            negate == true ? " (negated)" : "", rv);
+    free(cmd);
+    return result;
+}
+#endif  /* _WIN32 */
 
 /* @brief: Parse the ProxyJump configuration line and if parsing,
  * stores the result in the configuration option
@@ -397,6 +521,11 @@ ssh_config_parse_line(ssh_session session,
   long l;
   int64_t ll;
 
+  /* Ignore empty lines */
+  if (line == NULL || *line == '\0') {
+    return 0;
+  }
+
   x = s = strdup(line);
   if (s == NULL) {
     ssh_set_error_oom(session);
@@ -450,6 +579,7 @@ ssh_config_parse_line(ssh_session session,
         int result = 1;
         size_t args = 0;
         enum ssh_config_match_e opt;
+        char *localuser = NULL;
 
         *parsing = 0;
         do {
@@ -499,24 +629,47 @@ ssh_config_parse_line(ssh_session session,
                 break;
 
             case MATCH_EXEC:
-                /* Skip to the end of line as unsupported */
-                p = ssh_config_get_cmd(&s);
+                /* Skip one argument (including in quotes) */
+                p = ssh_config_get_token(&s);
                 if (p == NULL || p[0] == '\0') {
                     SSH_LOG(SSH_LOG_WARN, "line %d: Match keyword "
                             "'%s' requires argument", count, p2);
                     SAFE_FREE(x);
                     return -1;
                 }
+                if (result != 1) {
+                    SSH_LOG(SSH_LOG_INFO, "line %d: Skipped match exec "
+                            "'%s' as previous conditions already failed.",
+                            count, p2);
+                    continue;
+                }
+                result &= ssh_match_exec(session, p, negate);
                 args++;
-                SSH_LOG(SSH_LOG_WARN,
-                        "line %d: Unsupported Match keyword '%s', ignoring",
-                        count,
-                        p2);
-                result = 0;
+                break;
+
+            case MATCH_LOCALUSER:
+                /* Here we match only one argument */
+                p = ssh_config_get_str_tok(&s, NULL);
+                if (p == NULL || p[0] == '\0') {
+                    ssh_set_error(session, SSH_FATAL,
+                                  "line %d: ERROR - Match user keyword "
+                                  "requires argument", count);
+                    SAFE_FREE(x);
+                    return -1;
+                }
+                localuser = ssh_get_local_username();
+                if (localuser == NULL) {
+                    SSH_LOG(SSH_LOG_WARN, "line %d: Can not get local username "
+                            "for conditional matching.", count);
+                    SAFE_FREE(x);
+                    return -1;
+                }
+                result &= ssh_config_match(localuser, p, negate);
+                SAFE_FREE(localuser);
+                args++;
                 break;
 
             case MATCH_ORIGINALHOST:
-            case MATCH_LOCALUSER:
                 /* Skip one argument */
                 p = ssh_config_get_str_tok(&s, NULL);
                 if (p == NULL || p[0] == '\0') {
