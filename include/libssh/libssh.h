@@ -463,6 +463,8 @@ LIBSSH_API int ssh_channel_is_closed(ssh_channel channel);
 LIBSSH_API int ssh_channel_is_eof(ssh_channel channel);
 LIBSSH_API int ssh_channel_is_open(ssh_channel channel);
 LIBSSH_API ssh_channel ssh_channel_new(ssh_session session);
+LIBSSH_API void ssh_channel_set_manual_window_refund(ssh_channel session);
+LIBSSH_API int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes);
 LIBSSH_API int ssh_channel_open_auth_agent(ssh_channel channel);
 LIBSSH_API int ssh_channel_open_forward(ssh_channel channel, const char *remotehost,
     int remoteport, const char *sourcehost, int localport);

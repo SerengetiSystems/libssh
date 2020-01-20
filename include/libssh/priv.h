@@ -102,6 +102,10 @@ char *strndup(const char *s, size_t n);
 #  define PRIx32 "x"
 # endif /* PRIx32 */
 
+# ifndef PRIxPtr
+#  define PRIxPtr "zx"
+# endif /* PRIx32 */
+
 # ifdef _MSC_VER
 #  include <stdio.h>
 #  include <stdarg.h> /* va_copy define check */

@@ -541,8 +541,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         SSH_LOG(SSH_LOG_DEBUG, "%s", buffer);
         return;
     } else {
-        printed = snprintf(buffer + count, sizeof(buffer) - count,
-			"(%"PRIu32" bytes):", len);
+        printed = snprintf(buffer + count, sizeof(buffer) - count, "("SIZET_SPECIFIER" bytes):", len);
         if (printed < 0) {
             goto error;
         }
@@ -591,7 +590,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-				"  %08"PRIx32" ", i);
+				"  %08"PRIxPtr" ", i);
             if (printed < 0) {
                 goto error;
             }
@@ -1792,7 +1791,7 @@ int ssh_tmpname(char *template)
         }
     }
 
-    srand(time(NULL));
+    srand((unsigned)time(NULL));
 
     for (i = 0; i < 6; ++i) {
 #ifdef _WIN32
