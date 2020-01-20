@@ -432,15 +432,15 @@ int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
       ssh_buffer_reinit(session->out_buffer);
       return SSH_ERROR;
     }
-	else
-	{
-		SSH_LOG(SSH_LOG_PROTOCOL,
-			"refunding window (channel %d:%d) to %d bytes",
-			channel->local_channel,
-			channel->remote_channel,
-			bytes);
-		return SSH_OK;
-	}
+    else
+    {
+      SSH_LOG(SSH_LOG_PROTOCOL,
+        "refunding window (channel %d:%d) to %d bytes",
+        channel->local_channel,
+        channel->remote_channel,
+        bytes);
+      return SSH_OK;
+    }
   }
   else
   {
