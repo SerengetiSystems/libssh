@@ -1588,7 +1588,7 @@ sftp_attributes sftp_readdir(sftp_session sftp, sftp_dir dir)
                 }
 
                 ssh_set_error(sftp->session, SSH_FATAL,
-                        "Unknown error status: %d", status->status);
+                        "SFTP Server: [%u] %s", status->status, status->errormsg);
                 status_msg_free(status);
 
                 return NULL;
@@ -2461,6 +2461,8 @@ int sftp_mkdir(sftp_session sftp, const char *directory, mode_t mode)
                  * To be POSIX conform and to be able to map it to EEXIST a stat
                  * call is needed here.
                  */
+                ssh_set_error(sftp->session, SSH_REQUEST_DENIED,
+                  "SFTP server: %s", status->errormsg);
                 errno_attr = sftp_lstat(sftp, directory);
                 if (errno_attr != NULL) {
                     SAFE_FREE(errno_attr);
@@ -2471,14 +2473,14 @@ int sftp_mkdir(sftp_session sftp, const char *directory, mode_t mode)
                 status_msg_free(status);
                 return 0;
             default:
+                ssh_set_error(sftp->session, SSH_REQUEST_DENIED,
+                  "SFTP server: %s", status->errormsg);
                 break;
         }
         /*
          * The status should be SSH_FX_OK if the command was successful, if it
          * didn't, then there was an error
          */
-        ssh_set_error(sftp->session, SSH_REQUEST_DENIED,
-                "SFTP server: %s", status->errormsg);
         status_msg_free(status);
         return -1;
     } else {
