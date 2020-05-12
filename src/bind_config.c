@@ -201,12 +201,12 @@ static void local_parse_file(ssh_bind bind,
 
     f = fopen(filename, "r");
     if (f == NULL) {
-        SSH_LOG(SSH_LOG_RARE, "Cannot find file %s to load",
+        SSH_LOG_COMMON(bind, SSH_LOG_RARE, "Cannot find file %s to load",
                 filename);
         return;
     }
 
-    SSH_LOG(SSH_LOG_PACKET, "Reading additional configuration data from %s",
+    SSH_LOG_COMMON(bind, SSH_LOG_PACKET, "Reading additional configuration data from %s",
             filename);
 
     while (fgets(line, sizeof(line), f)) {
@@ -239,7 +239,7 @@ static void local_parse_glob(ssh_bind bind,
         globfree(&globbuf);
         return;
     } else if (rt != 0) {
-        SSH_LOG(SSH_LOG_RARE, "Glob error: %s",
+        SSH_LOG_COMMON(bind, SSH_LOG_RARE, "Glob error: %s",
                 fileglob);
         globfree(&globbuf);
         return;
@@ -343,7 +343,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HOSTKEY, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set Hostkey value '%s'",
                         count, p);
             }
@@ -354,7 +354,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_BINDADDR, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set ListenAddress value '%s'",
                         count, p);
             }
@@ -365,7 +365,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_BINDPORT_STR, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set Port value '%s'",
                         count, p);
             }
@@ -376,7 +376,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_C_S, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set C->S Ciphers value '%s'",
                         count, p);
                 break;
@@ -384,7 +384,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
 
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_CIPHERS_S_C, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set S->C Ciphers value '%s'",
                         count, p);
             }
@@ -395,7 +395,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HMAC_C_S, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set C->S MAC value '%s'",
                         count, p);
                 break;
@@ -403,7 +403,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
 
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_HMAC_S_C, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set S->C MAC value '%s'",
                         count, p);
             }
@@ -433,7 +433,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
                 rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_LOG_VERBOSITY,
                         &value);
                 if (rc != 0) {
-                    SSH_LOG(SSH_LOG_WARN,
+                    SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                             "line %d: Failed to set LogLevel value '%s'",
                             count, p);
                 }
@@ -445,7 +445,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
         if (p && (*parser_flags & PARSING)) {
             rc = ssh_bind_options_set(bind, SSH_BIND_OPTIONS_KEY_EXCHANGE, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set KexAlgorithms value '%s'",
                         count, p);
             }
@@ -482,7 +482,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
                 break;
             }
             args++;
-            SSH_LOG(SSH_LOG_TRACE, "line %d: Processing Match keyword '%s'",
+            SSH_LOG_COMMON(bind, SSH_LOG_TRACE, "line %d: Processing Match keyword '%s'",
                     count, p);
 
             /* If the option is prefixed with ! the result should be negated */
@@ -520,13 +520,13 @@ ssh_bind_config_parse_line(ssh_bind bind,
                 /* Skip one argument */
                 p = ssh_config_get_str_tok(&s, NULL);
                 if (p == NULL || p[0] == '\0') {
-                    SSH_LOG(SSH_LOG_WARN, "line %d: Match keyword "
+                    SSH_LOG_COMMON(bind, SSH_LOG_WARN, "line %d: Match keyword "
                             "'%s' requires argument\n", count, p2);
                     SAFE_FREE(x);
                     return -1;
                 }
                 args++;
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Unsupported Match keyword '%s', ignoring\n",
                         count,
                         p2);
@@ -556,7 +556,7 @@ ssh_bind_config_parse_line(ssh_bind bind,
             rc = ssh_bind_options_set(bind,
                                  SSH_BIND_OPTIONS_PUBKEY_ACCEPTED_KEY_TYPES, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set PubKeyAcceptedKeyTypes value '%s'",
                         count, p);
             }
@@ -568,26 +568,26 @@ ssh_bind_config_parse_line(ssh_bind bind,
             rc = ssh_bind_options_set(bind,
                                  SSH_BIND_OPTIONS_HOSTKEY_ALGORITHMS, p);
             if (rc != 0) {
-                SSH_LOG(SSH_LOG_WARN,
+                SSH_LOG_COMMON(bind, SSH_LOG_WARN,
                         "line %d: Failed to set HostkeyAlgorithms value '%s'",
                         count, p);
             }
         }
         break;
     case BIND_CFG_NOT_ALLOWED_IN_MATCH:
-        SSH_LOG(SSH_LOG_WARN, "Option not allowed in Match block: %s, line: %d",
+        SSH_LOG_COMMON(bind, SSH_LOG_WARN, "Option not allowed in Match block: %s, line: %d",
                 keyword, count);
         break;
     case BIND_CFG_UNKNOWN:
-        SSH_LOG(SSH_LOG_WARN, "Unknown option: %s, line: %d",
+        SSH_LOG_COMMON(bind, SSH_LOG_WARN, "Unknown option: %s, line: %d",
                 keyword, count);
         break;
     case BIND_CFG_UNSUPPORTED:
-        SSH_LOG(SSH_LOG_WARN, "Unsupported option: %s, line: %d",
+        SSH_LOG_COMMON(bind, SSH_LOG_WARN, "Unsupported option: %s, line: %d",
                 keyword, count);
         break;
     case BIND_CFG_NA:
-        SSH_LOG(SSH_LOG_WARN, "Option not applicable: %s, line: %d",
+        SSH_LOG_COMMON(bind, SSH_LOG_WARN, "Option not applicable: %s, line: %d",
                 keyword, count);
         break;
     default:
@@ -621,7 +621,7 @@ int ssh_bind_config_parse_file(ssh_bind bind, const char *filename)
         return 0;
     }
 
-    SSH_LOG(SSH_LOG_PACKET, "Reading configuration data from %s", filename);
+    SSH_LOG_COMMON(bind, SSH_LOG_PACKET, "Reading configuration data from %s", filename);
 
     parser_flags = PARSING;
     while (fgets(line, sizeof(line), f)) {

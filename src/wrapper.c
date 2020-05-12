@@ -261,7 +261,7 @@ static int crypt_set_algorithms2(ssh_session session)
                 wanted);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set output algorithm to %s", wanted);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set output algorithm to %s", wanted);
 
     session->next_crypto->out_cipher = cipher_new(i);
     if (session->next_crypto->out_cipher == NULL) {
@@ -299,7 +299,7 @@ static int crypt_set_algorithms2(ssh_session session)
                 wanted);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set HMAC output algorithm to %s", wanted);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set HMAC output algorithm to %s", wanted);
 
     session->next_crypto->out_hmac = ssh_hmactab[i].hmac_type;
     session->next_crypto->out_hmac_etm = ssh_hmactab[i].etm;
@@ -320,7 +320,7 @@ static int crypt_set_algorithms2(ssh_session session)
                 wanted);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set input algorithm to %s", wanted);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set input algorithm to %s", wanted);
 
     session->next_crypto->in_cipher = cipher_new(i);
     if (session->next_crypto->in_cipher == NULL) {
@@ -353,7 +353,7 @@ static int crypt_set_algorithms2(ssh_session session)
                 wanted);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set HMAC input algorithm to %s", wanted);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set HMAC input algorithm to %s", wanted);
 
     session->next_crypto->in_hmac = ssh_hmactab[i].hmac_type;
     session->next_crypto->in_hmac_etm = ssh_hmactab[i].etm;
@@ -416,7 +416,7 @@ int crypt_set_algorithms_server(ssh_session session){
                 "no crypto algorithm function found for %s",method);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET,"Set output algorithm %s",method);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Set output algorithm %s",method);
 
     session->next_crypto->out_cipher = cipher_new(i);
     if (session->next_crypto->out_cipher == NULL) {
@@ -451,7 +451,7 @@ int crypt_set_algorithms_server(ssh_session session){
           method);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set HMAC output algorithm to %s", method);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set HMAC output algorithm to %s", method);
 
     session->next_crypto->out_hmac = ssh_hmactab[i].hmac_type;
     session->next_crypto->out_hmac_etm = ssh_hmactab[i].etm;
@@ -471,7 +471,7 @@ int crypt_set_algorithms_server(ssh_session session){
                 "no crypto algorithm function found for %s",method);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET,"Set input algorithm %s",method);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Set input algorithm %s",method);
 
     session->next_crypto->in_cipher = cipher_new(i);
     if (session->next_crypto->in_cipher == NULL) {
@@ -504,7 +504,7 @@ int crypt_set_algorithms_server(ssh_session session){
           method);
         return SSH_ERROR;
     }
-    SSH_LOG(SSH_LOG_PACKET, "Set HMAC input algorithm to %s", method);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Set HMAC input algorithm to %s", method);
 
     session->next_crypto->in_hmac = ssh_hmactab[i].hmac_type;
     session->next_crypto->in_hmac_etm = ssh_hmactab[i].etm;
@@ -512,11 +512,11 @@ int crypt_set_algorithms_server(ssh_session session){
     /* compression */
     method = session->next_crypto->kex_methods[SSH_COMP_C_S];
     if(strcmp(method,"zlib") == 0){
-        SSH_LOG(SSH_LOG_PACKET,"enabling C->S compression");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET,"enabling C->S compression");
         session->next_crypto->do_compress_in=1;
     }
     if(strcmp(method,"zlib@openssh.com") == 0){
-        SSH_LOG(SSH_LOG_PACKET,"enabling C->S delayed compression");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET,"enabling C->S delayed compression");
 
         if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED) {
             session->next_crypto->do_compress_in = 1;
@@ -527,11 +527,11 @@ int crypt_set_algorithms_server(ssh_session session){
 
     method = session->next_crypto->kex_methods[SSH_COMP_S_C];
     if(strcmp(method,"zlib") == 0){
-        SSH_LOG(SSH_LOG_PACKET, "enabling S->C compression");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "enabling S->C compression");
         session->next_crypto->do_compress_out=1;
     }
     if(strcmp(method,"zlib@openssh.com") == 0){
-        SSH_LOG(SSH_LOG_PACKET,"enabling S->C delayed compression");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET,"enabling S->C delayed compression");
 
         if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED) {
             session->next_crypto->do_compress_out = 1;

@@ -212,7 +212,7 @@ ssh_known_hosts_entries_compare(struct ssh_knownhosts_entry *k1,
  * If the  entries  list is NULL, it will allocate a new list. Caller
  * is responsible to free it even if an error occurs.
  */
-static int ssh_known_hosts_read_entries(const char *match,
+static int ssh_known_hosts_read_entries(ssh_session session, const char *match,
                                         const char *filename,
                                         struct ssh_list **entries)
 {
@@ -224,7 +224,7 @@ static int ssh_known_hosts_read_entries(const char *match,
 
     fp = fopen(filename, "r");
     if (fp == NULL) {
-        SSH_LOG(SSH_LOG_WARN, "Failed to open the known_hosts file '%s': %s",
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Failed to open the known_hosts file '%s': %s",
                 filename, strerror(errno));
         /* The missing file is not an error here */
         return SSH_OK;
@@ -376,7 +376,7 @@ struct ssh_list *ssh_known_hosts_get_algorithms(ssh_session session)
         return NULL;
     }
 
-    rc = ssh_known_hosts_read_entries(host_port,
+    rc = ssh_known_hosts_read_entries(session, host_port,
                                       session->opts.knownhosts,
                                       &entry_list);
     if (rc != 0) {
@@ -385,7 +385,7 @@ struct ssh_list *ssh_known_hosts_get_algorithms(ssh_session session)
         return NULL;
     }
 
-    rc = ssh_known_hosts_read_entries(host_port,
+    rc = ssh_known_hosts_read_entries(session, host_port,
                                       session->opts.global_knownhosts,
                                       &entry_list);
     SAFE_FREE(host_port);
@@ -529,7 +529,7 @@ char *ssh_known_hosts_get_algorithms_names(ssh_session session)
         return NULL;
     }
 
-    rc = ssh_known_hosts_read_entries(host_port,
+    rc = ssh_known_hosts_read_entries(session, host_port,
                                       session->opts.knownhosts,
                                       &entry_list);
     if (rc != 0) {
@@ -538,7 +538,7 @@ char *ssh_known_hosts_get_algorithms_names(ssh_session session)
         return NULL;
     }
 
-    rc = ssh_known_hosts_read_entries(host_port,
+    rc = ssh_known_hosts_read_entries(session, host_port,
                                       session->opts.global_knownhosts,
                                       &entry_list);
     SAFE_FREE(host_port);
@@ -805,7 +805,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
     if (session->opts.knownhosts != NULL) {
         known_hosts_found = ssh_file_readaccess_ok(session->opts.knownhosts);
         if (!known_hosts_found) {
-            SSH_LOG(SSH_LOG_WARN, "Cannot access file %s",
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Cannot access file %s",
                     session->opts.knownhosts);
         }
     }
@@ -814,7 +814,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
         global_known_hosts_found =
                 ssh_file_readaccess_ok(session->opts.global_knownhosts);
         if (!global_known_hosts_found) {
-            SSH_LOG(SSH_LOG_WARN, "Cannot access file %s",
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Cannot access file %s",
                     session->opts.global_knownhosts);
         }
     }
@@ -833,7 +833,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
     }
 
     if (known_hosts_found) {
-        rc = ssh_known_hosts_read_entries(host_port,
+        rc = ssh_known_hosts_read_entries(session, host_port,
                                           session->opts.knownhosts,
                                           &entry_list);
         if (rc != 0) {
@@ -844,7 +844,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
     }
 
     if (global_known_hosts_found) {
-        rc = ssh_known_hosts_read_entries(host_port,
+        rc = ssh_known_hosts_read_entries(session, host_port,
                                           session->opts.global_knownhosts,
                                           &entry_list);
         if (rc != 0) {
@@ -1038,7 +1038,7 @@ int ssh_session_update_known_hosts(ssh_session session)
 }
 
 static enum ssh_known_hosts_e
-ssh_known_hosts_check_server_key(const char *hosts_entry,
+ssh_known_hosts_check_server_key(ssh_session session, const char *hosts_entry,
                                  const char *filename,
                                  ssh_key server_key,
                                  struct ssh_knownhosts_entry **pentry)
@@ -1048,7 +1048,7 @@ ssh_known_hosts_check_server_key(const char *hosts_entry,
     enum ssh_known_hosts_e found = SSH_KNOWN_HOSTS_UNKNOWN;
     int rc;
 
-    rc = ssh_known_hosts_read_entries(hosts_entry,
+    rc = ssh_known_hosts_read_entries(session, hosts_entry,
                                       filename,
                                       &entry_list);
     if (rc != 0) {
@@ -1219,7 +1219,7 @@ ssh_session_get_known_hosts_entry_file(ssh_session session,
         return SSH_KNOWN_HOSTS_ERROR;
     }
 
-    found = ssh_known_hosts_check_server_key(host_port,
+    found = ssh_known_hosts_check_server_key(session, host_port,
                                              filename,
                                              server_pubkey,
                                              pentry);

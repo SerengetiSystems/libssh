@@ -63,7 +63,7 @@ SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
     error = ssh_string_to_char(error_s);
     SSH_STRING_FREE(error_s);
   }
-  SSH_LOG(SSH_LOG_PACKET, "Received SSH_MSG_DISCONNECT %d:%s",
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received SSH_MSG_DISCONNECT %d:%s",
                           code, error != NULL ? error : "no error");
   ssh_set_error(session, SSH_FATAL,
       "Received SSH_MSG_DISCONNECT: %d:%s",
@@ -87,7 +87,7 @@ SSH_PACKET_CALLBACK(ssh_packet_ignore_callback){
 	(void)user;
 	(void)type;
 	(void)packet;
-	SSH_LOG(SSH_LOG_PROTOCOL,"Received %s packet",type==SSH2_MSG_IGNORE ? "SSH_MSG_IGNORE" : "SSH_MSG_DEBUG");
+	SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Received %s packet",type==SSH2_MSG_IGNORE ? "SSH_MSG_IGNORE" : "SSH_MSG_DEBUG");
 	/* TODO: handle a graceful disconnect */
 	return SSH_PACKET_USED;
 }
@@ -99,7 +99,7 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
   (void)packet;
   (void)user;
   (void)type;
-  SSH_LOG(SSH_LOG_PROTOCOL, "Received SSH_MSG_NEWKEYS");
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received SSH_MSG_NEWKEYS");
 
   if (session->session_state != SSH_SESSION_STATE_DH ||
       session->dh_handshake_state != DH_STATE_NEWKEYS_SENT) {
@@ -128,7 +128,7 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
         goto error;
     }
 
-    rc = ssh_pki_import_signature_blob(sig_blob, server_key, &sig);
+    rc = ssh_pki_import_signature_blob(session, sig_blob, server_key, &sig);
     if (rc != SSH_OK) {
         goto error;
     }
@@ -158,7 +158,7 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
     if (rc == SSH_ERROR) {
       goto error;
     }
-    SSH_LOG(SSH_LOG_PROTOCOL,"Signature verified and valid");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Signature verified and valid");
 
     /* When receiving this packet, we switch on the incomming crypto. */
     rc = ssh_packet_set_newkeys(session, SSH_DIRECTION_IN);
@@ -185,7 +185,7 @@ SSH_PACKET_CALLBACK(ssh_packet_service_accept){
 	(void)user;
 
     session->auth.service_state = SSH_AUTH_SERVICE_ACCEPTED;
-	SSH_LOG(SSH_LOG_PACKET,
+	SSH_LOG_COMMON(session, SSH_LOG_PACKET,
 	      "Received SSH_MSG_SERVICE_ACCEPT");
 
 	return SSH_PACKET_USED;
@@ -204,21 +204,21 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info)
     (void)type;
     (void)user;
 
-    SSH_LOG(SSH_LOG_PACKET, "Received SSH_MSG_EXT_INFO");
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received SSH_MSG_EXT_INFO");
 
     rc = ssh_buffer_get_u32(packet, &nr_extensions);
     if (rc == 0) {
-        SSH_LOG(SSH_LOG_PACKET, "Failed to read number of extensions");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Failed to read number of extensions");
         return SSH_PACKET_USED;
     }
 
     nr_extensions = ntohl(nr_extensions);
     if (nr_extensions > 128) {
-        SSH_LOG(SSH_LOG_PACKET, "Invalid number of extensions");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid number of extensions");
         return SSH_PACKET_USED;
     }
 
-    SSH_LOG(SSH_LOG_PACKET, "Follows %u extensions", nr_extensions);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Follows %u extensions", nr_extensions);
 
     for (i = 0; i < nr_extensions; i++) {
         char *name = NULL;
@@ -227,14 +227,14 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info)
 
         rc = ssh_buffer_unpack(packet, "ss", &name, &value);
         if (rc != SSH_OK) {
-            SSH_LOG(SSH_LOG_PACKET, "Error reading extension name-value pair");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Error reading extension name-value pair");
             return SSH_PACKET_USED;
         }
 
         cmp = strcmp(name, "server-sig-algs");
         if (cmp == 0) {
             /* TODO check for NULL bytes */
-            SSH_LOG(SSH_LOG_PACKET, "Extension: %s=<%s>", name, value);
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Extension: %s=<%s>", name, value);
             if (ssh_match_group(value, "rsa-sha2-512")) {
                 session->extensions |= SSH_EXT_SIG_RSA_SHA512;
             }

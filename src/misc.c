@@ -1274,7 +1274,7 @@ int ssh_analyze_banner(ssh_session session, int server)
           return -1;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "Analyzing banner: %s", banner);
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Analyzing banner: %s", banner);
 
     switch (banner[4]) {
         case '2':
@@ -1324,7 +1324,7 @@ int ssh_analyze_banner(ssh_session session, int server)
 
             session->openssh = SSH_VERSION_INT(((int) major), ((int) minor), 0);
 
-            SSH_LOG(SSH_LOG_PROTOCOL,
+            SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
                     "We are talking to an OpenSSH client version: %lu.%lu (%x)",
                     major, minor, session->openssh);
         }

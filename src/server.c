@@ -213,7 +213,7 @@ static int ssh_server_send_extensions(ssh_session session) {
     int rc;
     const char *hostkey_algorithms;
 
-    SSH_LOG(SSH_LOG_PACKET, "Sending SSH_MSG_EXT_INFO");
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Sending SSH_MSG_EXT_INFO");
 
     if (session->opts.pubkey_accepted_types) {
         hostkey_algorithms = session->opts.pubkey_accepted_types;
@@ -252,22 +252,22 @@ SSH_PACKET_CALLBACK(ssh_packet_kexdh_init){
   (void)type;
   (void)user;
 
-  SSH_LOG(SSH_LOG_PACKET,"Received SSH_MSG_KEXDH_INIT");
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Received SSH_MSG_KEXDH_INIT");
   if(session->dh_handshake_state != DH_STATE_INIT){
-    SSH_LOG(SSH_LOG_RARE,"Invalid state for SSH_MSG_KEXDH_INIT");
+    SSH_LOG_COMMON(session, SSH_LOG_RARE,"Invalid state for SSH_MSG_KEXDH_INIT");
     session->session_state = SSH_SESSION_STATE_ERROR;
     return SSH_PACKET_USED;
   }
 
   /* If first_kex_packet_follows guess was wrong, ignore this message. */
   if (session->first_kex_follows_guess_wrong != 0) {
-    SSH_LOG(SSH_LOG_RARE, "first_kex_packet_follows guess was wrong, "
+    SSH_LOG_COMMON(session, SSH_LOG_RARE, "first_kex_packet_follows guess was wrong, "
                           "ignoring first SSH_MSG_KEXDH_INIT message");
     session->first_kex_follows_guess_wrong = 0;
 
     return SSH_PACKET_USED;
   }
-  SSH_LOG(SSH_LOG_DEBUG, "Calling next KEXDH handler");
+  SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Calling next KEXDH handler");
   return SSH_PACKET_NOT_USED;
 }
 
@@ -348,7 +348,7 @@ static void ssh_server_connection_callback(ssh_session session){
                 goto error;
             }
             set_status(session, 0.4f);
-            SSH_LOG(SSH_LOG_PROTOCOL,
+            SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
                     "SSH client banner: %s", session->clientbanner);
 
             /* Here we analyze the different protocols the server allows. */
@@ -500,7 +500,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user) {
             ret = i + 1;
             session->clientbanner = str;
             session->session_state = SSH_SESSION_STATE_BANNER_RECEIVED;
-            SSH_LOG(SSH_LOG_PACKET, "Received banner: %s", str);
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received banner: %s", str);
             session->ssh_connection_callback(session);
 
             return ret;
@@ -562,7 +562,7 @@ int ssh_handle_key_exchange(ssh_session session) {
     pending:
     rc = ssh_handle_packets_termination(session, SSH_TIMEOUT_USER,
         ssh_server_kex_termination,session);
-    SSH_LOG(SSH_LOG_PACKET, "ssh_handle_key_exchange: current state : %d",
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "ssh_handle_key_exchange: current state : %d",
         session->session_state);
     if (rc != SSH_OK)
       return rc;
@@ -615,7 +615,7 @@ int ssh_auth_reply_default(ssh_session session,int partial) {
   /* Strip the comma. */
   methods_c[strlen(methods_c) - 1] = '\0'; // strip the comma. We are sure there is at
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Sending a auth failure. methods that can continue: %s", methods_c);
 
   rc = ssh_buffer_pack(session->out_buffer,
@@ -634,7 +634,7 @@ int ssh_auth_reply_default(ssh_session session,int partial) {
 static int ssh_message_channel_request_open_reply_default(ssh_message msg) {
     int rc;
 
-    SSH_LOG(SSH_LOG_FUNCTIONS, "Refusing a channel");
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_FUNCTIONS, "Refusing a channel");
 
     rc = ssh_buffer_pack(msg->session->out_buffer,
                          "bdddd",
@@ -659,7 +659,7 @@ static int ssh_message_channel_request_reply_default(ssh_message msg) {
   if (msg->channel_request.want_reply) {
     channel = msg->channel_request.channel->remote_channel;
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
         "Sending a default channel_request denied to channel %d", channel);
 
     rc = ssh_buffer_pack(msg->session->out_buffer,
@@ -673,7 +673,7 @@ static int ssh_message_channel_request_reply_default(ssh_message msg) {
     return ssh_packet_send(msg->session);
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
       "The client doesn't want to know the request failed!");
 
   return SSH_OK;
@@ -693,7 +693,7 @@ int ssh_message_service_reply_success(ssh_message msg) {
     }
     session = msg->session;
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
             "Sending a SERVICE_ACCEPT for service %s", msg->service_request.service);
 
     rc = ssh_buffer_pack(session->out_buffer,
@@ -711,7 +711,7 @@ int ssh_message_service_reply_success(ssh_message msg) {
 int ssh_message_global_request_reply_success(ssh_message msg, uint16_t bound_port) {
     int rc;
 
-    SSH_LOG(SSH_LOG_FUNCTIONS, "Accepting a global request");
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_FUNCTIONS, "Accepting a global request");
 
     if (msg->global_request.want_reply) {
         if (ssh_buffer_add_u8(msg->session->out_buffer
@@ -733,7 +733,7 @@ int ssh_message_global_request_reply_success(ssh_message msg, uint16_t bound_por
 
     if(msg->global_request.type == SSH_GLOBAL_REQUEST_TCPIP_FORWARD 
                                 && msg->global_request.bind_port == 0) {
-        SSH_LOG(SSH_LOG_PACKET,
+        SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
                 "The client doesn't want to know the remote port!");
     }
 
@@ -743,7 +743,7 @@ error:
 }
 
 static int ssh_message_global_request_reply_default(ssh_message msg) {
-    SSH_LOG(SSH_LOG_FUNCTIONS, "Refusing a global request");
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_FUNCTIONS, "Refusing a global request");
 
     if (msg->global_request.want_reply) {
         if (ssh_buffer_add_u8(msg->session->out_buffer
@@ -752,7 +752,7 @@ static int ssh_message_global_request_reply_default(ssh_message msg) {
         }
         return ssh_packet_send(msg->session);
     }
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
             "The client doesn't want to know the request failed!");
 
     return SSH_OK;
@@ -777,7 +777,7 @@ int ssh_message_reply_default(ssh_message msg) {
     case SSH_REQUEST_GLOBAL:
       return ssh_message_global_request_reply_default(msg);
     default:
-      SSH_LOG(SSH_LOG_PACKET,
+      SSH_LOG_COMMON(msg->session,  SSH_LOG_PACKET,
           "Don't know what to default reply to %d type",
           msg->type);
       break;
@@ -896,7 +896,7 @@ int ssh_message_auth_interactive_request(ssh_message msg, const char *name,
 
   /* fill in the kbdint structure */
   if (msg->session->kbdint == NULL) {
-    SSH_LOG(SSH_LOG_PROTOCOL, "Warning: Got a "
+    SSH_LOG_COMMON(msg->session, SSH_LOG_PROTOCOL, "Warning: Got a "
                                         "keyboard-interactive response but it "
                                         "seems we didn't send the request.");
 
@@ -993,13 +993,13 @@ int ssh_auth_reply_success(ssh_session session, int partial)
 
     crypto = ssh_packet_get_current_crypto(session, SSH_DIRECTION_OUT);
     if (crypto != NULL && crypto->delayed_compress_out) {
-        SSH_LOG(SSH_LOG_PROTOCOL, "Enabling delayed compression OUT");
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Enabling delayed compression OUT");
         crypto->do_compress_out = 1;
     }
 
     crypto = ssh_packet_get_current_crypto(session, SSH_DIRECTION_IN);
     if (crypto != NULL && crypto->delayed_compress_in) {
-        SSH_LOG(SSH_LOG_PROTOCOL, "Enabling delayed compression IN");
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Enabling delayed compression IN");
         crypto->do_compress_in = 1;
     }
     return r;

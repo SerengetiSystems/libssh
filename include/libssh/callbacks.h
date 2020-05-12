@@ -26,6 +26,7 @@
 #define _SSH_CALLBACK_H
 
 #include <libssh/libssh.h>
+#include <libssh/poll.h>
 #include <string.h>
 
 #ifdef __cplusplus
@@ -433,6 +434,11 @@ typedef int(*ssh_callback_send) (socket_t socket, void *userdata, const char *bu
 typedef void(*ssh_callback_close) (socket_t socket, void *userdata);
 
 /**
++* @brief callback to poll a user managed socket
++*/
+typedef int(*ssh_poll_fn)(ssh_pollfd_t*, nfds_t, int, void* userdata);
+
+/**
 * These are the callbacks exported by the socket structure
 * They are called by unbuffered read and write when socket data is sent or received
 */
@@ -455,6 +461,10 @@ struct ssh_socket_io_callbacks_struct {
 	* (not called close because there is a #define for close in the source)
 	*/
 	ssh_callback_close closecb;
+        /**
+        * This function will be called to poll the socket state.
+        */
+        ssh_poll_fn poll;
 };
 
 typedef struct ssh_socket_io_callbacks_struct *ssh_socket_io_callbacks;

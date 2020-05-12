@@ -365,17 +365,17 @@ int ssh_key_algorithm_allowed(ssh_session session, const char *type)
     else if (session->server) {
         allowed_list = session->opts.wanted_methods[SSH_HOSTKEYS];
         if (allowed_list == NULL) {
-            SSH_LOG(SSH_LOG_WARN, "Session invalid: no host key available");
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Session invalid: no host key available");
             return 0;
         }
     }
 #endif
     else {
-        SSH_LOG(SSH_LOG_WARN, "Session invalid: not set as client nor server");
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Session invalid: not set as client nor server");
         return 0;
     }
 
-    SSH_LOG(SSH_LOG_DEBUG, "Checking %s with list <%s>", type, allowed_list);
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Checking %s with list <%s>", type, allowed_list);
     return ssh_match_group(allowed_list, type);
 }
 
@@ -403,7 +403,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
         if ((session->openssh > 0) &&
             (session->openssh < SSH_VERSION_INT(7, 2, 0)))
         {
-            SSH_LOG(SSH_LOG_DEBUG,
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                     "We are talking to an old OpenSSH (%x); "
                     "returning SSH_DIGEST_SHA1",
                     session->openssh);
@@ -441,7 +441,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
     case SSH_KEYTYPE_ECDSA:
     case SSH_KEYTYPE_UNKNOWN:
     default:
-        SSH_LOG(SSH_LOG_WARN, "Digest algorithm to be used with key type %u "
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Digest algorithm to be used with key type %u "
                 "is not defined", type);
     }
 
@@ -470,7 +470,7 @@ ssh_key_get_signature_algorithm(ssh_session session,
         if ((session->openssh > 0) &&
             (session->openssh < SSH_VERSION_INT(7, 8, 0)))
         {
-            SSH_LOG(SSH_LOG_DEBUG,
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                     "We are talking to an old OpenSSH (%x); "
                     "using old cert format",
                     session->openssh);
@@ -2152,7 +2152,8 @@ int ssh_pki_export_signature_blob(const ssh_signature sig,
     return SSH_OK;
 }
 
-int ssh_pki_import_signature_blob(const ssh_string sig_blob,
+int ssh_pki_import_signature_blob(ssh_session session,
+                                  const ssh_string sig_blob,
                                   const ssh_key pubkey,
                                   ssh_signature *psig)
 {
@@ -2190,6 +2191,7 @@ int ssh_pki_import_signature_blob(const ssh_string sig_blob,
     alg = ssh_string_get_char(algorithm);
     type = ssh_key_type_from_signature_name(alg);
     hash_type = ssh_key_hash_from_name(alg);
+    hash_type = ssh_key_hash_from_name(alg);
     SSH_STRING_FREE(algorithm);
 
     blob = ssh_buffer_get_ssh_string(buf);
@@ -2198,7 +2200,7 @@ int ssh_pki_import_signature_blob(const ssh_string sig_blob,
         return SSH_ERROR;
     }
 
-    sig = pki_signature_from_blob(pubkey, blob, type, hash_type);
+    sig = pki_signature_from_blob(session, pubkey, blob, type, hash_type);
     SSH_STRING_FREE(blob);
     if (sig == NULL) {
         return SSH_ERROR;
@@ -2219,11 +2221,11 @@ int ssh_pki_import_signature_blob(const ssh_string sig_blob,
  *
  * @return  SSH_OK if compatible; SSH_ERROR otherwise
  */
-int pki_key_check_hash_compatible(ssh_key key,
+int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
                                   enum ssh_digest_e hash_type)
 {
     if (key == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Null pointer provided as key to "
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Null pointer provided as key to "
                                "pki_key_check_hash_compatible()");
         return SSH_ERROR;
     }
@@ -2233,7 +2235,7 @@ int pki_key_check_hash_compatible(ssh_key key,
     case SSH_KEYTYPE_DSS:
         if (hash_type == SSH_DIGEST_SHA1) {
             if (ssh_fips_mode()) {
-                SSH_LOG(SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
+                SSH_LOG_COMMON(session, SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
                 return SSH_ERROR;
             } else {
                 return SSH_OK;
@@ -2244,7 +2246,7 @@ int pki_key_check_hash_compatible(ssh_key key,
     case SSH_KEYTYPE_RSA:
         if (hash_type == SSH_DIGEST_SHA1) {
             if (ssh_fips_mode()) {
-                SSH_LOG(SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
+                SSH_LOG_COMMON(session, SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
                 return SSH_ERROR;
             } else {
                 return SSH_OK;
@@ -2284,11 +2286,11 @@ int pki_key_check_hash_compatible(ssh_key key,
     case SSH_KEYTYPE_RSA1:
     case SSH_KEYTYPE_ECDSA:
     case SSH_KEYTYPE_UNKNOWN:
-        SSH_LOG(SSH_LOG_WARN, "Unknown key type %d", key->type);
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Unknown key type %d", key->type);
         return SSH_ERROR;
     }
 
-    SSH_LOG(SSH_LOG_WARN, "Key type %d incompatible with hash type  %d",
+    SSH_LOG_COMMON(session, SSH_LOG_WARN, "Key type %d incompatible with hash type  %d",
             key->type, hash_type);
 
     return SSH_ERROR;
@@ -2304,35 +2306,36 @@ int ssh_pki_signature_verify(ssh_session session,
     enum ssh_keytypes_e key_type;
 
     if (session == NULL || sig == NULL || key == NULL || input == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
                                "ssh_pki_signature_verify()");
         return SSH_ERROR;
     }
     key_type = ssh_key_type_plain(key->type);
 
-    SSH_LOG(SSH_LOG_FUNCTIONS,
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS,
             "Going to verify a %s type signature",
             sig->type_c);
 
     if (key_type != sig->type) {
-        SSH_LOG(SSH_LOG_WARN,
+        SSH_LOG_COMMON(session, SSH_LOG_WARN,
                 "Can not verify %s signature with %s key",
                 sig->type_c, key->type_c);
         return SSH_ERROR;
     }
 
     /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(key, sig->hash_type);
+    rc = pki_key_check_hash_compatible(session, key, sig->hash_type);
     if (rc != SSH_OK) {
         return SSH_ERROR;
     }
 
-    rc = pki_verify_data_signature(sig, key, input, input_len);
+    rc = pki_verify_data_signature(session, sig, key, input, input_len);
 
     return rc;
 }
 
-ssh_signature pki_do_sign(const ssh_key privkey,
+ssh_signature pki_do_sign(ssh_session session, 
+                          const ssh_key privkey,
                           const unsigned char *input,
                           size_t input_len,
                           enum ssh_digest_e hash_type)
@@ -2340,18 +2343,18 @@ ssh_signature pki_do_sign(const ssh_key privkey,
     int rc;
 
     if (privkey == NULL || input == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
                                "pki_do_sign()");
         return NULL;
     }
 
     /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(privkey, hash_type);
+    rc = pki_key_check_hash_compatible(session, privkey, hash_type);
     if (rc != SSH_OK) {
         return NULL;
     }
 
-    return pki_sign_data(privkey, hash_type, input, input_len);
+    return pki_sign_data(session, privkey, hash_type, input, input_len);
 }
 
 /*
@@ -2375,7 +2378,7 @@ ssh_string ssh_pki_do_sign(ssh_session session,
     if (session == NULL || sigbuf == NULL || privkey == NULL ||
         !ssh_key_is_private(privkey))
     {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
                                "ssh_pki_do_sign()");
         return NULL;
     }
@@ -2408,7 +2411,7 @@ ssh_string ssh_pki_do_sign(ssh_session session,
     }
 
     /* Generate the signature */
-    sig = pki_do_sign(privkey,
+    sig = pki_do_sign(session, privkey,
             ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             hash_type);
@@ -2524,7 +2527,7 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
     }
 
     /* Generate the signature */
-    sig = pki_do_sign(privkey,
+    sig = pki_do_sign(session, privkey,
             ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             digest);

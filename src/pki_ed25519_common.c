@@ -26,6 +26,7 @@
 #include "libssh/pki.h"
 #include "libssh/pki_priv.h"
 #include "libssh/buffer.h"
+#include "libssh/session.h"
 
 int pki_privkey_build_ed25519(ssh_key key,
                               ssh_string pubkey,
@@ -255,13 +256,13 @@ ssh_string pki_ed25519_signature_to_blob(ssh_signature sig)
  *
  * @return SSH_ERROR on error, SSH_OK on success
  */
-int pki_signature_from_ed25519_blob(ssh_signature sig, ssh_string sig_blob)
+int pki_signature_from_ed25519_blob(ssh_session session, ssh_signature sig, ssh_string sig_blob)
 {
     size_t len;
 
     len = ssh_string_len(sig_blob);
     if (len != ED25519_SIG_LEN){
-        SSH_LOG(SSH_LOG_WARN, "Invalid ssh-ed25519 signature len: %zu", len);
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Invalid ssh-ed25519 signature len: %zu", len);
         return SSH_ERROR;
     }
 

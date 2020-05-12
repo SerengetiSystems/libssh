@@ -130,6 +130,7 @@ ssh_socket ssh_socket_new(ssh_session session)
     s->last_errno = -1;
     s->fd_is_socket = 1;
     s->session = session;
+    s->io_callbacks = &session->socket_io_callbacks;
     s->in_buffer = ssh_buffer_new();
     if (s->in_buffer == NULL) {
         ssh_set_error_oom(session);
@@ -336,13 +337,13 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
                 ssh_poll_set_events(p, POLLOUT | POLLIN);
             }
 
-			if (!(s->io_callbacks && s->io_callbacks->closecb))
-			{   //if socket is externally managed don't try and do this
-				rc = ssh_socket_set_blocking(ssh_socket_get_fd(s));
-				if (rc < 0) {
-					return -1;
-				}
-			}
+	    if (!(s->io_callbacks && s->io_callbacks->closecb))
+	    {   //if socket is externally managed don't try and do this
+		rc = ssh_socket_set_blocking(ssh_socket_get_fd(s));
+		if (rc < 0) {
+                    return -1;
+		}
+	    }
 
             if (s->callbacks != NULL && s->callbacks->connected != NULL) {
                 s->callbacks->connected(SSH_SOCKET_CONNECTED_OK,
@@ -391,6 +392,8 @@ ssh_poll_handle ssh_socket_get_poll_handle(ssh_socket s)
         return s->poll_handle;
     }
     s->poll_handle = ssh_poll_new(s->fd,0,ssh_socket_pollcallback,s);
+    if (s->session->socket_io_callbacks.poll)
+      ssh_set_poll_function(s->poll_handle, s->session->socket_io_callbacks.poll, s->session->socket_io_callbacks.userdata);
     return s->poll_handle;
 }
 

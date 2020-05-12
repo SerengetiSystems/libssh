@@ -258,11 +258,11 @@ int sftp_server_init(sftp_session sftp){
     return -1;
   }
 
-  SSH_LOG(SSH_LOG_PACKET, "Received SSH_FXP_INIT");
+  SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET, "Received SSH_FXP_INIT");
 
   ssh_buffer_get_u32(packet->payload, &version);
   version = ntohl(version);
-  SSH_LOG(SSH_LOG_PACKET, "Client version: %d", version);
+  SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET, "Client version: %d", version);
   sftp->client_version = (int)version;
 
   reply = ssh_buffer_new();
@@ -289,7 +289,7 @@ int sftp_server_init(sftp_session sftp){
   }
   SSH_BUFFER_FREE(reply);
 
-  SSH_LOG(SSH_LOG_PROTOCOL, "Server version sent");
+  SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL, "Server version sent");
 
   if (version > LIBSFTP_VERSION) {
     sftp->version = LIBSFTP_VERSION;
@@ -387,7 +387,7 @@ ssize_t sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
     }
 
     if ((uint32_t)size != ssh_buffer_get_len(payload)) {
-        SSH_LOG(SSH_LOG_PACKET,
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
                 "Had to write %d bytes, wrote only %zd",
                 ssh_buffer_get_len(payload),
                 size);
@@ -592,7 +592,7 @@ static sftp_message sftp_get_message(sftp_packet packet)
         return NULL;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
             "Packet with id %d type %d",
             msg->id,
             msg->packet_type);
@@ -680,7 +680,7 @@ int sftp_init(sftp_session sftp) {
       sftp_set_error(sftp, SSH_FX_FAILURE);
       return -1;
   }
-  SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL,
       "SFTP server version %d",
       version);
   rc = ssh_buffer_unpack(packet->payload, "s", &ext_name);
@@ -693,7 +693,7 @@ int sftp_init(sftp_session sftp) {
       break;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL,
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL,
         "SFTP server extension: %s, version: %s",
         ext_name, ext_data);
 
@@ -827,7 +827,7 @@ static int sftp_enqueue(sftp_session sftp, sftp_message msg) {
     return -1;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
       "Queued msg id %d type %d",
       msg->id, msg->packet_type);
 
@@ -868,7 +868,7 @@ static sftp_message sftp_dequeue(sftp_session sftp, uint32_t id){
       }
       msg = queue->message;
       request_queue_free(queue);
-      SSH_LOG(SSH_LOG_PACKET,
+      SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
           "Dequeued msg id %d type %d",
           msg->id,
           msg->packet_type);
@@ -1326,7 +1326,7 @@ static sftp_attributes sftp_parse_attr_3(sftp_session sftp, ssh_buffer buf,
         if (rc != SSH_OK){
             goto error;
         }
-        SSH_LOG(SSH_LOG_PROTOCOL, "Name: %s", attr->name);
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL, "Name: %s", attr->name);
 
         /* Set owner and group if we talk to openssh and have the longname */
         if (ssh_get_openssh_version(sftp->session)) {
@@ -1346,7 +1346,7 @@ static sftp_attributes sftp_parse_attr_3(sftp_session sftp, ssh_buffer buf,
     if (rc != SSH_OK){
         goto error;
     }
-    SSH_LOG(SSH_LOG_PROTOCOL,
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL,
             "Flags: %.8"PRIx32"\n", (uint32_t) attr->flags);
 
     if (attr->flags & SSH_FILEXFER_ATTR_SIZE) {
@@ -1354,7 +1354,7 @@ static sftp_attributes sftp_parse_attr_3(sftp_session sftp, ssh_buffer buf,
         if(rc != SSH_OK) {
             goto error;
         }
-        SSH_LOG(SSH_LOG_PROTOCOL,
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL,
                 "Size: %"PRIu64"\n",
                 (uint64_t) attr->size);
     }
@@ -1559,7 +1559,7 @@ sftp_attributes sftp_readdir(sftp_session sftp, sftp_dir dir)
             return NULL;
         }
 
-        SSH_LOG(SSH_LOG_PACKET,
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
                 "Sent a ssh_fxp_readdir with id %d", id);
 
         while (msg == NULL) {
@@ -1617,7 +1617,7 @@ sftp_attributes sftp_readdir(sftp_session sftp, sftp_dir dir)
         return NULL;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "Count is %d", dir->count);
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PROTOCOL, "Count is %d", dir->count);
 
     attr = sftp_parse_attr(sftp, dir->buffer, 1);
     if (attr == NULL) {
@@ -1803,7 +1803,7 @@ sftp_file sftp_open(sftp_session sftp,
     if ((flags & O_APPEND) == O_APPEND) {
         sftp_flags |= SSH_FXF_APPEND;
     }
-    SSH_LOG(SSH_LOG_PACKET,"Opening file %s with sftp flags %x",file,sftp_flags);
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,"Opening file %s with sftp flags %x",file,sftp_flags);
     id = sftp_get_new_id(sftp);
 
     rc = ssh_buffer_pack(buffer,
@@ -2163,7 +2163,7 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
   if (len < 0) {
     return -1;
   } else  if ((size_t)len != packetlen) {
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(sftp->session, SSH_LOG_PACKET,
         "Could not write as much data as expected");
   }
 

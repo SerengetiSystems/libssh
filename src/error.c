@@ -64,6 +64,9 @@ void _ssh_set_error(void *error,
 
     err->error.error_code = code;
     if (ssh_get_log_level() >= SSH_LOG_WARN) {
+      if (err->callbacks->log_function)
+        err->callbacks->log_function(err, SSH_LOG_WARN, err->error.error_buffer, err->callbacks->userdata);
+      else
         ssh_log_function(SSH_LOG_WARN,
                          function,
                          err->error.error_buffer);

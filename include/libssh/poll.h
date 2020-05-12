@@ -114,7 +114,8 @@ typedef unsigned long int nfds_t;
 #endif /* WIN32 */
 #endif /* HAVE_POLL */
 
-typedef int(*poll_fn)(ssh_pollfd_t *, nfds_t, int);
+typedef int(*poll_fn)(ssh_pollfd_t*, nfds_t, int);
+typedef int(*ctx_poll_fn)(ssh_pollfd_t*, nfds_t, int, void *userdata);
 
 void ssh_poll_init(void);
 void ssh_poll_cleanup(void);
@@ -122,7 +123,7 @@ void ssh_poll_set(poll_fn mypoll);
 int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout);
 typedef struct ssh_poll_ctx_struct *ssh_poll_ctx;
 typedef struct ssh_poll_handle_struct *ssh_poll_handle;
-
+void ssh_set_poll_function(ssh_poll_handle handle, ctx_poll_fn function, void* userdata);
 /**
  * @brief SSH poll callback. This callback will be used when an event
  *                      caught on the socket.

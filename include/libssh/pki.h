@@ -132,7 +132,8 @@ void ssh_signature_free(ssh_signature sign);
 
 int ssh_pki_export_signature_blob(const ssh_signature sign,
                                   ssh_string *sign_blob);
-int ssh_pki_import_signature_blob(const ssh_string sig_blob,
+int ssh_pki_import_signature_blob(ssh_session session, 
+                                  const ssh_string sig_blob,
                                   const ssh_key pubkey,
                                   ssh_signature *psig);
 int ssh_pki_signature_verify(ssh_session session,
