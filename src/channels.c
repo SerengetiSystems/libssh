@@ -146,7 +146,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_conf){
   (void)type;
   (void)user;
 
-  SSH_LOG(SSH_LOG_PACKET,"Received SSH2_MSG_CHANNEL_OPEN_CONFIRMATION");
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Received SSH2_MSG_CHANNEL_OPEN_CONFIRMATION");
 
   rc = ssh_buffer_unpack(packet, "d", &channelid);
   if (rc != SSH_OK)
@@ -168,20 +168,20 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_conf){
   if (rc != SSH_OK)
       goto error;
 
-  SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "Received a CHANNEL_OPEN_CONFIRMATION for channel %d:%d",
       channel->local_channel,
       channel->remote_channel);
 
   if (channel->state != SSH_CHANNEL_STATE_OPENING) {
-      SSH_LOG(SSH_LOG_RARE,
+      SSH_LOG_COMMON(session, SSH_LOG_RARE,
               "SSH2_MSG_CHANNEL_OPEN_CONFIRMATION received in incorrect "
               "channel state %d",
               channel->state);
       goto error;
   }
 
-  SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "Remote window : %"PRIu32", maxpacket : %"PRIu32,
       (uint32_t) channel->remote_window,
       (uint32_t) channel->remote_maxpacket);
@@ -211,7 +211,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_fail){
 
   channel=channel_from_msg(session,packet);
   if(channel==NULL){
-    SSH_LOG(SSH_LOG_RARE,"Invalid channel in packet");
+    SSH_LOG_COMMON(session, SSH_LOG_RARE,"Invalid channel in packet");
     return SSH_PACKET_USED;
   }
 
@@ -222,7 +222,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_fail){
   }
 
   if (channel->state != SSH_CHANNEL_STATE_OPENING) {
-      SSH_LOG(SSH_LOG_RARE,
+      SSH_LOG_COMMON(session, SSH_LOG_RARE,
               "SSH2_MSG_CHANNEL_OPEN_FAILURE received in incorrect channel "
               "state %d",
               channel->state);
@@ -301,7 +301,7 @@ channel_open(ssh_channel channel,
     channel->local_maxpacket = maxpacket;
     channel->local_window = window;
 
-    SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
             "Creating a channel %d with %d window and %d max packet",
             channel->local_channel, window, maxpacket);
 
@@ -328,7 +328,7 @@ channel_open(ssh_channel channel,
         return err;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "Sent a SSH_MSG_CHANNEL_OPEN type %s for channel %d",
             type, channel->local_channel);
 
@@ -393,12 +393,12 @@ void ssh_channel_set_manual_window_refund(ssh_channel channel)
 **/
 int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
 {
+  ssh_session session = channel->session;
   if (channel->flags & SSH_CHANNEL_FLAG_WINDOW_MANUAL)
   {
     channel->local_refund += bytes;
     if (channel->local_refund >= channel->local_maxpacket)
     {
-      ssh_session session = channel->session;
       /* WINDOW_ADJUST packet needs a relative increment rather than an absolute
       * value, so we give here the missing bytes needed to reach new_window
       */
@@ -420,7 +420,7 @@ int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
       channel->local_window += channel->local_refund;
       channel->local_refund = 0;
 
-      SSH_LOG(SSH_LOG_PROTOCOL,
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
         "growing window (channel %d:%d) to %d bytes",
         channel->local_channel,
         channel->remote_channel,
@@ -433,7 +433,7 @@ int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
     }
 	else
 	{
-		SSH_LOG(SSH_LOG_PROTOCOL,
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
 			"refunding window (channel %d:%d) to %d bytes",
 			channel->local_channel,
 			channel->remote_channel,
@@ -443,7 +443,7 @@ int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes)
   }
   else
   {
-    SSH_LOG(SSH_LOG_PROTOCOL,
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "refunding window only supported with channel flag SSH_CHANNEL_FLAG_WINDOW_MANUAL");
     ssh_set_error_invalid(channel->session);
     return SSH_ERROR;
@@ -466,7 +466,7 @@ static int grow_window(ssh_session session,
   int rc;
 
   if(new_window <= channel->local_window){
-    SSH_LOG(SSH_LOG_PROTOCOL,
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
         "growing window (channel %d:%d) to %d bytes : not needed (%d bytes)",
         channel->local_channel, channel->remote_channel, new_window,
         channel->local_window);
@@ -490,7 +490,7 @@ static int grow_window(ssh_session session,
     goto error;
   }
 
-  SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "growing window (channel %d:%d) to %d bytes",
       channel->local_channel,
       channel->remote_channel,
@@ -554,18 +554,18 @@ SSH_PACKET_CALLBACK(channel_rcv_change_window) {
 
   channel = channel_from_msg(session,packet);
   if (channel == NULL) {
-    SSH_LOG(SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
   }
 
   rc = ssh_buffer_unpack(packet, "d", &bytes);
   if (channel == NULL || rc != SSH_OK) {
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
         "Error getting a window adjust message: invalid packet");
 
     return SSH_PACKET_USED;
   }
 
-  SSH_LOG(SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "Adding %d bytes to channel (%d:%d) (from %d bytes)",
       bytes,
       channel->local_channel,
@@ -594,7 +594,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
 
   channel = channel_from_msg(session,packet);
   if (channel == NULL) {
-    SSH_LOG(SSH_LOG_FUNCTIONS,
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS,
         "%s", ssh_get_error(session));
 
     return SSH_PACKET_USED;
@@ -608,13 +608,13 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
 
   str = ssh_buffer_get_ssh_string(packet);
   if (str == NULL) {
-    SSH_LOG(SSH_LOG_PACKET, "Invalid data packet!");
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid data packet!");
 
     return SSH_PACKET_USED;
   }
   len = ssh_string_len(str);
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Channel receiving %" PRIdS " bytes data in %d (local win=%d remote win=%d)",
       len,
       is_stderr,
@@ -623,7 +623,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
 
   /* What shall we do in this case? Let's accept it anyway */
   if (len > channel->local_window) {
-    SSH_LOG(SSH_LOG_RARE,
+    SSH_LOG_COMMON(session, SSH_LOG_RARE,
         "Data packet too big for our window(%" PRIdS " vs %d)",
         len,
         channel->local_window);
@@ -642,7 +642,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
     channel->local_window = 0; /* buggy remote */
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Channel windows are now (local win=%d remote win=%d)",
       channel->local_window,
       channel->remote_window);
@@ -693,12 +693,12 @@ SSH_PACKET_CALLBACK(channel_rcv_eof) {
 
   channel = channel_from_msg(session,packet);
   if (channel == NULL) {
-    SSH_LOG(SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
 
     return SSH_PACKET_USED;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received eof on channel (%d:%d)",
       channel->local_channel,
       channel->remote_channel);
@@ -721,12 +721,12 @@ SSH_PACKET_CALLBACK(channel_rcv_close) {
 
 	channel = channel_from_msg(session,packet);
 	if (channel == NULL) {
-		SSH_LOG(SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
+		SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
 
 		return SSH_PACKET_USED;
 	}
 
-	SSH_LOG(SSH_LOG_PACKET,
+	SSH_LOG_COMMON(session, SSH_LOG_PACKET,
 			"Received close on channel (%d:%d)",
 			channel->local_channel,
 			channel->remote_channel);
@@ -740,7 +740,7 @@ SSH_PACKET_CALLBACK(channel_rcv_close) {
 		channel->state = SSH_CHANNEL_STATE_CLOSED;
 	}
 	if (channel->remote_eof == 0) {
-		SSH_LOG(SSH_LOG_PACKET,
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET,
 				"Remote host not polite enough to send an eof before close");
 	}
 	channel->remote_eof = 1;
@@ -772,7 +772,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 
 	channel = channel_from_msg(session,packet);
 	if (channel == NULL) {
-		SSH_LOG(SSH_LOG_FUNCTIONS,"%s", ssh_get_error(session));
+		SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS,"%s", ssh_get_error(session));
 		return SSH_PACKET_USED;
 	}
 
@@ -780,7 +780,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 	        &request,
 	        &status);
 	if (rc != SSH_OK) {
-		SSH_LOG(SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
 		return SSH_PACKET_USED;
 	}
 
@@ -788,10 +788,10 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
         SAFE_FREE(request);
         rc = ssh_buffer_unpack(packet, "d", &channel->exit_status);
         if (rc != SSH_OK) {
-            SSH_LOG(SSH_LOG_PACKET, "Invalid exit-status packet");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid exit-status packet");
             return SSH_PACKET_USED;
         }
-        SSH_LOG(SSH_LOG_PACKET, "received exit-status %d", channel->exit_status);
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "received exit-status %d", channel->exit_status);
 
         ssh_callbacks_execute_list(channel->callbacks,
                                    ssh_channel_callbacks,
@@ -807,15 +807,15 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
         char *sig = NULL;
 
 		SAFE_FREE(request);
-		SSH_LOG(SSH_LOG_PACKET, "received signal");
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET, "received signal");
 
 		rc = ssh_buffer_unpack(packet, "s", &sig);
 		if (rc != SSH_OK) {
-			SSH_LOG(SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
+			SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
 			return SSH_PACKET_USED;
 		}
 
-		SSH_LOG(SSH_LOG_PACKET,
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET,
 				"Remote connection sent a signal SIG %s", sig);
         ssh_callbacks_execute_list(channel->callbacks,
                                    ssh_channel_callbacks,
@@ -843,7 +843,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 		        &errmsg, /* error message */
 		        &lang);
 		if (rc != SSH_OK) {
-			SSH_LOG(SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
+			SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid MSG_CHANNEL_REQUEST");
 			return SSH_PACKET_USED;
 		}
 
@@ -851,7 +851,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 			core = "";
 		}
 
-		SSH_LOG(SSH_LOG_PACKET,
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET,
 				"Remote connection closed by signal SIG %s %s", sig, core);
 		ssh_callbacks_execute_list(channel->callbacks,
                                    ssh_channel_callbacks,
@@ -871,7 +871,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 	}
 	if(strcmp(request,"keepalive@openssh.com")==0){
 	  SAFE_FREE(request);
-	  SSH_LOG(SSH_LOG_PROTOCOL,"Responding to Openssh's keepalive");
+	  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Responding to Openssh's keepalive");
 
       rc = ssh_buffer_pack(session->out_buffer,
                            "bd",
@@ -887,7 +887,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 
   if (strcmp(request, "auth-agent-req@openssh.com") == 0) {
     SAFE_FREE(request);
-    SSH_LOG(SSH_LOG_PROTOCOL, "Received an auth-agent-req request");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received an auth-agent-req request");
     ssh_callbacks_execute_list(channel->callbacks,
                                ssh_channel_callbacks,
                                channel_auth_agent_req_function,
@@ -903,7 +903,7 @@ SSH_PACKET_CALLBACK(channel_rcv_request) {
 	 */
 	ssh_message_handle_channel_request(session,channel,packet,request,status);
 #else
-    SSH_LOG(SSH_LOG_WARNING, "Unhandled channel request %s", request);
+    SSH_LOG_COMMON(session, SSH_LOG_WARNING, "Unhandled channel request %s", request);
 #endif
 	
 	SAFE_FREE(request);
@@ -934,7 +934,7 @@ int channel_default_bufferize(ssh_channel channel,
       return -1;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
           "placing " SIZET_SPECIFIER " bytes into channel buffer (%s)",
           len,
           is_stderr ? "stderr" : "stdout");
@@ -1321,7 +1321,7 @@ int ssh_channel_send_eof(ssh_channel channel)
     }
 
     rc = ssh_packet_send(session);
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
         "Sent a EOF on client channel (%d:%d)",
         channel->local_channel,
         channel->remote_channel);
@@ -1386,7 +1386,7 @@ int ssh_channel_close(ssh_channel channel)
     }
 
     rc = ssh_packet_send(session);
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "Sent a close on client channel (%d:%d)",
             channel->local_channel,
             channel->remote_channel);
@@ -1466,7 +1466,7 @@ static int channel_write_common(ssh_channel channel,
   }
 
   if (len > INT_MAX) {
-      SSH_LOG(SSH_LOG_PROTOCOL,
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
               "Length (%u) is bigger than INT_MAX", len);
       return SSH_ERROR;
   }
@@ -1503,14 +1503,14 @@ static int channel_write_common(ssh_channel channel,
   }
   while (len > 0) {
     if (channel->remote_window < len) {
-      SSH_LOG(SSH_LOG_PROTOCOL,
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
           "Remote window is %d bytes. going to write %d bytes",
           channel->remote_window,
           len);
       /* What happens when the channel window is zero? */
       if(channel->remote_window == 0) {
           /* nothing can be written */
-          SSH_LOG(SSH_LOG_PROTOCOL,
+          SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
                 "Wait for a growing window message...");
           rc = ssh_handle_packets_termination(session, SSH_TIMEOUT_DEFAULT,
               ssh_channel_waitwindow_termination,channel);
@@ -1563,7 +1563,7 @@ static int channel_write_common(ssh_channel channel,
         return SSH_ERROR;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
         "channel_write wrote %ld bytes", (long int) effectivelen);
 
     channel->remote_window -= effectivelen;
@@ -1710,16 +1710,16 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_success){
 
   channel=channel_from_msg(session,packet);
   if (channel == NULL) {
-    SSH_LOG(SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
     return SSH_PACKET_USED;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received SSH_CHANNEL_SUCCESS on channel (%d:%d)",
       channel->local_channel,
       channel->remote_channel);
   if(channel->request_state != SSH_CHANNEL_REQ_STATE_PENDING){
-    SSH_LOG(SSH_LOG_RARE, "SSH_CHANNEL_SUCCESS received in incorrect state %d",
+    SSH_LOG_COMMON(session, SSH_LOG_RARE, "SSH_CHANNEL_SUCCESS received in incorrect state %d",
         channel->request_state);
   } else {
     channel->request_state=SSH_CHANNEL_REQ_STATE_ACCEPTED;
@@ -1740,17 +1740,17 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_failure){
 
   channel=channel_from_msg(session,packet);
   if (channel == NULL) {
-    SSH_LOG(SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS, "%s", ssh_get_error(session));
 
     return SSH_PACKET_USED;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received SSH_CHANNEL_FAILURE on channel (%d:%d)",
       channel->local_channel,
       channel->remote_channel);
   if(channel->request_state != SSH_CHANNEL_REQ_STATE_PENDING){
-    SSH_LOG(SSH_LOG_RARE, "SSH_CHANNEL_FAILURE received in incorrect state %d",
+    SSH_LOG_COMMON(session, SSH_LOG_RARE, "SSH_CHANNEL_FAILURE received in incorrect state %d",
         channel->request_state);
   } else {
     channel->request_state=SSH_CHANNEL_REQ_STATE_DENIED;
@@ -1804,7 +1804,7 @@ static int channel_request(ssh_channel channel, const char *request,
     return rc;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Sent a SSH_MSG_CHANNEL_REQUEST %s", request);
   if (reply == 0) {
     channel->request_state = SSH_CHANNEL_REQ_STATE_NONE;
@@ -1830,7 +1830,7 @@ pending:
       rc=SSH_ERROR;
       break;
     case SSH_CHANNEL_REQ_STATE_ACCEPTED:
-      SSH_LOG(SSH_LOG_PROTOCOL,
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
           "Channel request %s success",request);
       rc=SSH_OK;
       break;
@@ -2262,10 +2262,10 @@ SSH_PACKET_CALLBACK(ssh_request_success){
   (void)user;
   (void)packet;
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received SSH_REQUEST_SUCCESS");
   if(session->global_req_state != SSH_CHANNEL_REQ_STATE_PENDING){
-    SSH_LOG(SSH_LOG_RARE, "SSH_REQUEST_SUCCESS received in incorrect state %d",
+    SSH_LOG_COMMON(session, SSH_LOG_RARE, "SSH_REQUEST_SUCCESS received in incorrect state %d",
         session->global_req_state);
   } else {
     session->global_req_state=SSH_CHANNEL_REQ_STATE_ACCEPTED;
@@ -2285,10 +2285,10 @@ SSH_PACKET_CALLBACK(ssh_request_denied){
   (void)user;
   (void)packet;
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received SSH_REQUEST_FAILURE");
   if(session->global_req_state != SSH_CHANNEL_REQ_STATE_PENDING){
-    SSH_LOG(SSH_LOG_RARE, "SSH_REQUEST_DENIED received in incorrect state %d",
+    SSH_LOG_COMMON(session, SSH_LOG_RARE, "SSH_REQUEST_DENIED received in incorrect state %d",
         session->global_req_state);
   } else {
     session->global_req_state=SSH_CHANNEL_REQ_STATE_DENIED;
@@ -2368,7 +2368,7 @@ int ssh_global_request(ssh_session session,
       return rc;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Sent a SSH_MSG_GLOBAL_REQUEST %s", request);
 
   if (reply == 0) {
@@ -2387,11 +2387,11 @@ pending:
   }
   switch(session->global_req_state){
     case SSH_CHANNEL_REQ_STATE_ACCEPTED:
-      SSH_LOG(SSH_LOG_PROTOCOL, "Global request %s success",request);
+      SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Global request %s success",request);
       rc=SSH_OK;
       break;
     case SSH_CHANNEL_REQ_STATE_DENIED:
-      SSH_LOG(SSH_LOG_PACKET,
+      SSH_LOG_COMMON(session, SSH_LOG_PACKET,
           "Global request %s failed", request);
       ssh_set_error(session, SSH_REQUEST_DENIED,
           "Global request %s failed", request);
@@ -2968,7 +2968,7 @@ int ssh_channel_read_timeout(ssh_channel channel,
    * We may have problem if the window is too small to accept as much data
    * as asked
    */
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Read (%d) buffered : %d bytes. Window: %d",
       count,
       ssh_buffer_get_len(stdbuf),

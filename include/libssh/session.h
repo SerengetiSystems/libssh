@@ -31,6 +31,7 @@
 #include "libssh/poll.h"
 #include "libssh/config.h"
 #include "libssh/misc.h"
+#include "libssh/callbacks.h"
 
 /* These are the different states a SSH session can be into its life */
 enum ssh_session_state_e {

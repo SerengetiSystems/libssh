@@ -112,7 +112,7 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     (void) type;
     (void) user;
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_GROUP received");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_GROUP received");
 
     if (bignum_ctx_invalid(ctx)) {
         goto error;
@@ -246,7 +246,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     bignum server_pubkey = NULL;
     (void)type;
     (void)user;
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
 
     ssh_packet_remove_callbacks(session, &ssh_dhgex_client_callbacks);
     rc = ssh_buffer_unpack(packet,
@@ -288,7 +288,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     if (rc == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
     session->dh_handshake_state = DH_STATE_NEWKEYS_SENT;
 
     return SSH_PACKET_USED;
@@ -648,7 +648,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
 
 	if (type == SSH2_MSG_KEX_DH_GEX_REQUEST_OLD)
 	{
-		SSH_LOG(SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST_OLD");
+		SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST_OLD");
 		session->next_crypto->using_old_gex = 1;
 		rc = ssh_buffer_unpack(packet, "d", &pn);
 		pmin = min(pn, DH_PMIN);
@@ -660,7 +660,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
 	}
 	else
 	{
-		SSH_LOG(SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST");
+		SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST");
 		session->next_crypto->using_old_gex = 0;
 		/* Minimum group size, preferred group size, maximum group size */
 		rc = ssh_buffer_unpack(packet, "ddd", &pmin, &pn, &pmax);
@@ -681,7 +681,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
     }
 	else
 	{
-		SSH_LOG(SSH_LOG_INFO, "dh-gex: DHGEX_REQUEST[%u:%u:%u]", pmin, pn, pmax);
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, "dh-gex: DHGEX_REQUEST[%u:%u:%u]", pmin, pn, pmax);
 	}
 
     session->next_crypto->dh_pmin = pmin;
@@ -751,7 +751,7 @@ error:
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_init){
     (void) type;
     (void) user;
-    SSH_LOG(SSH_LOG_DEBUG, "Received SSH_MSG_KEX_DHGEX_INIT");
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH_MSG_KEX_DHGEX_INIT");
     ssh_packet_remove_callbacks(session, &ssh_dhgex_server_callbacks);
     ssh_server_dh_process_init(session, packet);
     return SSH_PACKET_USED;

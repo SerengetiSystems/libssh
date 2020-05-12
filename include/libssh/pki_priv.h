@@ -61,7 +61,7 @@ int pki_key_compare(const ssh_key k1,
                     const ssh_key k2,
                     enum ssh_keycmp_e what);
 
-int pki_key_check_hash_compatible(ssh_key key,
+int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
                                   enum ssh_digest_e hash_type);
 /* SSH Private Key Functions */
 enum ssh_keytypes_e pki_privatekey_type_from_string(const char *privkey);
@@ -111,22 +111,26 @@ int pki_privkey_build_ecdsa(ssh_key key,
 ssh_string pki_publickey_to_blob(const ssh_key key);
 
 /* SSH Signature Functions */
-ssh_signature pki_sign_data(const ssh_key privkey,
+ssh_signature pki_sign_data(ssh_session session,
+                            const ssh_key privkey,
                             enum ssh_digest_e hash_type,
                             const unsigned char *input,
                             size_t input_len);
-int pki_verify_data_signature(ssh_signature signature,
+int pki_verify_data_signature(ssh_session session, 
+                              ssh_signature signature,
                               const ssh_key pubkey,
                               const unsigned char *input,
                               size_t input_len);
 ssh_string pki_signature_to_blob(const ssh_signature sign);
-ssh_signature pki_signature_from_blob(const ssh_key pubkey,
+ssh_signature pki_signature_from_blob(ssh_session session, 
+                                      const ssh_key pubkey,
                                       const ssh_string sig_blob,
                                       enum ssh_keytypes_e type,
                                       enum ssh_digest_e hash_type);
 
 /* SSH Signing Functions */
-ssh_signature pki_do_sign(const ssh_key privkey,
+ssh_signature pki_do_sign(ssh_session session,
+                          const ssh_key privkey,
                           const unsigned char *input,
                           size_t input_len,
                           enum ssh_digest_e hash_type);
@@ -144,7 +148,7 @@ int pki_ed25519_key_cmp(const ssh_key k1,
 int pki_ed25519_key_dup(ssh_key new, const ssh_key key);
 int pki_ed25519_public_key_to_blob(ssh_buffer buffer, ssh_key key);
 ssh_string pki_ed25519_signature_to_blob(ssh_signature sig);
-int pki_signature_from_ed25519_blob(ssh_signature sig, ssh_string sig_blob);
+int pki_signature_from_ed25519_blob(ssh_session session, ssh_signature sig, ssh_string sig_blob);
 int pki_privkey_build_ed25519(ssh_key key,
                               ssh_string pubkey,
                               ssh_string privkey);

@@ -71,6 +71,8 @@ struct ssh_poll_handle_struct {
   int lock;
   ssh_poll_callback cb;
   void *cb_data;
+  ctx_poll_fn poll_cb; //this call back is a subsitute for poll on this context
+  void* poll_cb_data;
 };
 
 struct ssh_poll_ctx_struct {
@@ -79,6 +81,8 @@ struct ssh_poll_ctx_struct {
   size_t polls_allocated;
   size_t polls_used;
   size_t chunk_size;
+  ctx_poll_fn poll_cb; //this call back is a subsitute for poll on this context
+  void* poll_cb_data;
 };
 
 static poll_fn ssh_poll_emu;
@@ -352,11 +356,10 @@ ssh_poll_handle ssh_poll_new(socket_t fd, short events, ssh_poll_callback cb,
     void *userdata) {
     ssh_poll_handle p;
 
-    p = malloc(sizeof(struct ssh_poll_handle_struct));
+    p = calloc(1, sizeof(struct ssh_poll_handle_struct));
     if (p == NULL) {
         return NULL;
     }
-    ZERO_STRUCTP(p);
 
     p->x.fd = fd;
     p->events = events;
@@ -498,11 +501,10 @@ void ssh_poll_set_callback(ssh_poll_handle p, ssh_poll_callback cb, void *userda
 ssh_poll_ctx ssh_poll_ctx_new(size_t chunk_size) {
     ssh_poll_ctx ctx;
 
-    ctx = malloc(sizeof(struct ssh_poll_ctx_struct));
+    ctx = calloc(1, sizeof(struct ssh_poll_ctx_struct));
     if (ctx == NULL) {
         return NULL;
     }
-    ZERO_STRUCTP(ctx);
 
     if (chunk_size == 0) {
         chunk_size = SSH_POLL_CTX_CHUNK;
@@ -591,7 +593,22 @@ int ssh_poll_ctx_add(ssh_poll_ctx ctx, ssh_poll_handle p) {
   ctx->pollfds[p->x.idx].revents = 0;
   p->ctx = ctx;
 
+  if (!ctx->poll_cb && p->poll_cb)
+  {
+    ctx->poll_cb = p->poll_cb;
+    ctx->poll_cb_data = p->poll_cb_data;
+  }
+#ifdef _DEBUG //should not be adding handles to the context with different io callbacks
+  else if (p->poll_cb != ctx->poll_cb || p->poll_cb_data != ctx->poll_cb_data)
+    return -1; //invalid data
+#endif
   return 0;
+}
+
+void ssh_set_poll_function(ssh_poll_handle handle, ctx_poll_fn function, void* userdata)
+{
+  handle->poll_cb = function;
+  handle->poll_cb_data = userdata;
 }
 
 /**
@@ -674,10 +691,20 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
     }
 
     ssh_timestamp_init(&ts);
-    do {
+    if (ctx->poll_cb)
+    {
+      do {
+        int tm = ssh_timeout_update(&ts, timeout);
+        rc = ctx->poll_cb(ctx->pollfds, ctx->polls_used, tm, ctx->poll_cb_data);
+      } while (rc == -1 && errno == EINTR);
+    }
+    else
+    {
+      do {
         int tm = ssh_timeout_update(&ts, timeout);
         rc = ssh_poll(ctx->pollfds, ctx->polls_used, tm);
-    } while (rc == -1 && errno == EINTR);
+      } while (rc == -1 && errno == EINTR);
+    }
 
     if (rc < 0) {
         return SSH_ERROR;
@@ -732,6 +759,8 @@ ssh_poll_ctx ssh_poll_get_default_ctx(ssh_session session){
 		return session->default_poll_ctx;
 	/* 2 is enough for the default one */
 	session->default_poll_ctx = ssh_poll_ctx_new(2);
+        session->default_poll_ctx->poll_cb = session->socket_io_callbacks.poll;
+        session->default_poll_ctx->poll_cb_data = session->socket_io_callbacks.userdata;
 	return session->default_poll_ctx;
 }
 
@@ -744,6 +773,7 @@ struct ssh_event_fd_wrapper {
 
 struct ssh_event_struct {
     ssh_poll_ctx ctx;
+   
 #ifdef WITH_SERVER
     struct ssh_list *sessions;
 #endif

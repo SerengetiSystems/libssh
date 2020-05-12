@@ -136,6 +136,7 @@ ssh_socket ssh_socket_new(ssh_session session)
     s->last_errno = -1;
     s->fd_is_socket = 1;
     s->session = session;
+    s->io_callbacks = &session->socket_io_callbacks;
     s->in_buffer = ssh_buffer_new();
     if (s->in_buffer == NULL) {
         ssh_set_error_oom(session);
@@ -395,6 +396,8 @@ ssh_poll_handle ssh_socket_get_poll_handle(ssh_socket s)
         return s->poll_handle;
     }
     s->poll_handle = ssh_poll_new(s->fd,0,ssh_socket_pollcallback,s);
+    if (s->session->socket_io_callbacks.poll)
+      ssh_set_poll_function(s->poll_handle, s->session->socket_io_callbacks.poll, s->session->socket_io_callbacks.userdata);
     return s->poll_handle;
 }
 

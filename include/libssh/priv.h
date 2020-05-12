@@ -247,9 +247,9 @@ void ssh_log_function(int verbosity,
                       const char *buffer);
 #define SSH_LOG(priority, ...) \
     _ssh_log(priority, __func__, __VA_ARGS__)
+
 #define SSH_LOG_COMMON(bos, priority, ...) \
     ssh_log_common(&bos->common, priority, __func__, __VA_ARGS__)
-
 
 /* LEGACY */
 void ssh_log_common(struct ssh_common_struct *common,

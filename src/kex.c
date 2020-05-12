@@ -343,7 +343,7 @@ SSH_PACKET_CALLBACK(ssh_packet_kexinit)
     (void)user;
 
     if (session->session_state == SSH_SESSION_STATE_AUTHENTICATED) {
-        SSH_LOG(SSH_LOG_INFO, "Initiating key re-exchange");
+        SSH_LOG_COMMON(session, SSH_LOG_INFO, "Initiating key re-exchange");
     } else if (session->session_state != SSH_SESSION_STATE_INITIAL_KEX) {
         ssh_set_error(session,SSH_FATAL,"SSH_KEXINIT received in wrong state");
         goto error;
@@ -500,7 +500,7 @@ SSH_PACKET_CALLBACK(ssh_packet_kexinit)
                 SAFE_FREE(rsa_sig_ext);
             }
 
-            SSH_LOG(SSH_LOG_DEBUG, "The client supports extension "
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "The client supports extension "
                     "negotiation. Enabled signature algorithms: %s%s",
                     session->extensions & SSH_EXT_SIG_RSA_SHA256 ? "SHA256" : "",
                     session->extensions & SSH_EXT_SIG_RSA_SHA512 ? " SHA512" : "");
@@ -588,19 +588,19 @@ char *ssh_client_select_hostkeys(ssh_session session)
     /* This removes the certificate types, unsupported for now */
     wanted_without_certs = ssh_find_all_matching(HOSTKEYS, wanted);
     if (wanted_without_certs == NULL) {
-        SSH_LOG(SSH_LOG_WARNING,
+        SSH_LOG_COMMON(session, SSH_LOG_WARNING,
                 "List of allowed host key algorithms is empty or contains only "
                 "unsupported algorithms");
         return NULL;
     }
 
-    SSH_LOG(SSH_LOG_DEBUG,
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
             "Order of wanted host keys: \"%s\"",
             wanted_without_certs);
 
     known_hosts_algorithms = ssh_known_hosts_get_algorithms_names(session);
     if (known_hosts_algorithms == NULL) {
-        SSH_LOG(SSH_LOG_DEBUG,
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                 "No key found in known_hosts; "
                 "changing host key method to \"%s\"",
                 wanted_without_certs);
@@ -608,7 +608,7 @@ char *ssh_client_select_hostkeys(ssh_session session)
         return wanted_without_certs;
     }
 
-    SSH_LOG(SSH_LOG_DEBUG,
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
             "Algorithms found in known_hosts files: \"%s\"",
             known_hosts_algorithms);
 
@@ -617,7 +617,7 @@ char *ssh_client_select_hostkeys(ssh_session session)
                                                 wanted_without_certs);
     SAFE_FREE(known_hosts_algorithms);
     if (known_hosts_ordered == NULL) {
-        SSH_LOG(SSH_LOG_DEBUG,
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                 "No key found in known_hosts is allowed; "
                 "changing host key method to \"%s\"",
                 wanted_without_certs);
@@ -641,7 +641,7 @@ char *ssh_client_select_hostkeys(ssh_session session)
         fips_hostkeys = ssh_keep_fips_algos(SSH_HOSTKEYS, new_hostkeys);
         SAFE_FREE(new_hostkeys);
         if (fips_hostkeys == NULL) {
-            SSH_LOG(SSH_LOG_WARNING,
+            SSH_LOG_COMMON(session, SSH_LOG_WARNING,
                     "None of the wanted host keys or keys in known_hosts files "
                     "is allowed in FIPS mode.");
             return NULL;
@@ -649,7 +649,7 @@ char *ssh_client_select_hostkeys(ssh_session session)
         new_hostkeys = fips_hostkeys;
     }
 
-    SSH_LOG(SSH_LOG_DEBUG,
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
             "Changing host key method to \"%s\"",
             new_hostkeys);
 
@@ -785,7 +785,7 @@ int ssh_kex_select_methods (ssh_session session){
     } else if(strcmp(session->next_crypto->kex_methods[SSH_KEX], "curve25519-sha256") == 0){
       session->next_crypto->kex_type=SSH_KEX_CURVE25519_SHA256;
     }
-    SSH_LOG(SSH_LOG_INFO, "Negotiated %s,%s,%s,%s,%s,%s,%s,%s,%s,%s",
+    SSH_LOG_COMMON(session, SSH_LOG_INFO, "Negotiated %s,%s,%s,%s,%s,%s,%s,%s,%s,%s",
             session->next_crypto->kex_methods[SSH_KEX],
             session->next_crypto->kex_methods[SSH_HOSTKEYS],
             session->next_crypto->kex_methods[SSH_CRYPT_C_S],
@@ -850,7 +850,7 @@ int ssh_send_kex(ssh_session session, int server_kex) {
     return -1;
   }
 
-  SSH_LOG(SSH_LOG_PACKET, "SSH_MSG_KEXINIT sent");
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET, "SSH_MSG_KEXINIT sent");
   return 0;
 error:
   ssh_buffer_reinit(session->out_buffer);
@@ -870,31 +870,31 @@ int ssh_send_rekex(ssh_session session)
 
     if (session->dh_handshake_state != DH_STATE_FINISHED) {
         /* Rekey/Key exchange is already in progress */
-        SSH_LOG(SSH_LOG_PACKET, "Attempting rekey in bad state");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Attempting rekey in bad state");
         return SSH_ERROR;
     }
 
     if (session->current_crypto == NULL) {
         /* No current crypto used -- can not exchange it */
-        SSH_LOG(SSH_LOG_PACKET, "No crypto to rekey");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "No crypto to rekey");
         return SSH_ERROR;
     }
 
     if (session->client) {
         rc = ssh_set_client_kex(session);
         if (rc != SSH_OK) {
-            SSH_LOG(SSH_LOG_PACKET, "Failed to set client kex");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Failed to set client kex");
             return rc;
         }
     } else {
 #ifdef WITH_SERVER
         rc = server_set_kex(session);
         if (rc == SSH_ERROR) {
-            SSH_LOG(SSH_LOG_PACKET, "Failed to set server kex");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Failed to set server kex");
             return rc;
         }
 #else
-        SSH_LOG(SSH_LOG_PACKET, "Invalid session state.");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid session state.");
         return SSH_ERROR;
 #endif /* WITH_SERVER */
     }
@@ -902,7 +902,7 @@ int ssh_send_rekex(ssh_session session)
     session->dh_handshake_state = DH_STATE_INIT;
     rc = ssh_send_kex(session, session->server);
     if (rc < 0) {
-        SSH_LOG(SSH_LOG_PACKET, "Failed to send kex");
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Failed to send kex");
         return rc;
     }
 
@@ -1100,7 +1100,7 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_ECDH_SHA2_NISTP521:
         if (session->next_crypto->ecdh_client_pubkey == NULL ||
             session->next_crypto->ecdh_server_pubkey == NULL) {
-            SSH_LOG(SSH_LOG_WARNING, "ECDH parameted missing");
+            SSH_LOG_COMMON(session, SSH_LOG_WARNING, "ECDH parameted missing");
             goto error;
         }
         rc = ssh_buffer_pack(buf,

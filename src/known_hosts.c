@@ -372,7 +372,7 @@ int ssh_is_server_known(ssh_session session)
 
             /* We got a match. Now check the key type */
             if (strcmp(pubkey_type, type) != 0) {
-                SSH_LOG(SSH_LOG_PACKET,
+                SSH_LOG_COMMON(session, SSH_LOG_PACKET,
                         "ssh_is_server_known: server type [%s] doesn't match the "
                         "type [%s] in known_hosts file",
                         pubkey_type,
