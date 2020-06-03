@@ -58,12 +58,6 @@ int ssh_set_callbacks(ssh_session session, ssh_callbacks cb) {
   };
   session->common.callbacks = cb;
 
-  /* LEGACY */
-  if (ssh_get_log_callback() == NULL && cb->log_function) {
-      ssh_set_log_callback(ssh_legacy_log_callback);
-      ssh_set_log_userdata(session);
-  }
-
   return 0;
 }
 
