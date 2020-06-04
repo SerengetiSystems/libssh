@@ -120,7 +120,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user)
         if (buffer[i] == '\r') {
             buffer[i] = '\0';
         }
-        if (buffer[i] == '\n') {
+        else if (buffer[i] == '\n') {
             int cmp;
 
             buffer[i] = '\0';
@@ -144,8 +144,10 @@ static int callback_receive_banner(const void *data, size_t len, void *user)
                 SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                         "ssh_protocol_version_exchange: %s",
                         buffer);
-                ret = i + 1;
-                break;
+                session->session_state = SSH_SESSION_STATE_ERROR;
+                ssh_set_error(session, SSH_FATAL, "Protocol mismatch: %s", buffer);
+
+                return 0;
             }
         }
         /* According to RFC 4253 the max banner length is 255 */
