@@ -388,7 +388,7 @@ ssize_t sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
 
     if ((uint32_t)size != ssh_buffer_get_len(payload)) {
         SSH_LOG(SSH_LOG_PACKET,
-                "Had to write %d bytes, wrote only %zd",
+			"Had to write %d bytes, wrote only " SIZET_SPECIFIER,
                 ssh_buffer_get_len(payload),
                 size);
     }

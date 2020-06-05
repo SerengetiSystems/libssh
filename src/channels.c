@@ -935,7 +935,7 @@ int channel_default_bufferize(ssh_channel channel,
   }
 
   SSH_LOG(SSH_LOG_PACKET,
-          "placing %zu bytes into channel buffer (%s)",
+          "placing " SIZET_SPECIFIER " bytes into channel buffer (%s)",
           len,
           is_stderr ? "stderr" : "stdout");
   if (!is_stderr) {
