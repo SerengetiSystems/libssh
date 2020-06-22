@@ -1403,6 +1403,9 @@ static sftp_attributes sftp_parse_attr_3(sftp_session sftp, ssh_buffer buf,
         if (rc != SSH_OK){
             goto error;
         }
+        //code should not have to know which one contains the right value at run time
+        attr->atime64 = attr->atime;
+        attr->mtime64 = attr->mtime;
     }
 
     if (attr->flags & SSH_FILEXFER_ATTR_EXTENDED) {
