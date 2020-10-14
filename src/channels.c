@@ -616,7 +616,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   len = ssh_string_len(str);
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Channel receiving %" PRIdS " bytes data in %d (local win=%d remote win=%d)",
+      "Channel receiving %zu bytes data in %d (local win=%d remote win=%d)",
       len,
       is_stderr,
       channel->local_window,
@@ -625,7 +625,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   /* What shall we do in this case? Let's accept it anyway */
   if (len > channel->local_window) {
     SSH_LOG_COMMON(session, SSH_LOG_RARE,
-        "Data packet too big for our window(%" PRIdS " vs %d)",
+        "Data packet too big for our window(%zu vs %d)",
         len,
         channel->local_window);
   }
@@ -3006,14 +3006,15 @@ int ssh_channel_read_timeout(ssh_channel channel,
   if (session->session_state == SSH_SESSION_STATE_ERROR) {
       return SSH_ERROR;
   }
+  /* If the server closed the channel properly, there is nothing to do */
+  if (channel->remote_eof && ssh_buffer_get_len(stdbuf) == 0) {
+      return 0;
+  }
   if (channel->state == SSH_CHANNEL_STATE_CLOSED) {
       ssh_set_error(session,
                     SSH_FATAL,
                     "Remote channel is closed.");
       return SSH_ERROR;
-  }
-  if (channel->remote_eof && ssh_buffer_get_len(stdbuf) == 0) {
-    return 0;
   }
   len = ssh_buffer_get_len(stdbuf);
   /* Read count bytes if len is greater, everything otherwise */
@@ -3170,9 +3171,9 @@ int ssh_channel_poll_timeout(ssh_channel channel, int timeout, int is_stderr)
     size_t len;
   int rc;
 
-  if(channel == NULL) {
-      return SSH_ERROR;
-  }
+    if (channel == NULL) {
+        return SSH_ERROR;
+    }
 
   session = channel->session;
   stdbuf = channel->stdout_buffer;
@@ -3188,12 +3189,23 @@ int ssh_channel_poll_timeout(ssh_channel channel, int timeout, int is_stderr)
                                         ssh_channel_read_termination,
                                         &ctx);
     if (rc == SSH_ERROR ||
-       session->session_state == SSH_SESSION_STATE_ERROR) {
-    rc = SSH_ERROR;
+        session->session_state == SSH_SESSION_STATE_ERROR) {
+        rc = SSH_ERROR;
         goto out;
-  }
+    } else if (rc == SSH_AGAIN) {
+        /* If the above timeout expired, it is ok and we do not need to
+         * attempt to check the read buffer. The calling functions do not
+         * expect us to return SSH_AGAIN either here. */
+        rc = SSH_OK;
+        goto out;
+    }
     len = ssh_buffer_get_len(stdbuf);
     if (len > 0) {
+        if (len > INT_MAX) {
+            rc = SSH_ERROR;
+        } else {
+            rc = (int)len;
+        }
         goto out;
     }
     if (channel->remote_eof) {

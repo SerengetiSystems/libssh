@@ -106,6 +106,9 @@
 /* Define to 1 if you have OpenSSL with X25519 support */
 #cmakedefine HAVE_OPENSSL_X25519 1
 
+/* Define to 1 if you have OpenSSL with Poly1305 support */
+#cmakedefine HAVE_OPENSSL_EVP_POLY1305 1
+
 /* Define to 1 if you have gcrypt with ChaCha20/Poly1305 support */
 #cmakedefine HAVE_GCRYPT_CHACHA_POLY 1
 
@@ -119,6 +122,9 @@
 
 /* Define to 1 if you have the `EVP_aes128_gcm' function. */
 #cmakedefine HAVE_OPENSSL_EVP_AES_GCM 1
+
+/* Define to 1 if you have the `EVP_chacha20' function. */
+#cmakedefine HAVE_OPENSSL_EVP_CHACHA20 1
 
 /* Define to 1 if you have the `CRYPTO_THREADID_set_callback' function. */
 #cmakedefine HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK 1
@@ -265,6 +271,9 @@
 
 /* Define to 1 if you want to enable DH group exchange algorithms */
 #cmakedefine WITH_GEX 1
+
+/* Define to 1 if you want to enable none cipher and MAC */
+#cmakedefine WITH_INSECURE_NONE 1
 
 /* Define to 1 if you want to enable blowfish cipher support */
 #cmakedefine WITH_BLOWFISH_CIPHER 1

@@ -254,6 +254,7 @@ static int dh_handshake(ssh_session session) {
       switch(session->next_crypto->kex_type){
         case SSH_KEX_DH_GROUP1_SHA1:
         case SSH_KEX_DH_GROUP14_SHA1:
+        case SSH_KEX_DH_GROUP14_SHA256:
         case SSH_KEX_DH_GROUP16_SHA512:
         case SSH_KEX_DH_GROUP18_SHA512:
           rc = ssh_client_dh_init(session);
@@ -452,7 +453,7 @@ static void ssh_client_connection_callback(ssh_session session)
             if (dh_handshake(session) == SSH_ERROR) {
                 goto error;
             }
-            /* FALL THROUGH */
+            FALL_THROUGH;
         case SSH_SESSION_STATE_DH:
             if(session->dh_handshake_state==DH_STATE_FINISHED){
                 set_status(session,1.0f);
@@ -506,120 +507,139 @@ static int ssh_connect_termination(void *user){
  * @see ssh_new()
  * @see ssh_disconnect()
  */
-int ssh_connect(ssh_session session) {
-  int ret;
+int ssh_connect(ssh_session session)
+{
+    int ret;
 
-  if (session == NULL) {
-    return SSH_ERROR;
-  }
+    if (!is_ssh_initialized()) {
+        ssh_set_error(session, SSH_FATAL,
+                      "Library not initialized.");
 
-  switch(session->pending_call_state){
-  case SSH_PENDING_CALL_NONE:
-  	break;
-  case SSH_PENDING_CALL_CONNECT:
-  	goto pending;
-  default:
-  	ssh_set_error(session,SSH_FATAL,"Bad call during pending SSH call in ssh_connect");
-
-  	return SSH_ERROR;
-  }
-  session->alive = 0;
-  session->client = 1;
-
-  if (session->opts.fd == SSH_INVALID_SOCKET &&
-      session->opts.host == NULL &&
-      session->opts.ProxyCommand == NULL) {
-    ssh_set_error(session, SSH_FATAL, "Hostname required");
-    return SSH_ERROR;
-  }
-
-  /* If the system configuration files were not yet processed, do it now */
-  if (!session->opts.config_processed) {
-    ret = ssh_options_parse_config(session, NULL);
-    if (ret != 0) {
-      ssh_set_error(session, SSH_FATAL,
-                    "Failed to process system configuration files");
-      return SSH_ERROR;
+        return SSH_ERROR;
     }
-  }
 
-  ret = ssh_options_apply(session);
-  if (ret < 0) {
-      ssh_set_error(session, SSH_FATAL, "Couldn't apply options");
-      return SSH_ERROR;
-  }
+    if (session == NULL) {
+        return SSH_ERROR;
+    }
 
-  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-          "libssh %s, using threading %s",
-          ssh_copyright(),
-          ssh_threads_get_type());
+    switch(session->pending_call_state) {
+    case SSH_PENDING_CALL_NONE:
+        break;
+    case SSH_PENDING_CALL_CONNECT:
+        goto pending;
+    default:
+        ssh_set_error(session, SSH_FATAL,
+                      "Bad call during pending SSH call in ssh_connect");
 
-  session->ssh_connection_callback = ssh_client_connection_callback;
-  session->session_state=SSH_SESSION_STATE_CONNECTING;
-  ssh_socket_set_callbacks(session->socket,&session->socket_callbacks);
-  session->socket_callbacks.connected=socket_callback_connected;
-  session->socket_callbacks.data=callback_receive_banner;
-  session->socket_callbacks.exception=ssh_socket_exception_callback;
-  session->socket_callbacks.userdata=session;
-  if (session->opts.fd != SSH_INVALID_SOCKET) {
-    session->session_state=SSH_SESSION_STATE_SOCKET_CONNECTED;
-    ssh_socket_set_fd(session->socket, session->opts.fd);
-    ssh_socket_set_io_callbacks(session->socket, &session->socket_io_callbacks);
-    ret=SSH_OK;
+        return SSH_ERROR;
+    }
+    session->alive = 0;
+    session->client = 1;
+
+    if (session->opts.fd == SSH_INVALID_SOCKET &&
+        session->opts.host == NULL &&
+        session->opts.ProxyCommand == NULL)
+    {
+        ssh_set_error(session, SSH_FATAL, "Hostname required");
+        return SSH_ERROR;
+    }
+
+    /* If the system configuration files were not yet processed, do it now */
+    if (!session->opts.config_processed) {
+        ret = ssh_options_parse_config(session, NULL);
+        if (ret != 0) {
+            ssh_set_error(session, SSH_FATAL,
+                          "Failed to process system configuration files");
+            return SSH_ERROR;
+        }
+    }
+
+    ret = ssh_options_apply(session);
+    if (ret < 0) {
+        ssh_set_error(session, SSH_FATAL, "Couldn't apply options");
+        return SSH_ERROR;
+    }
+
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
+            "libssh %s, using threading %s",
+            ssh_copyright(),
+            ssh_threads_get_type());
+
+    session->ssh_connection_callback = ssh_client_connection_callback;
+    session->session_state = SSH_SESSION_STATE_CONNECTING;
+    ssh_socket_set_callbacks(session->socket, &session->socket_callbacks);
+    session->socket_callbacks.connected = socket_callback_connected;
+    session->socket_callbacks.data = callback_receive_banner;
+    session->socket_callbacks.exception = ssh_socket_exception_callback;
+    session->socket_callbacks.userdata = session;
+
+    if (session->opts.fd != SSH_INVALID_SOCKET) {
+        session->session_state = SSH_SESSION_STATE_SOCKET_CONNECTED;
+        ssh_socket_set_fd(session->socket, session->opts.fd);
+        ssh_socket_set_io_callbacks(session->socket, &session->socket_io_callbacks);
+        ret = SSH_OK;
 #ifndef _WIN32
-  } else if (session->opts.ProxyCommand != NULL){
-    ret = ssh_socket_connect_proxycommand(session->socket,
-                                          session->opts.ProxyCommand);
+    } else if (session->opts.ProxyCommand != NULL) {
+        ret = ssh_socket_connect_proxycommand(session->socket,
+                session->opts.ProxyCommand);
 #endif
-  } else {
-    ret=ssh_socket_connect(session->socket,
-                           session->opts.host,
-                           session->opts.port > 0 ? session->opts.port : 22,
-                           session->opts.bindaddr);
-  }
-  if (ret == SSH_ERROR) {
-    return SSH_ERROR;
-  }
+    } else {
+        ret = ssh_socket_connect(session->socket,
+                                 session->opts.host,
+                                 session->opts.port > 0 ? session->opts.port : 22,
+                                 session->opts.bindaddr);
+    }
+    if (ret == SSH_ERROR) {
+        return SSH_ERROR;
+    }
 
-  set_status(session, 0.2f);
+    set_status(session, 0.2f);
 
-  session->alive = 1;
-  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Socket connecting, now waiting for the callbacks to work");
+    session->alive = 1;
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
+            "Socket connecting, now waiting for the callbacks to work");
+
 pending:
-  session->pending_call_state=SSH_PENDING_CALL_CONNECT;
-  if(ssh_is_blocking(session)) {
-      int timeout = (session->opts.timeout * 1000) +
-                    (session->opts.timeout_usec / 1000);
-      if (timeout == 0) {
-          timeout = 10 * 1000;
-      }
-      SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Actual timeout : %d", timeout);
-      ret = ssh_handle_packets_termination(session, timeout, ssh_connect_termination, session);
-      if (session->session_state != SSH_SESSION_STATE_ERROR &&
-          (ret == SSH_ERROR || !ssh_connect_termination(session))) {
-          ssh_set_error(session, SSH_FATAL,
-                        "Timeout connecting to %s", session->opts.host);
-          session->session_state = SSH_SESSION_STATE_ERROR;
-      }
-  }
-  else {
-      ret = ssh_handle_packets_termination(session,
-                                           SSH_TIMEOUT_NONBLOCKING,
-                                           ssh_connect_termination,
-                                           session);
-      if (ret == SSH_ERROR) {
-          session->session_state = SSH_SESSION_STATE_ERROR;
-      }
-  }
-  SSH_LOG_COMMON(session, SSH_LOG_PACKET,"current state : %d",session->session_state);
-  if(!ssh_is_blocking(session) && !ssh_connect_termination(session)){
-    return SSH_AGAIN;
-  }
+    session->pending_call_state = SSH_PENDING_CALL_CONNECT;
+    if(ssh_is_blocking(session)) {
+        int timeout = (session->opts.timeout * 1000) +
+            (session->opts.timeout_usec / 1000);
+        if (timeout == 0) {
+            timeout = 10 * 1000;
+        }
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Actual timeout : %d", timeout);
+        ret = ssh_handle_packets_termination(session, timeout,
+                                             ssh_connect_termination, session);
+        if (session->session_state != SSH_SESSION_STATE_ERROR &&
+            (ret == SSH_ERROR || !ssh_connect_termination(session)))
+        {
+            ssh_set_error(session, SSH_FATAL,
+                          "Timeout connecting to %s", session->opts.host);
+            session->session_state = SSH_SESSION_STATE_ERROR;
+        }
+    } else {
+        ret = ssh_handle_packets_termination(session,
+                                             SSH_TIMEOUT_NONBLOCKING,
+                                             ssh_connect_termination,
+                                             session);
+        if (ret == SSH_ERROR) {
+            session->session_state = SSH_SESSION_STATE_ERROR;
+        }
+    }
 
-  session->pending_call_state=SSH_PENDING_CALL_NONE;
-  if(session->session_state == SSH_SESSION_STATE_ERROR || session->session_state == SSH_SESSION_STATE_DISCONNECTED)
-  	return SSH_ERROR;
-  return SSH_OK;
+    SSH_LOG(SSH_LOG_PACKET, "current state : %d", session->session_state);
+    if (!ssh_is_blocking(session) && !ssh_connect_termination(session)) {
+        return SSH_AGAIN;
+    }
+
+    session->pending_call_state = SSH_PENDING_CALL_NONE;
+    if (session->session_state == SSH_SESSION_STATE_ERROR ||
+        session->session_state == SSH_SESSION_STATE_DISCONNECTED)
+    {
+        return SSH_ERROR;
+    }
+
+    return SSH_OK;
 }
 
 /**
@@ -672,84 +692,89 @@ int ssh_get_openssh_version(ssh_session session) {
  *
  * @param[in]  session  The SSH session to use.
  */
-void ssh_disconnect(ssh_session session) {
-  struct ssh_iterator *it;
-  int rc;
+void
+ssh_disconnect(ssh_session session)
+{
+    struct ssh_iterator *it;
+    int rc;
 
-  if (session == NULL) {
-    return;
-  }
-
-  if (session->socket != NULL && ssh_socket_is_open(session->socket)) {
-    rc = ssh_buffer_pack(session->out_buffer,
-                         "bdss",
-                         SSH2_MSG_DISCONNECT,
-                         SSH2_DISCONNECT_BY_APPLICATION,
-                         "Bye Bye",
-                         ""); /* language tag */
-    if (rc != SSH_OK){
-      ssh_set_error_oom(session);
-      goto error;
+    if (session == NULL) {
+        return;
     }
 
-    ssh_packet_send(session);
-    ssh_socket_close(session->socket);
-  }
+    if (session->socket != NULL && ssh_socket_is_open(session->socket)) {
+        rc = ssh_buffer_pack(session->out_buffer,
+                             "bdss",
+                             SSH2_MSG_DISCONNECT,
+                             SSH2_DISCONNECT_BY_APPLICATION,
+                             "Bye Bye",
+                             ""); /* language tag */
+        if (rc != SSH_OK) {
+            ssh_set_error_oom(session);
+            goto error;
+        }
+
+        ssh_packet_send(session);
+        ssh_socket_close(session->socket);
+    }
+
 error:
-  session->recv_seq = 0;
-  session->send_seq = 0;
-  session->alive = 0;
-  if (session->socket != NULL){
-    ssh_socket_reset(session->socket);
-  }
-  session->opts.fd = SSH_INVALID_SOCKET;
-  session->session_state=SSH_SESSION_STATE_DISCONNECTED;
-
-  while ((it=ssh_list_get_iterator(session->channels)) != NULL) {
-    ssh_channel_do_free(ssh_iterator_value(ssh_channel,it));
-    ssh_list_remove(session->channels, it);
-  }
-  if(session->current_crypto){
-    crypto_free(session->current_crypto);
-    session->current_crypto=NULL;
-  }
-  if (session->next_crypto) {
-    crypto_free(session->next_crypto);
-    session->next_crypto = crypto_new();
-    if (session->next_crypto == NULL) {
-      ssh_set_error_oom(session);
+    session->recv_seq = 0;
+    session->send_seq = 0;
+    session->alive = 0;
+    if (session->socket != NULL){
+        ssh_socket_reset(session->socket);
     }
-  }
-  if (session->in_buffer) {
-    ssh_buffer_reinit(session->in_buffer);
-  }
-  if (session->out_buffer) {
-    ssh_buffer_reinit(session->out_buffer);
-  }
-  if (session->in_hashbuf) {
-    ssh_buffer_reinit(session->in_hashbuf);
-  }
-  if (session->out_hashbuf) {
-    ssh_buffer_reinit(session->out_hashbuf);
-  }
-  session->auth.supported_methods = 0;
-  SAFE_FREE(session->serverbanner);
-  SAFE_FREE(session->clientbanner);
+    session->opts.fd = SSH_INVALID_SOCKET;
+    session->session_state = SSH_SESSION_STATE_DISCONNECTED;
+    session->pending_call_state = SSH_PENDING_CALL_NONE;
 
-  if(session->ssh_message_list){
-    ssh_message msg;
-    while((msg=ssh_list_pop_head(ssh_message ,session->ssh_message_list))
-        != NULL){
-      ssh_message_free(msg);
+    while ((it = ssh_list_get_iterator(session->channels)) != NULL) {
+        ssh_channel_do_free(ssh_iterator_value(ssh_channel, it));
+        ssh_list_remove(session->channels, it);
     }
-    ssh_list_free(session->ssh_message_list);
-    session->ssh_message_list=NULL;
-  }
+    if (session->current_crypto) {
+      crypto_free(session->current_crypto);
+      session->current_crypto = NULL;
+    }
+    if (session->next_crypto) {
+        crypto_free(session->next_crypto);
+        session->next_crypto = crypto_new();
+        if (session->next_crypto == NULL) {
+            ssh_set_error_oom(session);
+        }
+    }
+    if (session->in_buffer) {
+        ssh_buffer_reinit(session->in_buffer);
+    }
+    if (session->out_buffer) {
+        ssh_buffer_reinit(session->out_buffer);
+    }
+    if (session->in_hashbuf) {
+        ssh_buffer_reinit(session->in_hashbuf);
+    }
+    if (session->out_hashbuf) {
+        ssh_buffer_reinit(session->out_hashbuf);
+    }
+    session->auth.supported_methods = 0;
+    SAFE_FREE(session->serverbanner);
+    SAFE_FREE(session->clientbanner);
 
-  if (session->packet_callbacks){
-    ssh_list_free(session->packet_callbacks);
-    session->packet_callbacks=NULL;
-  }
+    if (session->ssh_message_list) {
+        ssh_message msg = NULL;
+
+        while ((msg = ssh_list_pop_head(ssh_message,
+                                        session->ssh_message_list)) != NULL) {
+              ssh_message_free(msg);
+        }
+        ssh_list_free(session->ssh_message_list);
+        session->ssh_message_list = NULL;
+    }
+
+    if (session->packet_callbacks) {
+        ssh_list_free(session->packet_callbacks);
+        session->packet_callbacks = NULL;
+    }
 }
 
 const char *ssh_copyright(void) {

@@ -32,6 +32,7 @@ static int auth_callback(const char *prompt,
 {
     (void)prompt;   /* unused */
     (void)echo;     /* unused */
+    (void)verify;   /* unused */
     (void)userdata; /* unused */
 
     snprintf(buf, len, "secret");
@@ -40,8 +41,8 @@ static int auth_callback(const char *prompt,
 }
 
 struct ssh_callbacks_struct cb = {
-    .auth_function = auth_callback,
     .userdata = NULL,
+    .auth_function = auth_callback,
 };
 
 static void select_loop(ssh_session session, ssh_channel channel)
@@ -86,10 +87,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     ssh_session session = NULL;
     ssh_channel channel = NULL;
-    char *banner = NULL;
     const char *env = NULL;
     int socket_fds[2] = {-1, -1};
     ssize_t nwritten;
+    bool no = false;
     int rc;
 
     /* Set up the socket to send data */
@@ -97,7 +98,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     assert(rc == 0);
 
     nwritten = send(socket_fds[1], data, size, 0);
-    assert(nwritten == size);
+    assert((size_t)nwritten == size);
 
     rc = shutdown(socket_fds[1], SHUT_WR);
     assert(rc == 0);
@@ -116,6 +117,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     rc = ssh_options_set(session, SSH_OPTIONS_HOST, "127.0.0.1");
     assert(rc == 0);
     rc = ssh_options_set(session, SSH_OPTIONS_USER, "alice");
+    assert(rc == 0);
+    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_C_S, "none");
+    assert(rc == 0);
+    rc = ssh_options_set(session, SSH_OPTIONS_CIPHERS_S_C, "none");
+    assert(rc == 0);
+    rc = ssh_options_set(session, SSH_OPTIONS_HMAC_C_S, "none");
+    assert(rc == 0);
+    rc = ssh_options_set(session, SSH_OPTIONS_HMAC_S_C, "none");
+    assert(rc == 0);
+    rc = ssh_options_set(session, SSH_OPTIONS_PROCESS_CONFIG, &no);
     assert(rc == 0);
 
     ssh_callbacks_init(&cb);

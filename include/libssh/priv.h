@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #if !defined(HAVE_STRTOULL)
 # if defined(HAVE___STRTOULL)
@@ -72,11 +73,6 @@ char *strndup(const char *s, size_t n);
 #endif
 
 #ifdef _WIN32
-
-/* Imitate define of inttypes.h */
-# ifndef PRIdS
-#  define PRIdS "Id"
-# endif
 
 # ifndef PRIu64
 #  if __WORDSIZE == 64
@@ -174,7 +170,6 @@ int gettimeofday(struct timeval *__p, void *__t);
 #else /* _WIN32 */
 
 #include <unistd.h>
-#define PRIdS "zd"
 
 #define _XCLOSESOCKET close
 
@@ -184,7 +179,7 @@ int gettimeofday(struct timeval *__p, void *__t);
 #include "libssh/callbacks.h"
 
 /* some constants */
-#ifndef MAX_PACKAT_LEN
+#ifndef MAX_PACKET_LEN
 #define MAX_PACKET_LEN 262144
 #endif
 #ifndef ERROR_BUFFERLEN
@@ -361,7 +356,7 @@ void explicit_bzero(void *s, size_t n);
 #define discard_const_p(type, ptr) ((type *)discard_const(ptr))
 
 /**
- * Get the argument cound of variadic arguments
+ * Get the argument count of variadic arguments
  */
 /*
  * Since MSVC 2010 there is a bug in passing __VA_ARGS__ to subsequent
@@ -437,5 +432,7 @@ void explicit_bzero(void *s, size_t n);
 #endif /* UNUSED_VAR */
 
 void ssh_agent_state_free(void *data);
+
+bool is_ssh_initialized(void);
 
 #endif /* _LIBSSH_PRIV_H */

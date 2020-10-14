@@ -69,6 +69,9 @@ static struct ssh_hmac_struct ssh_hmac_tab[] = {
   { "hmac-sha2-256-etm@openssh.com", SSH_HMAC_SHA256,        true  },
   { "hmac-sha2-512-etm@openssh.com", SSH_HMAC_SHA512,        true  },
   { "hmac-md5-etm@openssh.com",      SSH_HMAC_MD5,           true  },
+#ifdef WITH_INSECURE_NONE
+  { "none",                          SSH_HMAC_NONE,          false },
+#endif /* WITH_INSECURE_NONE */
   { NULL,                            0,                      false }
 };
 
@@ -548,6 +551,7 @@ int crypt_set_algorithms_server(ssh_session session){
     switch (session->next_crypto->kex_type) {
     case SSH_KEX_DH_GROUP1_SHA1:
     case SSH_KEX_DH_GROUP14_SHA1:
+    case SSH_KEX_DH_GROUP14_SHA256:
     case SSH_KEX_DH_GROUP16_SHA512:
     case SSH_KEX_DH_GROUP18_SHA512:
       ssh_server_dh_init(session);

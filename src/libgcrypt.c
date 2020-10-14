@@ -33,17 +33,14 @@
 #include "libssh/wrapper.h"
 #include "libssh/string.h"
 #include "libssh/misc.h"
+#ifdef HAVE_GCRYPT_CHACHA_POLY
+#include "libssh/chacha20-poly1305-common.h"
+#endif
 
 #ifdef HAVE_LIBGCRYPT
 #include <gcrypt.h>
 
 #ifdef HAVE_GCRYPT_CHACHA_POLY
-
-#define CHACHA20_BLOCKSIZE 64
-#define CHACHA20_KEYLEN 32
-
-#define POLY1305_TAGLEN 16
-#define POLY1305_KEYLEN 32
 
 struct chacha20_poly1305_keysched {
     bool initialized;
@@ -54,13 +51,6 @@ struct chacha20_poly1305_keysched {
     /* mac handle used for authenticating the packets */
     gcry_mac_hd_t mac_hd;
 };
-
-#pragma pack(push, 1)
-struct ssh_packet_header {
-    uint32_t length;
-    uint8_t payload[];
-};
-#pragma pack(pop)
 
 static const uint8_t zero_block[CHACHA20_BLOCKSIZE] = {0};
 #endif /* HAVE_GCRYPT_CHACHA_POLY */
@@ -891,6 +881,17 @@ out:
 }
 #endif /* HAVE_GCRYPT_CHACHA_POLY */
 
+#ifdef WITH_INSECURE_NONE
+static void
+none_crypt(UNUSED_PARAM(struct ssh_cipher_struct *cipher),
+           void *in,
+           void *out,
+           size_t len)
+{
+    memcpy(out, in, len);
+}
+#endif /* WITH_INSECURE_NONE */
+
 /* the table of supported ciphers */
 static struct ssh_cipher_struct ssh_ciphertab[] = {
 #ifdef WITH_BLOWFISH_CIPHER
@@ -1030,6 +1031,15 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
     .name = "chacha20-poly1305@openssh.com"
 #endif
   },
+#ifdef WITH_INSECURE_NONE
+  {
+    .name            = "none",
+    .blocksize       = 8,
+    .keysize         = 0,
+    .encrypt         = none_crypt,
+    .decrypt         = none_crypt
+  },
+#endif /* WITH_INSECURE_NONE */
   {
     .name            = NULL,
     .blocksize       = 0,

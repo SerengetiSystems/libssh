@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -72,6 +73,7 @@ static int auth_none(ssh_session session, const char *user, void *userdata)
         (struct session_data_struct *)userdata;
 
     (void)session;
+    (void)user;
 
     if (sdata->auth_attempts > 0) {
         sdata->authenticated = true;
@@ -119,6 +121,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     int socket_fds[2] = {-1, -1};
     ssize_t nwritten;
+    bool no = false;
+    const char *env = NULL;
     int rc;
 
     /* Our struct holding information about the session. */
@@ -143,7 +147,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     assert(rc == 0);
 
     nwritten = send(socket_fds[1], data, size, 0);
-    assert(nwritten == size);
+    assert((size_t)nwritten == size);
 
     rc = shutdown(socket_fds[1], SHUT_WR);
     assert(rc == 0);
@@ -155,9 +159,28 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     ssh_session session = ssh_new();
     assert(session != NULL);
 
-    ssh_bind_options_set(sshbind,
+
+    env = getenv("LIBSSH_VERBOSITY");
+    if (env != NULL && strlen(env) > 0) {
+        rc = ssh_bind_options_set(sshbind,
+                                  SSH_BIND_OPTIONS_LOG_VERBOSITY_STR,
+                                  env);
+        assert(rc == 0);
+    }
+    rc = ssh_bind_options_set(sshbind,
                          SSH_BIND_OPTIONS_RSAKEY,
                          "/tmp/libssh_fuzzer_private_key");
+    assert(rc == 0);
+    rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_CIPHERS_C_S, "none");
+    assert(rc == 0);
+    rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_CIPHERS_S_C, "none");
+    assert(rc == 0);
+    rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_HMAC_C_S, "none");
+    assert(rc == 0);
+    rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_HMAC_S_C, "none");
+    assert(rc == 0);
+    rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_PROCESS_CONFIG, &no);
+    assert(rc == 0);
 
     ssh_set_auth_methods(session, SSH_AUTH_METHOD_NONE);
 

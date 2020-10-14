@@ -153,6 +153,14 @@ if (OPENSSL_FOUND)
     set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARY})
     check_symbol_exists(EVP_PKEY_ED25519 "openssl/evp.h" FOUND_OPENSSL_ED25519)
 
+    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
+    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARY})
+    check_function_exists(EVP_chacha20 HAVE_OPENSSL_EVP_CHACHA20)
+
+    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
+    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARY})
+    check_symbol_exists(EVP_PKEY_POLY1305 "openssl/evp.h" HAVE_OPENSSL_EVP_POLY1305)
+
     if (HAVE_OPENSSL_EVP_DIGESTSIGN AND HAVE_OPENSSL_EVP_DIGESTVERIFY AND
         FOUND_OPENSSL_ED25519)
         set(HAVE_OPENSSL_ED25519 1)
@@ -180,9 +188,11 @@ if (NOT WITH_GCRYPT AND NOT WITH_MBEDTLS)
     endif (HAVE_OPENSSL_ECC)
 endif ()
 
-if (NOT WITH_MBEDTLS)
-    set(HAVE_DSA 1)
-endif (NOT WITH_MBEDTLS)
+if (WITH_DSA)
+    if (NOT WITH_MBEDTLS)
+        set(HAVE_DSA 1)
+    endif (NOT WITH_MBEDTLS)
+endif()
 
 # FUNCTIONS
 
@@ -475,9 +485,16 @@ if (WITH_PKCS11_URI)
         message(FATAL_ERROR "PKCS #11 is not supported for gcrypt.")
         set(WITH_PKCS11_URI 0)
     endif()
-    if (WITH_WITH_MBEDTLS)
+    if (WITH_MBEDTLS)
         message(FATAL_ERROR "PKCS #11 is not supported for mbedcrypto")
         set(WITH_PKCS11_URI 0)
+    endif()
+endif()
+
+if (WITH_MBEDTLS)
+    if (WITH_DSA)
+        message(FATAL_ERROR "DSA is not supported with mbedTLS crypto")
+        set(HAVE_DSA 0)
     endif()
 endif()
 

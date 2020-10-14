@@ -9,6 +9,7 @@ set(TORTURE_LIBRARY torture)
 include_directories(${OPENSSL_INCLUDE_DIR}
                     ${CMOCKA_INCLUDE_DIR}
                     ${ZLIB_INCLUDE_DIR}
+                    ${libssh_BINARY_DIR}/include
                     ${libssh_BINARY_DIR}
                     ${libssh_SOURCE_DIR}/src
                     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -159,6 +160,17 @@ if (CLIENT_TESTING OR SERVER_TESTING)
         execute_process(COMMAND ${ID_EXECUTABLE} -u OUTPUT_VARIABLE LOCAL_UID OUTPUT_STRIP_TRAILING_WHITESPACE)
     endif()
 
+    find_program(TIMEOUT_EXECUTABLE
+                 NAME
+                    timeout
+                 PATHS
+                    /bin
+                    /usr/bin
+                    /usr/local/bin)
+    if (TIMEOUT_EXECUTABLE)
+        set(WITH_TIMEOUT "1")
+    endif()
+
     # chroot_wrapper
     add_library(chroot_wrapper SHARED chroot_wrapper.c)
     set(CHROOT_WRAPPER_LIBRARY ${libssh_BINARY_DIR}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}chroot_wrapper${CMAKE_SHARED_LIBRARY_SUFFIX})
@@ -170,7 +182,7 @@ if (CLIENT_TESTING OR SERVER_TESTING)
     # ssh_ping
     add_executable(ssh_ping ssh_ping.c)
     target_compile_options(ssh_ping PRIVATE ${DEFAULT_C_COMPILE_FLAGS})
-    target_link_libraries(ssh_ping ssh::ssh)
+    target_link_libraries(ssh_ping ssh::static)
 
     # homedir will be used in passwd
     set(HOMEDIR ${CMAKE_CURRENT_BINARY_DIR}/home)

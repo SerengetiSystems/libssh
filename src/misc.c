@@ -1325,7 +1325,8 @@ int ssh_analyze_banner(ssh_session session, int server)
             session->openssh = SSH_VERSION_INT(((int) major), ((int) minor), 0);
 
             SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-                    "We are talking to an OpenSSH client version: %lu.%lu (%x)",
+                    "We are talking to an OpenSSH %s version: %lu.%lu (%x)",
+                    server ? "client" : "server",
                     major, minor, session->openssh);
         }
     }
@@ -1773,6 +1774,8 @@ int ssh_tmpname(char *template)
 {
     char *tmp = NULL;
     size_t i = 0;
+    int rc = 0;
+    uint8_t random[6];
 
     if (template == NULL) {
         goto err;
@@ -1791,17 +1794,18 @@ int ssh_tmpname(char *template)
         }
     }
 
-    srand((unsigned)time(NULL));
+    rc = ssh_get_random(random, 6, 0);
+    if (!rc) {
+        SSH_LOG(SSH_LOG_WARNING,
+                "Could not generate random data\n");
+        goto err;
+    }
 
-    for (i = 0; i < 6; ++i) {
-#ifdef _WIN32
-        /* in win32 MAX_RAND is 32767, thus we can not shift that far,
-         * otherwise the last three chars are 0 */
-        int hexdigit = (rand() >> (i * 2)) & 0x1f;
-#else
-        int hexdigit = (rand() >> (i * 5)) & 0x1f;
-#endif
-        tmp[i] = hexdigit > 9 ? hexdigit + 'a' - 10 : hexdigit + '0';
+    for (i = 0; i < 6; i++) {
+        /* Limit the random[i] < 32 */
+        random[i] &= 0x1f;
+        /* For values from 0 to 9 use numbers, otherwise use letters */
+        tmp[i] = random[i] > 9 ? random[i] + 'a' - 10 : random[i] + '0';
     }
 
     return 0;
@@ -1822,29 +1826,29 @@ err:
  * @param[in]  replace      String to be replaced is stored in replace.
  *
  * @returns  src_replaced a pointer that points to the replaced string.
- * NULL if allocation fails.
+ * NULL if allocation fails or if src is NULL.
  */
-char *ssh_strreplace(char *src, const char *pattern, const char *replace)
+char *ssh_strreplace(const char *src, const char *pattern, const char *replace)
 {
     char *p = NULL;
     char *src_replaced = NULL;
-    size_t len_replaced;
 
-    if (pattern == NULL || replace == NULL) {
-        return src;
+    if (src == NULL) {
+        return NULL;
     }
 
-    if ((p = strstr(src, pattern)) != NULL) {
+    if (pattern == NULL || replace == NULL) {
+        return strdup(src);
+    }
+
+    p = strstr(src, pattern);
+
+    if (p != NULL) {
         size_t offset = p - src;
-        size_t len  = strlen(src);
         size_t pattern_len = strlen(pattern);
         size_t replace_len = strlen(replace);
-
-        if (replace_len != pattern_len) {
-            len_replaced = strlen(src) + replace_len - pattern_len + 1;
-        } else {
-            len_replaced = strlen(src) + 1;
-        }
+        size_t len  = strlen(src);
+        size_t len_replaced = len + replace_len - pattern_len + 1;
 
         src_replaced = (char *)malloc(len_replaced);
 
@@ -1856,9 +1860,10 @@ char *ssh_strreplace(char *src, const char *pattern, const char *replace)
         memcpy(src_replaced, src, offset);
         memcpy(src_replaced + offset, replace, replace_len);
         memcpy(src_replaced + offset + replace_len, src + offset + pattern_len, len - offset - pattern_len);
+        return src_replaced; /* free in the caller */
+    } else {
+        return strdup(src);
     }
-
-    return src_replaced; /* free in the caller */
 }
 
 /** @} */
