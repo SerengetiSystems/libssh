@@ -254,6 +254,7 @@ static int dh_handshake(ssh_session session) {
       switch(session->next_crypto->kex_type){
         case SSH_KEX_DH_GROUP1_SHA1:
         case SSH_KEX_DH_GROUP14_SHA1:
+        case SSH_KEX_DH_GROUP14_SHA256:
         case SSH_KEX_DH_GROUP16_SHA512:
         case SSH_KEX_DH_GROUP18_SHA512:
           rc = ssh_client_dh_init(session);
@@ -452,7 +453,7 @@ static void ssh_client_connection_callback(ssh_session session)
             if (dh_handshake(session) == SSH_ERROR) {
                 goto error;
             }
-            /* FALL THROUGH */
+            FALL_THROUGH;
         case SSH_SESSION_STATE_DH:
             if(session->dh_handshake_state==DH_STATE_FINISHED){
                 set_status(session,1.0f);
@@ -506,8 +507,16 @@ static int ssh_connect_termination(void *user){
  * @see ssh_new()
  * @see ssh_disconnect()
  */
-int ssh_connect(ssh_session session) {
+int ssh_connect(ssh_session session)
+{
   int ret;
+
+    if (!is_ssh_initialized()) {
+        ssh_set_error(session, SSH_FATAL,
+                      "Library not initialized.");
+
+        return SSH_ERROR;
+    }
 
   if (session == NULL) {
     return SSH_ERROR;
@@ -519,7 +528,8 @@ int ssh_connect(ssh_session session) {
   case SSH_PENDING_CALL_CONNECT:
   	goto pending;
   default:
-  	ssh_set_error(session,SSH_FATAL,"Bad call during pending SSH call in ssh_connect");
+        ssh_set_error(session, SSH_FATAL,
+                      "Bad call during pending SSH call in ssh_connect");
 
   	return SSH_ERROR;
   }
@@ -528,7 +538,8 @@ int ssh_connect(ssh_session session) {
 
   if (session->opts.fd == SSH_INVALID_SOCKET &&
       session->opts.host == NULL &&
-      session->opts.ProxyCommand == NULL) {
+        session->opts.ProxyCommand == NULL)
+    {
     ssh_set_error(session, SSH_FATAL, "Hostname required");
     return SSH_ERROR;
   }
@@ -561,6 +572,7 @@ int ssh_connect(ssh_session session) {
   session->socket_callbacks.data=callback_receive_banner;
   session->socket_callbacks.exception=ssh_socket_exception_callback;
   session->socket_callbacks.userdata=session;
+
   if (session->opts.fd != SSH_INVALID_SOCKET) {
     session->session_state=SSH_SESSION_STATE_SOCKET_CONNECTED;
     ssh_socket_set_fd(session->socket, session->opts.fd);
@@ -594,15 +606,16 @@ pending:
           timeout = 10 * 1000;
       }
       SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Actual timeout : %d", timeout);
-      ret = ssh_handle_packets_termination(session, timeout, ssh_connect_termination, session);
+        ret = ssh_handle_packets_termination(session, timeout,
+                                             ssh_connect_termination, session);
       if (session->session_state != SSH_SESSION_STATE_ERROR &&
-          (ret == SSH_ERROR || !ssh_connect_termination(session))) {
+            (ret == SSH_ERROR || !ssh_connect_termination(session)))
+        {
           ssh_set_error(session, SSH_FATAL,
                         "Timeout connecting to %s", session->opts.host);
           session->session_state = SSH_SESSION_STATE_ERROR;
       }
-  }
-  else {
+    } else {
       ret = ssh_handle_packets_termination(session,
                                            SSH_TIMEOUT_NONBLOCKING,
                                            ssh_connect_termination,
@@ -611,14 +624,19 @@ pending:
           session->session_state = SSH_SESSION_STATE_ERROR;
       }
   }
+
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,"current state : %d",session->session_state);
   if(!ssh_is_blocking(session) && !ssh_connect_termination(session)){
     return SSH_AGAIN;
   }
 
   session->pending_call_state=SSH_PENDING_CALL_NONE;
-  if(session->session_state == SSH_SESSION_STATE_ERROR || session->session_state == SSH_SESSION_STATE_DISCONNECTED)
+    if (session->session_state == SSH_SESSION_STATE_ERROR ||
+        session->session_state == SSH_SESSION_STATE_DISCONNECTED)
+    {
   	return SSH_ERROR;
+    }
+
   return SSH_OK;
 }
 

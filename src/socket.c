@@ -42,8 +42,10 @@
 #else /* _WIN32 */
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <signal.h>
 #endif /* _WIN32 */
 
 #include "libssh/priv.h"
@@ -177,6 +179,9 @@ void ssh_socket_reset(ssh_socket s)
     s->data_except = 0;
     s->poll_handle = NULL;
     s->state=SSH_SOCKET_NONE;
+#ifndef _WIN32
+    s->proxy_pid = 0;
+#endif
 }
 
 /**
@@ -476,6 +481,28 @@ void ssh_socket_close(ssh_socket s){
     }
 
     s->state = SSH_SOCKET_CLOSED;
+
+#ifndef _WIN32
+    /* If the proxy command still runs try to kill it */
+    if (s->proxy_pid != 0) {
+        int status;
+        pid_t pid = s->proxy_pid;
+
+        s->proxy_pid = 0;
+        kill(pid, SIGTERM);
+        while (waitpid(pid, &status, 0) == -1) {
+            if (errno != EINTR) {
+                SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
+                return;
+}
+        }
+        if (!WIFEXITED(status)) {
+            SSH_LOG(SSH_LOG_WARN, "Proxy command exitted abnormally");
+            return;
+        }
+        SSH_LOG(SSH_LOG_TRACE, "Proxy command returned %d", WEXITSTATUS(status));
+    }
+#endif
 }
 
 /**
@@ -870,7 +897,7 @@ ssh_execute_command(const char *command, socket_t in, socket_t out)
     /* Prepare /dev/null socket for the stderr redirection */
     int devnull = open("/dev/null", O_WRONLY);
     if (devnull == -1) {
-        SSH_LOG(SSH_LOG_WARNING, "Failed to open stderr");
+        SSH_LOG(SSH_LOG_WARNING, "Failed to open /dev/null");
         exit(1);
     }
 
@@ -915,7 +942,9 @@ ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
     pid = fork();
     if(pid == 0) {
         ssh_execute_command(command, pair[0], pair[0]);
+        /* Does not return */
     }
+    s->proxy_pid = pid;
     close(pair[0]);
     SSH_LOG(SSH_LOG_PROTOCOL, "ProxyCommand connection pipe: [%d,%d]",pair[0],pair[1]);
     ssh_socket_set_fd(s, pair[1]);

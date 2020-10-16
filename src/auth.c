@@ -1116,7 +1116,9 @@ int ssh_userauth_publickey_auto(ssh_session session,
                         "Public key authentication error for %s",
                         privkey_file);
                 ssh_key_free(state->privkey);
+                state->privkey = NULL;
                 ssh_key_free(state->pubkey);
+                state->pubkey = NULL;
                 SAFE_FREE(session->auth.auto_state);
                 return rc;
             } else if (rc == SSH_AUTH_AGAIN) {
@@ -1182,6 +1184,8 @@ int ssh_userauth_publickey_auto(ssh_session session,
                 return rc;
             }
 
+            ssh_key_free(state->privkey);
+            ssh_key_free(state->pubkey);
             SSH_LOG_COMMON(session, SSH_LOG_WARN,
                     "The server accepted the public key but refused the signature");
             state->it = state->it->next;
