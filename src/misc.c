@@ -542,7 +542,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         return;
     } else {
         printed = snprintf(buffer + count, sizeof(buffer) - count,
-			"(%"PRIu32" bytes):", len);
+			"(%"PRIuS" bytes):", len);
         if (printed < 0) {
             goto error;
         }
@@ -591,7 +591,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-				"  %08"PRIx32" ", i);
+				"  %08"PRIuS" ", i);
             if (printed < 0) {
                 goto error;
             }

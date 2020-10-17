@@ -76,7 +76,11 @@ char *strndup(const char *s, size_t n);
 
 /* Imitate define of inttypes.h */
 # ifndef PRIdS
-#  define PRIdS "Id"
+#  define PRIdS "zd"
+# endif
+
+# ifndef PRIuS
+#  define PRIuS "zu"
 # endif
 
 # ifndef PRIu64
