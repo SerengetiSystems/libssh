@@ -694,6 +694,9 @@ LIBSSH_API int sftp_rename(sftp_session sftp, const char *original, const  char 
  */
 LIBSSH_API int sftp_setstat(sftp_session sftp, const char *file, sftp_attributes attr);
 
+
+LIBSSH_API int sftp_fsetstat(sftp_file file, sftp_attributes attr);
+
 /**
  * @brief Change the file owner and group
  *

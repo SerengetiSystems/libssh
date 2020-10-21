@@ -3433,4 +3433,87 @@ sftp_attributes sftp_fstat(sftp_file file)
     return NULL;
 }
 
+
+int sftp_fsetstat(sftp_file file, sftp_attributes attr)
+{
+    sftp_status_message status = NULL;
+    sftp_message msg = NULL;
+    ssh_buffer buffer;
+    uint32_t id;
+    int rc;
+
+    if (file == NULL) {
+        return -1;
+    }
+
+    buffer = ssh_buffer_new();
+    if (buffer == NULL) {
+        ssh_set_error_oom(file->sftp->session);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+    }
+    id = sftp_get_new_id(file->sftp);
+    rc = ssh_buffer_pack(buffer,
+        "dS",
+        id,
+        file->handle);
+    if (rc != SSH_OK) {
+        ssh_set_error_oom(file->sftp->session);
+        SSH_BUFFER_FREE(buffer);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+    }
+
+    rc = buffer_add_attributes(buffer, attr);
+    if (rc != 0) {
+        ssh_set_error_oom(file->sftp->session);
+        SSH_BUFFER_FREE(buffer);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+    }
+    rc = sftp_packet_write(file->sftp, SSH_FXP_FSETSTAT, buffer);
+    SSH_BUFFER_FREE(buffer);
+    if (rc < 0) {
+        return -1;
+    }
+
+    while (msg == NULL) {
+        if (sftp_read_and_dispatch(file->sftp) < 0) {
+            return -1;
+        }
+        msg = sftp_dequeue(file->sftp, id);
+    }
+
+    if (msg->packet_type == SSH_FXP_STATUS) {
+        status = parse_status_msg(msg);
+        sftp_message_free(msg);
+        if (status == NULL) {
+            return -1;
+        }
+        sftp_set_error(file->sftp, status->status);
+        switch (status->status) {
+        case SSH_FX_OK:
+            status_msg_free(status);
+            return 0;
+        default:
+            break;
+        }
+        /*
+         * The status should be SSH_FX_OK if the command was successful, if it
+         * didn't, then there was an error
+         */
+        ssh_set_error(file->sftp->session, SSH_REQUEST_DENIED,
+            "SFTP server: %s", status->errormsg);
+        status_msg_free(status);
+        return -1;
+    }
+    else {
+        ssh_set_error(file->sftp->session, SSH_FATAL,
+            "Received message %d when attempting to set stats", msg->packet_type);
+        sftp_message_free(msg);
+        sftp_set_error(file->sftp, SSH_FX_BAD_MESSAGE);
+    }
+    return -1;
+}
+
 #endif /* WITH_SFTP */
