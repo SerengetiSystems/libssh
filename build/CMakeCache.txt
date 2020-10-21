@@ -1,0 +1,67 @@
+BUILD_SHARED_LIBS:BOOL=OFF
+
+//Path to a library.
+LIB_EAY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libcrypto.lib
+
+//Path to a library.
+LIB_EAY_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libcrypto.lib
+
+//Path to a library.
+LIB_EAY_RELEASE:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/lib/libcrypto.lib
+
+//Path to a file.
+OPENSSL_INCLUDE_DIR:PATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/include
+
+OPENSSL_ROOT_DIR:PATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release
+
+//Path to a library.
+SSL_EAY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libssl.lib
+
+//Path to a library.
+SSL_EAY_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libssl.lib
+
+//Path to a library.
+SSL_EAY_RELEASE:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/lib/libssl.lib
+
+//Compile with blowfish support
+WITH_BLOWFISH_CIPHER:BOOL=ON
+
+//Build with calltrace debug output
+WITH_DEBUG_CALLTRACE:BOOL=OFF
+
+//Build with cryto debug output
+WITH_DEBUG_CRYPTO:BOOL=OFF
+
+//Build with packet debug output
+WITH_DEBUG_PACKET:BOOL=OFF
+
+//Build with DSA
+WITH_DSA:BOOL=ON
+
+//Enable DH Group exchange mechanisms
+WITH_GEX:BOOL=ON
+
+//Compile with Pcap generation support
+WITH_PCAP:BOOL=ON
+
+//Build with PKCS#11 URI support
+WITH_PKCS11_URI:BOOL=ON
+
+//Build with SSH server support
+WITH_SERVER:BOOL=ON
+
+//Build with SFTP support
+WITH_SFTP:BOOL=ON
+
+//Build with symbol versioning
+WITH_SYMBOL_VERSIONING:BOOL=ON
+
+//Build with ZLIB support
+WITH_ZLIB:BOOL=ON
+
+ZLIB_INCLUDE_DIR:PATH=C:/Development/Dependencies/zlib-1.2.11
+
+ZLIB_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/zlib-1.2.11/contrib/vstudio/vc16.0/x86/ZlibStatDebug/zlibstat.lib
+
+ZLIB_LIBRARY_RELEASE:FILEPATH=C:/Development/Dependencies/zlib-1.2.11/contrib/vstudio/vc16.0/x86/ZlibStatReleaseWithoutAsm/zlibstat.lib
+
