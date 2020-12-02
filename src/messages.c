@@ -152,21 +152,40 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                 return SSH_OK;
             }
             else if (msg->auth_request.method == SSH_AUTH_METHOD_INTERACTIVE &&
-              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_function) &&
-              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_response_function) ){
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_start_function) &&
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_reply_function) ){
               if (ssh_message_auth_kbdint_is_response(msg))
-                rc = session->server_callbacks->auth_kbdint_response_function(session, session->kbdint->nanswers, session->kbdint->answers, session->server_callbacks->userdata);
-              else
-                rc = session->server_callbacks->auth_kbdint_function(session, msg->auth_request.username, session->server_callbacks->userdata);
-              if (rc == SSH_AUTH_INFO)
               {
-                // do nothing, the auth_kbdint_function already sent the requested prompts
+                rc = session->server_callbacks->auth_kbdint_reply_function(session, session->kbdint->nanswers, session->kbdint->answers, session->server_callbacks->userdata);
+                if (rc == SSH_AUTH_SUCCESS || rc == SSH_AUTH_PARTIAL) {
+                  ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
+                }
+                else if (rc == SSH_AUTH_INFO)
+                {
+                  //wants to ask more questions
+                  goto label;
+                }
+                else {
+                  ssh_message_reply_default(msg);
+                }
               }
-              else if (rc == SSH_AUTH_SUCCESS || rc == SSH_AUTH_PARTIAL) {
-                ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
-              }
-              else {
-                ssh_message_reply_default(msg);
+              else
+              {
+              label:
+                {
+                  uint32_t nquestions = 10;
+                  const char* questions[10], echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                  const char* name, * instruction;
+                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, &questions, echo, session->server_callbacks->userdata);
+                  if (rc == SSH_AUTH_INFO)
+                  {
+                    ssh_message_auth_interactive_request(msg, name, instruction, nquestions, questions, echo);
+                  }
+                  else
+                  {
+                    ssh_message_reply_default(msg);
+                  }
+                }
               }
               return SSH_OK;
             }

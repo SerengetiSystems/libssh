@@ -231,18 +231,37 @@ typedef int (*ssh_auth_gssapi_mic_callback) (ssh_session session, const char *us
 typedef int (*ssh_auth_pubkey_callback) (ssh_session session, const char *user, struct ssh_key_struct *pubkey,
 		char signature_state, void *userdata);
 
+/**
+ * @brief SSH authentication callback. Tries to authenticates user with the "none" method
+ * which is anonymous or passwordless.
+ * @param session Current session handler
+ * @param username username for which kbdint authentication is requested
+ * @param name name of keyboard interactive authentication module
+ * @param instruction instructions to use it
+ * @param nquestions in number of question slots available in questions, out number questions provided
+ * @param questions storage for const char *questions. These strings must remain valid after callback is complete
+ * @param array of char booleans that indicate whether the client should echo answers to the terminal
+ * @param userdata Userdata to be passed to the callback function.
+ * @returns SSH_AUTH_SUCCESS Authentication is accepted.
+ * @returns SSH_AUTH_PARTIAL Partial authentication, more authentication means are needed.
+ * @returns SSH_AUTH_DENIED Authentication failed.
+ onst char* name,
+  const char* instruction, unsigned int num_prompts,
+  const char** prompts, char* echo*/
+typedef int (*ssh_auth_kbdint_start_callback) (ssh_session session, const char *username, const char **name, const char **instruction, uint32_t *nquestions, const char** questions, char *echo, void* userdata);
 
 /**
  * @brief SSH authentication callback. Tries to authenticates user with the "none" method
  * which is anonymous or passwordless.
  * @param session Current session handler
- * @param user User that wants to authenticate
+ * @param nanswers number of answers provided
+ * @param answers array of answers
  * @param userdata Userdata to be passed to the callback function.
  * @returns SSH_AUTH_SUCCESS Authentication is accepted.
  * @returns SSH_AUTH_PARTIAL Partial authentication, more authentication means are needed.
  * @returns SSH_AUTH_DENIED Authentication failed.
  */
-typedef int (*ssh_auth_kbdint_response_callback) (ssh_session session, uint32_t nanswers, const char **answers, void* userdata);
+typedef int (*ssh_auth_kbdint_reply_callback) (ssh_session session, uint32_t nanswers, const char** answers, void* userdata);
 
 /**
  * @brief Handles an SSH service request
@@ -360,10 +379,10 @@ struct ssh_server_callbacks_struct {
   /* This function gets called when a client tries to intiate 
    * keyboard-interactive method.
    */
-  ssh_auth_none_callback auth_kbdint_function;
+  ssh_auth_kbdint_start_callback auth_kbdint_start_function;
   /* This function gets called when a client replies to a kbdint auth info request.
    */
-  ssh_auth_kbdint_response_callback auth_kbdint_response_function;
+  ssh_auth_kbdint_reply_callback auth_kbdint_reply_function;
 };
 typedef struct ssh_server_callbacks_struct *ssh_server_callbacks;
 
