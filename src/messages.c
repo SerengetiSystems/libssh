@@ -151,11 +151,30 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
 
                 return SSH_OK;
             }
-			else if (msg->auth_request.method == SSH_AUTH_METHOD_UNKNOWN)
-			{   // auth messages must always b replied to with auth succeess or auth failure
-				ssh_message_reply_default(msg);
-				return SSH_OK;
-			}
+            else if (msg->auth_request.method == SSH_AUTH_METHOD_INTERACTIVE &&
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_function) &&
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_response_function) ){
+              if (ssh_message_auth_kbdint_is_response(msg))
+                rc = session->server_callbacks->auth_kbdint_response_function(session, session->kbdint->nanswers, session->kbdint->answers, session->server_callbacks->userdata);
+              else
+                rc = session->server_callbacks->auth_kbdint_function(session, msg->auth_request.username, session->server_callbacks->userdata);
+              if (rc == SSH_AUTH_INFO)
+              {
+                // do nothing, the auth_kbdint_function already sent the requested prompts
+              }
+              else if (rc == SSH_AUTH_SUCCESS || rc == SSH_AUTH_PARTIAL) {
+                ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
+              }
+              else {
+                ssh_message_reply_default(msg);
+              }
+              return SSH_OK;
+            }
+	    else if (msg->auth_request.method == SSH_AUTH_METHOD_UNKNOWN)
+	    {   // auth messages must always b replied to with auth succeess or auth failure
+		    ssh_message_reply_default(msg);
+		    return SSH_OK;
+	    }
             break;
         case SSH_REQUEST_CHANNEL_OPEN:
             if (msg->channel_request_open.type == SSH_CHANNEL_SESSION &&
