@@ -313,10 +313,6 @@ LIBSSH_API int ssh_message_auth_interactive_request(ssh_message msg,
                     const char *name, const char *instruction,
                     unsigned int num_prompts, const char **prompts, char *echo);
 
-LIBSSH_API int ssh_session_auth_interactive_request(ssh_session session,
-  const char* name, const char* instruction,
-  unsigned int num_prompts, const char** prompts, char* echo);
-
 LIBSSH_API int ssh_message_service_reply_success(ssh_message msg);
 LIBSSH_API const char *ssh_message_service_service(ssh_message msg);
 
