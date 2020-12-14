@@ -174,7 +174,7 @@ error:
 
 #define BLOCK(letter, n) do {ptr = strchr((const char *)alphabet, source[n]); \
                              if(!ptr) return -1; \
-                             i = ptr - (const char *)alphabet; \
+                             i = (unsigned int)(ptr - (const char *)alphabet); \
                              SET_##letter(*block, i); \
                          } while(0)
 
