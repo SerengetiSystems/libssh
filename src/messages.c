@@ -174,9 +174,10 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
               label:
                 {
                   uint32_t nquestions = 10;
-                  const char* questions[10], echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-                  const char* name, * instruction;
-                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, &questions, echo, session->server_callbacks->userdata);
+                  char * questions[10];
+                  char echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                  char * name, * instruction;
+                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, questions, echo, session->server_callbacks->userdata);
                   if (rc == SSH_AUTH_INFO)
                   {
                     ssh_message_auth_interactive_request(msg, name, instruction, nquestions, questions, echo);

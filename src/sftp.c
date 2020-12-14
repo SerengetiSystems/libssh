@@ -126,7 +126,7 @@ static const char* sftp_message_type(int t)
      return "SSH_FXP_EXTENDED_REPLY";
     //unknown
    default:
-     sprintf_s(buffer, "Unknown Message: %d", t);
+     sprintf(buffer, "Unknown Message: %d", t);
      return buffer;
   }
 }
@@ -842,7 +842,7 @@ const char *sftp_extensions_get_data(sftp_session sftp, unsigned int idx) {
 
 int sftp_extension_supported(sftp_session sftp, const char *name,
     const char *data) {
-  size_t i, n;
+  uint32_t i, n;
 
   if (sftp == NULL || name == NULL || data == NULL) {
     return 0;
@@ -1064,7 +1064,7 @@ sftp_dir sftp_opendir(sftp_session sftp, const char *path)
     sftp_status_message status;
     ssh_buffer payload;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (sftp == NULL) {
         return NULL;
@@ -1602,7 +1602,7 @@ sftp_attributes sftp_readdir(sftp_session sftp, sftp_dir dir)
     sftp_attributes attr;
     ssh_buffer payload;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (dir->buffer == NULL) {
         payload = ssh_buffer_new();
@@ -1736,7 +1736,7 @@ static int sftp_handle_close(sftp_session sftp, ssh_string handle)
     sftp_message msg = NULL;
     ssh_buffer buffer = NULL;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     buffer = ssh_buffer_new();
     if (buffer == NULL) {
@@ -1847,7 +1847,7 @@ sftp_file sftp_open(sftp_session sftp,
     sftp_attributes stat_data;
     uint32_t sftp_flags = 0;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     buffer = ssh_buffer_new();
     if (buffer == NULL) {
@@ -2120,7 +2120,7 @@ int sftp_async_read(sftp_file file, void *data, uint32_t size, uint32_t id){
   sftp_status_message status;
   ssh_string datastring;
   int err = SSH_OK;
-  uint32_t len;
+  size_t len;
 
   if (file == NULL) {
     return SSH_ERROR;
@@ -2471,7 +2471,7 @@ int sftp_mkdir(sftp_session sftp, const char *directory, mode_t mode)
     struct sftp_attributes_struct attr;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     buffer = ssh_buffer_new();
     if (buffer == NULL) {
@@ -2656,7 +2656,7 @@ int sftp_setstat(sftp_session sftp, const char *file, sftp_attributes attr)
     ssh_buffer buffer;
     sftp_message msg = NULL;
     sftp_status_message status = NULL;
-    int rc;
+    ssize_t rc;
 
     buffer = ssh_buffer_new();
     if (buffer == NULL) {
@@ -2872,7 +2872,7 @@ char *sftp_readlink(sftp_session sftp, const char *path)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (sftp == NULL) {
         return NULL;
@@ -2999,7 +2999,7 @@ sftp_statvfs_t sftp_statvfs(sftp_session sftp, const char *path)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (sftp == NULL)
         return NULL;
@@ -3083,7 +3083,7 @@ int sftp_fsync(sftp_file file)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (file == NULL) {
         return -1;
@@ -3183,7 +3183,7 @@ sftp_statvfs_t sftp_fstatvfs(sftp_file file)
     sftp_session sftp;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (file == NULL) {
         return NULL;
@@ -3268,7 +3268,7 @@ char *sftp_canonicalize_path(sftp_session sftp, const char *path)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (sftp == NULL)
         return NULL;
@@ -3358,7 +3358,7 @@ static sftp_attributes sftp_xstat(sftp_session sftp,
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (sftp == NULL) {
         return NULL;
@@ -3443,7 +3443,7 @@ sftp_attributes sftp_fstat(sftp_file file)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (file == NULL) {
         return NULL;
@@ -3516,7 +3516,7 @@ int sftp_fsetstat(sftp_file file, sftp_attributes attr)
     sftp_message msg = NULL;
     ssh_buffer buffer;
     uint32_t id;
-    int rc;
+    ssize_t rc;
 
     if (file == NULL) {
         return -1;
