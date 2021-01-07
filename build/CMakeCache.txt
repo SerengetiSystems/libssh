@@ -1,28 +1,5 @@
 BUILD_SHARED_LIBS:BOOL=OFF
 
-//Path to a library.
-LIB_EAY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libcrypto.lib
-
-//Path to a library.
-LIB_EAY_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libcrypto.lib
-
-//Path to a library.
-LIB_EAY_RELEASE:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/lib/libcrypto.lib
-
-//Path to a file.
-OPENSSL_INCLUDE_DIR:PATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/include
-
-OPENSSL_ROOT_DIR:PATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release
-
-//Path to a library.
-SSL_EAY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libssl.lib
-
-//Path to a library.
-SSL_EAY_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Debug/lib/libssl.lib
-
-//Path to a library.
-SSL_EAY_RELEASE:FILEPATH=C:/Development/Dependencies/OpenSSL/VS16.0-WIN32-Release/lib/libssl.lib
-
 //Compile with blowfish support
 WITH_BLOWFISH_CIPHER:BOOL=ON
 
@@ -59,9 +36,5 @@ WITH_SYMBOL_VERSIONING:BOOL=ON
 //Build with ZLIB support
 WITH_ZLIB:BOOL=ON
 
-ZLIB_INCLUDE_DIR:PATH=C:/Development/Dependencies/zlib-1.2.11
-
-ZLIB_LIBRARY_DEBUG:FILEPATH=C:/Development/Dependencies/zlib-1.2.11/contrib/vstudio/vc16.0/x86/ZlibStatDebug/zlibstat.lib
-
-ZLIB_LIBRARY_RELEASE:FILEPATH=C:/Development/Dependencies/zlib-1.2.11/contrib/vstudio/vc16.0/x86/ZlibStatReleaseWithoutAsm/zlibstat.lib
-
+//Build with OpenSSL support
+WITH_OPENSSL:BOOL=ON

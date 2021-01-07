@@ -1,17 +1,14 @@
-@echo off
-SETLOCAL ENABLEEXTENSIONS
-SETLOCAL DISABLEDELAYEDEXPANSION
+@echo on
+SETLOCAL 
 pushd %~dp0
-mkdir "vs-16.0-x86"
-copy CMakeCache.txt "vs-16.0-x86"
-mkdir "vs-16.0-x64"
-del "vs-16.0-x64\CMakeCache.txt"
-for /f "tokens=1,* delims=]" %%A in ('"type CMakeCache.txt|find /n /v """') do (
-    set "line=%%B"
-    if defined line (
-        call set "line=echo.%%line:32=64%%"
-        call set "line=echo.%%line:86=64%%"
-        for /f "delims=" %%X in ('"%%line%%"') do %%~X >> "vs-16.0-x64\CMakeCache.txt"
-    ) ELSE echo.
+pushd ..\..\vcpkg\scripts\buildsystems
+set t=%CD%\vcpkg.cmake
+set tcf=%t:\=/%
+popd
+for %%p in (x86,x64) do (
+  rmdir /q /s vs-16.0-%%p
+  mkdir vs-16.0-%%p
+  echo CMAKE_TOOLCHAIN_FILE:FILEPATH=%tcf% > vs-16.0-%%p\CMakeCache.txt
+  type CMakeCache.txt >> vs-16.0-%%p\CmakeCache.txt
 )
 popd
