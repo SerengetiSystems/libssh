@@ -1,6 +1,8 @@
 @echo on
 SETLOCAL 
 pushd %~dp0
+FOR /F %%i IN ('DIR /B /O:D') DO SET NEWEST=%%i
+IF "%NEWEST:~0,3%"=="vs-" goto end
 pushd ..\..\vcpkg\scripts\buildsystems
 set t=%CD%\vcpkg.cmake
 set tcf=%t:\=/%
@@ -11,4 +13,6 @@ for %%p in (x86,x64) do (
   echo CMAKE_TOOLCHAIN_FILE:FILEPATH=%tcf% > vs-16.0-%%p\CMakeCache.txt
   type CMakeCache.txt >> vs-16.0-%%p\CmakeCache.txt
 )
+:end
 popd
+endlocal
