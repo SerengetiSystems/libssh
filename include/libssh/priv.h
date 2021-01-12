@@ -193,7 +193,7 @@ int gettimeofday(struct timeval *__p, void *__t);
 #endif
 
 #ifndef CLIENT_BANNER_SSH2
-#define CLIENT_BANNER_SSH2 "SSH-2.0-libssh_" SSH_STRINGIFY(LIBSSH_VERSION)
+#define CLIENT_BANNER_SSH2 "SSH-2.0-libssh_" SSH_STRINGIFY(LIBSSH_VERSION) "-RoboServer-3.6"
 #endif /* CLIENT_BANNER_SSH2 */
 
 #ifndef KBDINT_MAX_PROMPT
