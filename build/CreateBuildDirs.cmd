@@ -16,6 +16,10 @@ for %%p in (x86,x64) do (
   pushd vs-16.0-%%p
   "C:\Program Files\CMake\bin\CMake.exe" ..\.. -G "Visual Studio 16 2019" -A !t! 
   popd
+  rem popd doesn't set errorlevel unless it fails
+  rem rem we need to remove the directory on error so 
+  rem when the problem is fixed this script will try again
+  IF ERRORLEVEL 1 rmdir /q /s vs-16-%%p
 )
 :end
 popd
