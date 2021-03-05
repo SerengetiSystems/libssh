@@ -779,6 +779,8 @@ int ssh_kex_select_methods (ssh_session session)
     }
 
     for (i = 0; i < SSH_KEX_METHODS; i++) {
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "(server) %s: %s", ssh_kex_descriptions[i], server->methods[i]);
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "(client) %s: %s", ssh_kex_descriptions[i], client->methods[i]);
         session->next_crypto->kex_methods[i]=ssh_find_matching(server->methods[i],client->methods[i]);
 
         if (i == SSH_MAC_C_S || i == SSH_MAC_S_C) {
