@@ -2669,6 +2669,37 @@ ssh_string ssh_pki_do_sign_agent(ssh_session session,
 #endif /* _WIN32 */
 
 #ifdef WITH_SERVER
+//these functions are needed to verify key types before using them on the bind member of server
+LIBSSH_API const char* ssh_key_type_name(const ssh_key key)
+{
+  return key->type_c;
+}
+
+LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key)
+{
+  return is_ecdsa_key_type(key);
+}
+
+LIBSSH_API int ssh_key_is_cert(const ssh_key key)
+{
+  return is_cert_type(key);
+}
+
+LIBSSH_API int ssh_key_is_dsa(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_DSS;
+}
+
+LIBSSH_API int ssh_key_is_rsa(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_RSA;
+}
+
+LIBSSH_API int ssh_key_is_ed25519(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_ED25519;
+}
+
 ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
                                          const ssh_key privkey,
                                          const enum ssh_digest_e digest)

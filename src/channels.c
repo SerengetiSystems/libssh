@@ -1657,6 +1657,16 @@ uint32_t ssh_channel_window_size(ssh_channel channel) {
     return channel->remote_window;
 }
 
+uint32_t ssh_channel_local_packet_size(ssh_channel channel)
+{
+  return channel->local_maxpacket;
+}
+
+uint32_t ssh_channel_remote_packet_size(ssh_channel channel)
+{
+  return channel->remote_maxpacket;
+}
+
 /**
  * @brief Blocking write on a channel.
  *
