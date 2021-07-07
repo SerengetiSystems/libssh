@@ -799,7 +799,7 @@ void ssh_print_hash(enum ssh_publickey_hash_type type,
         return;
     }
 
-	SSH_LOG(SSH_LOG_CRYPTO, fingerprint);
+    SSH_LOG(SSH_LOG_CRYPTO, "%s", fingerprint);
 
     SAFE_FREE(fingerprint);
 }

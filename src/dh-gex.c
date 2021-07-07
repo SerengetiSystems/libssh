@@ -478,7 +478,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
             if (rc == EOF) {
                 break;
             }
-			SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line " SIZET_SPECIFIER, line);
+			SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line %u", line);
             do {
                 firstbyte = getc(moduli);
             } while(firstbyte != '\n' && firstbyte != EOF);
@@ -517,7 +517,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
     }
     if (*best_size != 0) {
         SSH_LOG(SSH_LOG_INFO,
-                "Selected %u bits modulus out of %u candidates in %u lines",
+                "Selected %zu bits modulus out of %u candidates in %u lines",
                 *best_size,
                 best_nlines - 1,
                 line);
@@ -634,6 +634,11 @@ void ssh_server_dhgex_init(ssh_session session){
     ssh_dh_init_common(session->next_crypto);
     session->dh_handshake_state = DH_STATE_INIT;
 }
+
+#ifndef min
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
+#endif
 
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
 {

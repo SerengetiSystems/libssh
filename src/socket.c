@@ -66,15 +66,6 @@
  * @{
  */
 
-enum ssh_socket_states_e {
-	SSH_SOCKET_NONE,
-	SSH_SOCKET_CONNECTING,
-	SSH_SOCKET_CONNECTED,
-	SSH_SOCKET_EOF,
-	SSH_SOCKET_ERROR,
-	SSH_SOCKET_CLOSED
-};
-
 static int sockets_initialized = 0;
 
 static ssize_t ssh_socket_unbuffered_read(ssh_socket s,

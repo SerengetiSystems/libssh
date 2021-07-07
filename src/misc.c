@@ -460,7 +460,7 @@ void ssh_print_hexa(const char *descr, const unsigned char *what, size_t len) {
     if (hexa == NULL) {
       return;
     }
-	_ssh_log(SSH_LOG_CRYPTO, descr, hexa);
+    _ssh_log(SSH_LOG_CRYPTO, descr, "%s", hexa);
 
     free(hexa);
 }
@@ -542,7 +542,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         return;
     } else {
         printed = snprintf(buffer + count, sizeof(buffer) - count,
-			"(%"PRIuS" bytes):", len);
+			"(%zu bytes):", len);
         if (printed < 0) {
             goto error;
         }
@@ -591,7 +591,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-				"  %08x" ", i);
+				"  %08x ", i);
             if (printed < 0) {
                 goto error;
             }
