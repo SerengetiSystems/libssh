@@ -66,7 +66,6 @@
  * @{
  */
 
-
 static int sockets_initialized = 0;
 
 static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
@@ -227,7 +226,7 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
     if (!ssh_socket_is_open(s)) {
         return -1;
     }
-    SSH_LOG(SSH_LOG_TRACE, "Poll callback on socket %d (%s%s%s), out buffer %d",fd,
+    SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "Poll callback on socket %d (%s%s%s), out buffer %d",fd,
             (revents & POLLIN) ? "POLLIN ":"",
             (revents & POLLOUT) ? "POLLOUT ":"",
             (revents & POLLERR) ? "POLLERR":"",
@@ -269,7 +268,7 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
 			if (s->last_errno == EAGAIN)
 #endif
 			{
-				SSH_LOG(SSH_LOG_TRACE, "Socket unexpectedly returned EAGAIN");
+				SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "Socket unexpectedly returned EAGAIN");
 				//skip this socket as it will block
 				s->read_wontblock = 0;
 				return -2;
@@ -332,7 +331,7 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
 
         /* First, POLLOUT is a sign we may be connected */
         if (s->state == SSH_SOCKET_CONNECTING) {
-            SSH_LOG(SSH_LOG_PACKET, "Received POLLOUT in connecting state");
+            SSH_LOG_COMMON(s->session, SSH_LOG_PACKET, "Received POLLOUT in connecting state");
             s->state = SSH_SOCKET_CONNECTED;
             if (p != NULL) {
                 ssh_poll_set_events(p, POLLOUT | POLLIN);
@@ -367,7 +366,7 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
             ssh_socket_nonblocking_flush(s);
         } else if (s->callbacks != NULL && s->callbacks->controlflow != NULL) {
             /* Otherwise advertise the upper level that write can be done */
-            SSH_LOG(SSH_LOG_TRACE,"sending control flow event");
+            SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "sending control flow event");
             s->callbacks->controlflow(SSH_SOCKET_FLOW_WRITEWONTBLOCK,
                                       s->callbacks->userdata);
         }
@@ -484,15 +483,15 @@ void ssh_socket_close(ssh_socket s){
         kill(pid, SIGTERM);
         while (waitpid(pid, &status, 0) == -1) {
             if (errno != EINTR) {
-                SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
+                SSH_LOG_COMMON(s->session, SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
                 return;
             }
         }
         if (!WIFEXITED(status)) {
-            SSH_LOG(SSH_LOG_WARN, "Proxy command exitted abnormally");
+            SSH_LOG_COMMON(s->session, SSH_LOG_WARN, "Proxy command exitted abnormally");
             return;
         }
-        SSH_LOG(SSH_LOG_TRACE, "Proxy command returned %d", WEXITSTATUS(status));
+        SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "Proxy command returned %d", WEXITSTATUS(status));
     }
 #endif
 }
@@ -605,7 +604,7 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
 		s->write_wontblock = 0;
     /* Reactive the POLLOUT detector in the poll multiplexer system */
     if (s->poll_handle) {
-        SSH_LOG(SSH_LOG_PACKET, "Enabling POLLOUT for socket");
+        SSH_LOG_COMMON(s->session, SSH_LOG_PACKET, "Enabling POLLOUT for socket");
         ssh_poll_set_events(s->poll_handle,ssh_poll_get_events(s->poll_handle) | POLLOUT);
     }
     if (w < 0) {
@@ -865,7 +864,7 @@ int ssh_socket_connect(ssh_socket s,
         return SSH_ERROR;
     }
     fd = ssh_connect_host_nonblocking(s->session, host, bind_addr, port);
-    SSH_LOG(SSH_LOG_PROTOCOL, "Nonblocking connection socket: %d", fd);
+    SSH_LOG_COMMON(s->session, SSH_LOG_PROTOCOL, "Nonblocking connection socket: %d", fd);
     if (fd == SSH_INVALID_SOCKET) {
         return SSH_ERROR;
     }
@@ -942,7 +941,7 @@ ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
         return SSH_ERROR;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "Executing proxycommand '%s'", command);
+    SSH_LOG_COMMON(s->session, SSH_LOG_PROTOCOL, "Executing proxycommand '%s'", command);
     pid = fork();
     if (pid == 0) {
         ssh_execute_command(command, pair[0], pair[0]);
@@ -950,7 +949,7 @@ ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
     }
     s->proxy_pid = pid;
     close(pair[0]);
-    SSH_LOG(SSH_LOG_PROTOCOL, "ProxyCommand connection pipe: [%d,%d]",pair[0],pair[1]);
+    SSH_LOG_COMMON(s->session, SSH_LOG_PROTOCOL, "ProxyCommand connection pipe: [%d,%d]",pair[0],pair[1]);
     ssh_socket_set_fd(s, pair[1]);
     s->state=SSH_SOCKET_CONNECTED;
     s->fd_is_socket=0;

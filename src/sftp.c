@@ -65,9 +65,19 @@ struct sftp_ext_struct {
   char **data;
 };
 
+#ifdef __GNUC__
+# define thread_local __thread
+#elif __STDC_VERSION__ >= 201112L
+# define thread_local _Thread_local
+#elif defined(_MSC_VER)
+# define thread_local __declspec(thread)
+#else
+# error Cannot define thread_local
+#endif
+
 static const char* sftp_message_type(int t)
 {
-  __declspec(thread) static char buffer[64];
+  static thread_local char buffer[64];
   switch (t)
   {
    //requests
