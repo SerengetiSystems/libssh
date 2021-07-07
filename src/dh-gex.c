@@ -310,7 +310,7 @@ error:
 static const char *moduli_file = DEFAULT_MODULI_FILE;
 
 //dont' let file go out of scope or this will break
-int ssh_set_moduli(const char *file)
+LIBSSH_API int ssh_set_moduli(const char *file)
 {
 	char timestamp[32] = { 0 };
 	char generator[32] = { 0 };

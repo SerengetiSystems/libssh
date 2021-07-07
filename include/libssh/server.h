@@ -301,6 +301,14 @@ LIBSSH_API const char *ssh_message_auth_password(ssh_message msg);
  */
 LIBSSH_API ssh_key ssh_message_auth_pubkey(ssh_message msg);
 
+//functions to inspect keys
+LIBSSH_API const char* ssh_key_type_name(const ssh_key key);
+LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_cert(const ssh_key key);
+LIBSSH_API int ssh_key_is_dsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_rsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_ed25519(const ssh_key key);
+
 LIBSSH_API int ssh_message_auth_kbdint_is_response(ssh_message msg);
 LIBSSH_API enum ssh_publickey_state_e ssh_message_auth_publickey_state(ssh_message msg);
 LIBSSH_API int ssh_message_auth_reply_success(ssh_message msg,int partial);
@@ -371,6 +379,8 @@ LIBSSH_API int ssh_send_keepalive(ssh_session session);
 SSH_DEPRECATED LIBSSH_API int ssh_accept(ssh_session session);
 SSH_DEPRECATED LIBSSH_API int channel_write_stderr(ssh_channel channel,
         const void *data, uint32_t len);
+
+LIBSSH_API int ssh_set_moduli(const char* file);
 
 #ifdef __cplusplus
 }

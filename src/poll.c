@@ -85,18 +85,11 @@ struct ssh_poll_ctx_struct {
   void* poll_cb_data;
 };
 
-static poll_fn ssh_poll_emu;
+
 
 #ifdef HAVE_POLL
 #include <poll.h>
-
-void ssh_poll_init(void) {
-	ssh_poll_emu = poll;
-}
-
-void ssh_poll_cleanup(void) {
-	ssh_poll_emu = poll;
-}
+static poll_fn ssh_poll_emu = poll;
 
 #else /* HAVE_POLL */
 
@@ -317,20 +310,9 @@ static int bsd_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout)
     return rc;
 }
 
-void ssh_poll_init(void) {
-    ssh_poll_emu = bsd_poll;
-}
-
-void ssh_poll_cleanup(void) {
-    ssh_poll_emu = bsd_poll;
-}
+static poll_fn ssh_poll_emu = bsd_poll;
 
 #endif /* HAVE_POLL */
-
-void ssh_poll_set(poll_fn mypoll)
-{
-	ssh_poll_emu = mypoll;
-}
 
 int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout) {
 	return (ssh_poll_emu)(fds, nfds, timeout);

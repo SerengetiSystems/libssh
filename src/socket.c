@@ -89,8 +89,6 @@ int ssh_socket_init(void)
             return -1;
         }
 #endif
-        ssh_poll_init();
-
         sockets_initialized = 1;
     }
 
@@ -103,7 +101,6 @@ int ssh_socket_init(void)
 void ssh_socket_cleanup(void)
 {
     if (sockets_initialized == 1) {
-        ssh_poll_cleanup();
 #ifdef _WIN32
         WSACleanup();
 #endif

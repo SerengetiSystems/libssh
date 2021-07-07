@@ -22,26 +22,33 @@
 #define POLL_H_
 
 #include "config.h"
+#include "callbacks.h"
 
 #ifdef HAVE_POLL
 
 #include <poll.h>
 typedef struct pollfd ssh_pollfd_t;
 
-#else /* HAVE_POLL */
+#else
+# if defined(_WIN32) && !defined(_WIN32_WINNT)
+#include <Windows.h>
+# endif
+# if(_WIN32_WINNT >= 0x0600)
+#include <WinSock2.h>
 
-/* poll emulation support */
+typedef struct pollfd ssh_pollfd_t;
 
-typedef struct ssh_pollfd_struct {
+typedef int nfds_t;
+# else
+typedef struct pollfd {
   socket_t fd;      /* file descriptor */
   short events;     /* requested events */
   short revents;    /* returned events */
 } ssh_pollfd_t;
 
-typedef unsigned long int nfds_t;
+typedef unsigned long nfds_t;
 
 #ifdef _WIN32
-
 #ifndef POLLRDNORM
 #define POLLRDNORM  0x0100
 #endif
@@ -112,14 +119,11 @@ typedef unsigned long int nfds_t;
 #endif
 
 #endif /* WIN32 */
+# endif //_WIN32_WINNT >= 0x0600
 #endif /* HAVE_POLL */
 
 typedef int(*poll_fn)(ssh_pollfd_t*, nfds_t, int);
-typedef int(*ctx_poll_fn)(ssh_pollfd_t*, nfds_t, int, void *userdata);
 
-void ssh_poll_init(void);
-void ssh_poll_cleanup(void);
-void ssh_poll_set(poll_fn mypoll);
 int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout);
 typedef struct ssh_poll_ctx_struct *ssh_poll_ctx;
 typedef struct ssh_poll_handle_struct *ssh_poll_handle;

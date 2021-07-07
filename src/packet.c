@@ -1752,7 +1752,7 @@ ssh_packet_is_kex(unsigned char type)
            type != SSH2_MSG_EXT_INFO;
 }
 
-bool
+int
 ssh_packet_in_rekey(ssh_session session)
 {
     /* We know we are rekeying if we are authenticated and the DH
