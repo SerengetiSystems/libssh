@@ -523,6 +523,10 @@ LIBSSH_API int ssh_channel_listen_forward(ssh_session session,
 LIBSSH_API void ssh_free(ssh_session session);
 LIBSSH_API const char *ssh_get_disconnect_message(ssh_session session);
 LIBSSH_API const char *ssh_get_error(void *error);
+LIBSSH_API void _ssh_set_error(void* error,
+                               int code,
+                               const char* function,
+                               const char* descr, ...);
 LIBSSH_API int ssh_get_error_code(void *error);
 LIBSSH_API socket_t ssh_get_fd(ssh_session session);
 LIBSSH_API char *ssh_get_hexa(const unsigned char *what, size_t len);

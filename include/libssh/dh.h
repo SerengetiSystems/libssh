@@ -69,7 +69,7 @@ int ssh_client_dh_init(ssh_session session);
 void ssh_server_dh_init(ssh_session session);
 #endif /* WITH_SERVER */
 
-int ssh_set_moduli(const char *file);
+LIBSSH_API int ssh_set_moduli(const char *file);
 
 int ssh_dh_generate_secret(ssh_session session, bignum dest);
 int ssh_server_dh_process_init(ssh_session session, ssh_buffer packet);
