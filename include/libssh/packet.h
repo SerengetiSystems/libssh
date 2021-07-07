@@ -88,6 +88,7 @@ int ssh_packet_set_newkeys(ssh_session session,
 struct ssh_crypto_struct *ssh_packet_get_current_crypto(ssh_session session,
         enum ssh_crypto_direction_e direction);
 
+LIBSSH_API bool ssh_packet_in_rekey(ssh_session session);
 int ssh_queue_send(ssh_session session);
 
 
