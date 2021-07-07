@@ -591,7 +591,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-				"  %08x ", i);
+				"  %08x ", (uint32_t)i);
             if (printed < 0) {
                 goto error;
             }
