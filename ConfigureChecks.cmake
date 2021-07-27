@@ -296,6 +296,9 @@ if (UNIT_TESTING)
 endif ()
 
 # OPTIONS
+
+if (WITH_THREADLOCAL_LOGGING)
+
 check_c_source_compiles("
 __thread int tls;
 
@@ -309,6 +312,8 @@ __declspec(thread) int tls;
 int main(void) {
     return 0;
 }" HAVE_MSC_THREAD_LOCAL_STORAGE)
+
+endif()
 
 ###########################################################
 # For detecting attributes we need to treat warnings as
