@@ -22,6 +22,7 @@ option(WITH_ABI_BREAK "Allow ABI break" OFF)
 option(WITH_GEX "Enable DH Group exchange mechanisms" ON)
 option(FUZZ_TESTING "Build with fuzzer for the server" OFF)
 option(PICKY_DEVELOPER "Build with picky developer flags" OFF)
+option(WITH_THREADLOCAL_LOGGING "Define logging functions thread local" OFF)
 
 if (WITH_ZLIB)
     set(WITH_LIBZ ON)
