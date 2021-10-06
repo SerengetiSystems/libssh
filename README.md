@@ -12,9 +12,9 @@
  The SSH library
 
 ```
-# Cedral's Why?
+# Serengeti Systems Why?
 
-I needed a coroutines capable version of this library. Which required 
+We needed a coroutines capable version of this library. Which required 
 suspending on read or write block. So I added external send, recv, and close functions. 
 You do this by calling 
 ```
