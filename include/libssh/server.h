@@ -381,8 +381,6 @@ SSH_DEPRECATED LIBSSH_API int ssh_accept(ssh_session session);
 SSH_DEPRECATED LIBSSH_API int channel_write_stderr(ssh_channel channel,
         const void *data, uint32_t len);
 
-LIBSSH_API int ssh_set_moduli(const char* file);
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

@@ -323,62 +323,6 @@ error:
 /* 0x04  Probabilistic Miller-Rabin primality tests. */
 #define PRIM_TEST_REQUIRED 0x04
 
-static const char *moduli_file = DEFAULT_MODULI_FILE;
-
-//dont' let file go out of scope or this will break
-LIBSSH_API int ssh_set_moduli(const char *file)
-{
-	char timestamp[32] = { 0 };
-	char generator[32] = { 0 };
-	char modulus[4096] = { 0 };
-	unsigned int type, tests, tries, size;
-	int firstbyte;
-	int rc;
-	size_t line = 0;
-	FILE *moduli = fopen(file, "r");
-	if (moduli == NULL) {
-		SSH_LOG(SSH_LOG_WARNING,
-			"Unable to open moduli file: %s",
-			strerror(errno));
-		return SSH_ERROR;
-	}
-	for (;;) {
-		line++;
-		firstbyte = getc(moduli);
-		if (firstbyte == '#'){
-			do {
-				firstbyte = getc(moduli);
-			} while (firstbyte != '\n' && firstbyte != EOF);
-			continue;
-		}
-		if (firstbyte == EOF) {
-			SSH_LOG(SSH_LOG_WARNING,
-				"Unable to read moduli file");
-			return SSH_ERROR;
-		}
-		ungetc(firstbyte, moduli);
-		rc = fscanf(moduli,
-			"%31s %u %u %u %u %31s %4095s\n",
-			timestamp,
-			&type,
-			&tests,
-			&tries,
-			&size,
-			generator,
-			modulus);
-		if (rc != 7){
-			SSH_LOG(SSH_LOG_WARNING,
-				"Unable to parse moduli file");
-			return SSH_ERROR;
-		}
-		else
-			break;
-	}
-	fclose(moduli);
-	moduli_file = file;
-	return 0;
-}
-
 /**
  * @internal
  *

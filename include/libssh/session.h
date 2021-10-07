@@ -70,15 +70,6 @@ enum ssh_pending_call_e {
 	SSH_PENDING_CALL_AUTH_GSSAPI_MIC
 };
 
-enum ssh_socket_states_e {
-        SSH_SOCKET_NONE,
-        SSH_SOCKET_CONNECTING,
-        SSH_SOCKET_CONNECTED,
-        SSH_SOCKET_EOF,
-        SSH_SOCKET_ERROR,
-        SSH_SOCKET_CLOSED
-};
-
 /* libssh calls may block an undefined amount of time */
 #define SSH_SESSION_FLAG_BLOCKING 1
 
