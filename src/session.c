@@ -62,7 +62,7 @@ ssh_session ssh_new(void)
     char *id = NULL;
     int rc;
 
-    session = calloc(1, sizeof (struct ssh_session_struct));
+    session = (ssh_session)calloc(1, sizeof (struct ssh_session_struct));
     if (session == NULL) {
         return NULL;
     }
@@ -504,7 +504,7 @@ int ssh_is_blocking(ssh_session session)
 
 /* Waits until the output socket is empty */
 static int ssh_flush_termination(void *c){
-  ssh_session session = c;
+  ssh_session session = (ssh_session)c;
   if (ssh_socket_buffered_write_bytes(session->socket) == 0 ||
       session->session_state == SSH_SESSION_STATE_ERROR)
     return 1;
@@ -1002,7 +1002,7 @@ int ssh_get_pubkey_hash(ssh_session session, unsigned char **hash)
         return SSH_ERROR;
     }
 
-    h = calloc(MD5_DIGEST_LEN, sizeof(unsigned char));
+    h = (unsigned char*)calloc(MD5_DIGEST_LEN, sizeof(unsigned char));
     if (h == NULL) {
         return SSH_ERROR;
     }
@@ -1137,7 +1137,7 @@ int ssh_get_publickey_hash(const ssh_key key,
         {
             SHACTX ctx;
 
-            h = calloc(1, SHA_DIGEST_LEN);
+            h = (unsigned char*)calloc(1, SHA_DIGEST_LEN);
             if (h == NULL) {
                 rc = -1;
                 goto out;
@@ -1160,7 +1160,7 @@ int ssh_get_publickey_hash(const ssh_key key,
         {
             SHA256CTX ctx;
 
-            h = calloc(1, SHA256_DIGEST_LEN);
+            h = (unsigned char*)calloc(1, SHA256_DIGEST_LEN);
             if (h == NULL) {
                 rc = -1;
                 goto out;
@@ -1191,7 +1191,7 @@ int ssh_get_publickey_hash(const ssh_key key,
                 goto out;
             }
 
-            h = calloc(1, MD5_DIGEST_LEN);
+            h = (unsigned char*)calloc(1, MD5_DIGEST_LEN);
             if (h == NULL) {
                 rc = -1;
                 goto out;

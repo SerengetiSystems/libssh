@@ -44,7 +44,7 @@ static z_stream *initcompress(ssh_session session, int level) {
   z_stream *stream = NULL;
   int status;
 
-  stream = calloc(1, sizeof(z_stream));
+  stream = (z_stream*)calloc(1, sizeof(z_stream));
   if (stream == NULL) {
     return NULL;
   }
@@ -75,9 +75,9 @@ static ssh_buffer gzip_compress(ssh_session session, ssh_buffer source, int leve
   if (crypto == NULL) {
       return NULL;
   }
-  zout = crypto->compress_out_ctx;
+  zout = (z_stream*)crypto->compress_out_ctx;
   if (zout == NULL) {
-    zout = crypto->compress_out_ctx = initcompress(session, level);
+    crypto->compress_out_ctx = zout = initcompress(session, level);
     if (zout == NULL) {
       return NULL;
     }
@@ -89,7 +89,7 @@ static ssh_buffer gzip_compress(ssh_session session, ssh_buffer source, int leve
   }
 
   zout->next_out = out_buf;
-  zout->next_in = in_ptr;
+  zout->next_in = (Bytef*)in_ptr;
   zout->avail_in = in_size;
   do {
     zout->avail_out = BLOCKSIZE;
@@ -139,7 +139,7 @@ static z_stream *initdecompress(ssh_session session) {
   z_stream *stream = NULL;
   int status;
 
-  stream = calloc(1, sizeof(z_stream));
+  stream = (z_stream*)calloc(1, sizeof(z_stream));
   if (stream == NULL) {
     return NULL;
   }
@@ -171,9 +171,9 @@ static ssh_buffer gzip_decompress(ssh_session session, ssh_buffer source, size_t
       return NULL;
   }
 
-  zin = crypto->compress_in_ctx;
+  zin = (z_stream*)crypto->compress_in_ctx;
   if (zin == NULL) {
-    zin = crypto->compress_in_ctx = initdecompress(session);
+    crypto->compress_in_ctx = zin = initdecompress(session);
     if (zin == NULL) {
       return NULL;
     }
@@ -185,7 +185,7 @@ static ssh_buffer gzip_decompress(ssh_session session, ssh_buffer source, size_t
   }
 
   zin->next_out = out_buf;
-  zin->next_in = in_ptr;
+  zin->next_in = (Bytef*)in_ptr;
   zin->avail_in = in_size;
 
   do {

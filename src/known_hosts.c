@@ -470,7 +470,7 @@ char * ssh_dump_knownhost(ssh_session session) {
         return NULL;
     }
 
-    buffer = calloc (1, MAX_LINE_SIZE);
+    buffer = (char*)calloc (1, MAX_LINE_SIZE);
     if (!buffer) {
         SAFE_FREE(host);
         return NULL;

@@ -62,7 +62,7 @@ struct ssh_string_struct *ssh_string_new(size_t size)
         return NULL;
     }
 
-    str = malloc(sizeof(struct ssh_string_struct) + size);
+    str = (struct ssh_string_struct*)malloc(sizeof(struct ssh_string_struct) + size);
     if (str == NULL) {
         return NULL;
     }
@@ -180,7 +180,7 @@ const char *ssh_string_get_char(struct ssh_string_struct *s)
  */
 char *ssh_string_to_char(struct ssh_string_struct *s) {
   size_t len;
-  char *new;
+  char *new_str;
 
   if (s == NULL) {
       return NULL;
@@ -191,14 +191,14 @@ char *ssh_string_to_char(struct ssh_string_struct *s) {
     return NULL;
   }
 
-  new = malloc(len + 1);
-  if (new == NULL) {
+  new_str = (char*)malloc(len + 1);
+  if (new_str == NULL) {
     return NULL;
   }
-  memcpy(new, s->data, len);
-  new[len] = '\0';
+  memcpy(new_str, s->data, len);
+  new_str[len] = '\0';
 
-  return new;
+  return new_str;
 }
 
 /**
@@ -219,7 +219,7 @@ void ssh_string_free_char(char *s) {
  * @return              Newly allocated copy of the string, NULL on error.
  */
 struct ssh_string_struct *ssh_string_copy(struct ssh_string_struct *s) {
-  struct ssh_string_struct *new;
+  struct ssh_string_struct *new_str;
   size_t len;
 
   if (s == NULL) {
@@ -231,14 +231,14 @@ struct ssh_string_struct *ssh_string_copy(struct ssh_string_struct *s) {
       return NULL;
   }
 
-  new = ssh_string_new(len);
-  if (new == NULL) {
+  new_str = ssh_string_new(len);
+  if (new_str == NULL) {
     return NULL;
   }
 
-  memcpy(new->data, s->data, len);
+  memcpy(new_str->data, s->data, len);
 
-  return new;
+  return new_str;
 }
 
 /**

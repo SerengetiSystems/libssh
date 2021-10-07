@@ -896,7 +896,7 @@ int ssh_scp_deny_request(ssh_scp scp, const char *reason)
     }
 
     len = strlen(reason) + 3;
-    buffer = malloc(len);
+    buffer = (char*)malloc(len);
     if (buffer == NULL) {
         return SSH_ERROR;
     }

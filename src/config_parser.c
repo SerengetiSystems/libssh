@@ -174,7 +174,7 @@ int ssh_config_parse_uri(const char *tok,
         char **hostname,
         char **port)
 {
-    char *endp = NULL;
+    const char *endp = NULL;
     long port_n;
 
     /* Sanitize inputs */

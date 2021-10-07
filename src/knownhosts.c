@@ -114,7 +114,7 @@ static int match_hashed_hostname(const char *host, const char *hashed_host)
     }
 
     rc = hash_hostname(host,
-                       ssh_buffer_get(salt),
+                       (unsigned char*)ssh_buffer_get(salt),
                        ssh_buffer_get_len(salt),
                        &hashed_buf_ptr,
                        &hashed_buf_size);
@@ -637,7 +637,7 @@ int ssh_known_hosts_parse_line(const char *hostname,
         return SSH_ERROR;
     }
 
-    e = calloc(1, sizeof(struct ssh_knownhosts_entry));
+    e = (ssh_knownhosts_entry*)calloc(1, sizeof(struct ssh_knownhosts_entry));
     if (e == NULL) {
         free(known_host);
         return SSH_ERROR;
@@ -749,7 +749,7 @@ int ssh_known_hosts_parse_line(const char *hostname,
     /* comment */
     p = strtok(NULL, " ");
     if (p != NULL) {
-        p = strstr(line, p);
+        p = (char*)strstr(line, p);
         if (p != NULL) {
             e->comment = strdup(p);
             if (e->comment == NULL) {

@@ -95,7 +95,7 @@ int ssh_client_ecdh_init(ssh_session session){
   }
 
   EC_POINT_point2oct(group,pubkey,POINT_CONVERSION_UNCOMPRESSED,
-      ssh_string_data(client_pubkey),len,ctx);
+      (unsigned char*)ssh_string_data(client_pubkey),len,ctx);
   BN_CTX_free(ctx);
 
   rc = ssh_buffer_add_ssh_string(session->out_buffer,client_pubkey);
@@ -137,13 +137,13 @@ int ecdh_build_k(ssh_session session) {
   if (session->server) {
       rc = EC_POINT_oct2point(group,
                               pubkey,
-                              ssh_string_data(session->next_crypto->ecdh_client_pubkey),
+                              (const unsigned char*)ssh_string_data(session->next_crypto->ecdh_client_pubkey),
                               ssh_string_len(session->next_crypto->ecdh_client_pubkey),
                               ctx);
   } else {
       rc = EC_POINT_oct2point(group,
                               pubkey,
-                              ssh_string_data(session->next_crypto->ecdh_server_pubkey),
+                              (const unsigned char*)ssh_string_data(session->next_crypto->ecdh_server_pubkey),
                               ssh_string_len(session->next_crypto->ecdh_server_pubkey),
                               ctx);
   }
@@ -170,7 +170,7 @@ int ecdh_build_k(ssh_session session) {
       return -1;
   }
 
-  bignum_bin2bn(buffer, len, &session->next_crypto->shared_secret);
+  bignum_bin2bn((const unsigned char*)buffer, len, &session->next_crypto->shared_secret);
   free(buffer);
   if (session->next_crypto->shared_secret == NULL) {
       EC_KEY_free(session->next_crypto->ecdh_privkey);
@@ -262,7 +262,7 @@ SSH_PACKET_CALLBACK(ssh_packet_server_ecdh_init){
     EC_POINT_point2oct(group,
                        ecdh_pubkey,
                        POINT_CONVERSION_UNCOMPRESSED,
-                       ssh_string_data(q_s_string),
+                       (unsigned char*)ssh_string_data(q_s_string),
                        len,
                        ctx);
     BN_CTX_free(ctx);

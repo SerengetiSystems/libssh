@@ -757,7 +757,7 @@ char *ssh_get_fingerprint_hash(enum ssh_publickey_hash_type type,
     }
     str_len += 1 + strlen(fingerprint) + 1;
 
-    str = malloc(str_len);
+    str = (char*)malloc(str_len);
     if (str == NULL) {
         SAFE_FREE(fingerprint);
         return NULL;

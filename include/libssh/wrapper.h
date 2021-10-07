@@ -37,6 +37,7 @@ enum ssh_kdf_digest {
 };
 
 enum ssh_hmac_e {
+  SSH_HMAC_UNKNOWN = 0,
   SSH_HMAC_SHA1 = 1,
   SSH_HMAC_SHA256,
   SSH_HMAC_SHA512,
@@ -58,10 +59,38 @@ struct ssh_hmac_struct {
 };
 
 enum ssh_crypto_direction_e {
+    SSH_DIRECTION_NONE = 0,
     SSH_DIRECTION_IN = 1,
     SSH_DIRECTION_OUT = 2,
     SSH_DIRECTION_BOTH = 3,
 };
+
+inline ssh_crypto_direction_e operator|(ssh_crypto_direction_e a, ssh_crypto_direction_e b)
+{
+    return static_cast<ssh_crypto_direction_e>(static_cast<int>(a) | static_cast<int>(b));
+}
+
+inline ssh_crypto_direction_e operator&(ssh_crypto_direction_e a, ssh_crypto_direction_e b)
+{
+    return static_cast<ssh_crypto_direction_e>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+inline ssh_crypto_direction_e operator~(ssh_crypto_direction_e a)
+{
+    return static_cast<ssh_crypto_direction_e>(~a);
+}
+
+inline ssh_crypto_direction_e &operator|=(ssh_crypto_direction_e &a, ssh_crypto_direction_e b)
+{
+    a = a | b;
+    return a;
+}
+
+inline ssh_crypto_direction_e& operator&=(ssh_crypto_direction_e& a, ssh_crypto_direction_e b)
+{
+    a = a | b;
+    return a;
+}
 
 struct ssh_cipher_struct;
 struct ssh_crypto_struct;

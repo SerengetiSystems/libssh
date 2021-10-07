@@ -312,7 +312,7 @@ static int cmp_first_kex_algo(const char *client_str,
     size_t client_kex_len;
     size_t server_kex_len;
 
-    char *colon;
+    const char *colon;
 
     int is_wrong = 1;
 
@@ -734,7 +734,7 @@ int ssh_set_client_kex(ssh_session session)
         return SSH_ERROR;
     }
     kex_len = len + strlen(KEX_EXTENSION_CLIENT) + 2; /* comma, NULL */
-    kex_tmp = realloc(kex, kex_len);
+    kex_tmp = (char*)realloc(kex, kex_len);
     if (kex_tmp == NULL) {
         free(kex);
         ssh_set_error_oom(session);
@@ -773,7 +773,7 @@ int ssh_kex_select_methods (ssh_session session)
 
     /* Here we should drop the  ext-info-c  from the list so we avoid matching.
      * it. We added it to the end, so we can just truncate the string here */
-    ext_start = strstr(client->methods[SSH_KEX], ","KEX_EXTENSION_CLIENT);
+    ext_start = strstr(client->methods[SSH_KEX], "," KEX_EXTENSION_CLIENT);
     if (ext_start != NULL) {
         ext_start[0] = '\0';
     }
@@ -1188,12 +1188,12 @@ int ssh_make_sessionid(ssh_session session)
 #endif /* WITH_GEX */
         session->next_crypto->digest_len = SHA_DIGEST_LENGTH;
         session->next_crypto->digest_type = SSH_KDF_SHA1;
-        session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
+        session->next_crypto->secret_hash = (unsigned char*)malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
             goto error;
         }
-        sha1(ssh_buffer_get(buf), ssh_buffer_get_len(buf),
+        sha1((const unsigned char*)ssh_buffer_get(buf), ssh_buffer_get_len(buf),
                                    session->next_crypto->secret_hash);
         break;
     case SSH_KEX_DH_GROUP14_SHA256:
@@ -1205,23 +1205,23 @@ int ssh_make_sessionid(ssh_session session)
 #endif /* WITH_GEX */
         session->next_crypto->digest_len = SHA256_DIGEST_LENGTH;
         session->next_crypto->digest_type = SSH_KDF_SHA256;
-        session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
+        session->next_crypto->secret_hash = (unsigned char*)malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
             goto error;
         }
-        sha256(ssh_buffer_get(buf), ssh_buffer_get_len(buf),
+        sha256((const unsigned char*)ssh_buffer_get(buf), ssh_buffer_get_len(buf),
                                      session->next_crypto->secret_hash);
         break;
     case SSH_KEX_ECDH_SHA2_NISTP384:
         session->next_crypto->digest_len = SHA384_DIGEST_LENGTH;
         session->next_crypto->digest_type = SSH_KDF_SHA384;
-        session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
+        session->next_crypto->secret_hash = (unsigned char*)malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
             goto error;
         }
-        sha384(ssh_buffer_get(buf), ssh_buffer_get_len(buf),
+        sha384((const unsigned char*)ssh_buffer_get(buf), ssh_buffer_get_len(buf),
                                      session->next_crypto->secret_hash);
         break;
     case SSH_KEX_DH_GROUP16_SHA512:
@@ -1229,12 +1229,12 @@ int ssh_make_sessionid(ssh_session session)
     case SSH_KEX_ECDH_SHA2_NISTP521:
         session->next_crypto->digest_len = SHA512_DIGEST_LENGTH;
         session->next_crypto->digest_type = SSH_KDF_SHA512;
-        session->next_crypto->secret_hash = malloc(session->next_crypto->digest_len);
+        session->next_crypto->secret_hash = (unsigned char*)malloc(session->next_crypto->digest_len);
         if (session->next_crypto->secret_hash == NULL) {
             ssh_set_error_oom(session);
             goto error;
         }
-        sha512(ssh_buffer_get(buf),
+        sha512((const unsigned char*)ssh_buffer_get(buf),
                ssh_buffer_get_len(buf),
                session->next_crypto->secret_hash);
         break;
@@ -1244,7 +1244,7 @@ int ssh_make_sessionid(ssh_session session)
      * but complement existing session id.
      */
     if (!session->next_crypto->session_id) {
-        session->next_crypto->session_id = malloc(session->next_crypto->digest_len);
+        session->next_crypto->session_id = (unsigned char*)malloc(session->next_crypto->digest_len);
         if (session->next_crypto->session_id == NULL) {
             ssh_set_error_oom(session);
             goto error;
@@ -1382,12 +1382,12 @@ int ssh_generate_session_keys(ssh_session session)
         intkey_srv_to_cli_len = hmac_digest_len(crypto->out_hmac);
     }
 
-    IV_cli_to_srv = malloc(IV_len);
-    IV_srv_to_cli = malloc(IV_len);
-    enckey_cli_to_srv = malloc(enckey_cli_to_srv_len);
-    enckey_srv_to_cli = malloc(enckey_srv_to_cli_len);
-    intkey_cli_to_srv = malloc(intkey_cli_to_srv_len);
-    intkey_srv_to_cli = malloc(intkey_srv_to_cli_len);
+    IV_cli_to_srv = (unsigned char*)malloc(IV_len);
+    IV_srv_to_cli = (unsigned char*)malloc(IV_len);
+    enckey_cli_to_srv = (unsigned char*)malloc(enckey_cli_to_srv_len);
+    enckey_srv_to_cli = (unsigned char*)malloc(enckey_srv_to_cli_len);
+    intkey_cli_to_srv = (unsigned char*)malloc(intkey_cli_to_srv_len);
+    intkey_srv_to_cli = (unsigned char*)malloc(intkey_srv_to_cli_len);
     if (IV_cli_to_srv == NULL || IV_srv_to_cli == NULL ||
         enckey_cli_to_srv == NULL || enckey_srv_to_cli == NULL ||
         intkey_cli_to_srv == NULL || intkey_srv_to_cli == NULL) {

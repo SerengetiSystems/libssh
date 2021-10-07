@@ -80,7 +80,7 @@ int ssh_userauth_pubkey(ssh_session session,
         return SSH_AUTH_ERROR;
     }
 
-    key->type = privatekey->type;
+    key->type = (ssh_keytypes_e)privatekey->type;
     key->type_c = ssh_key_type_to_char(key->type);
     key->flags = SSH_KEY_FLAG_PRIVATE|SSH_KEY_FLAG_PUBLIC;
     key->dsa = privatekey->dsa_priv;
@@ -109,7 +109,7 @@ int ssh_userauth_privatekey_file(ssh_session session,
   int rc = SSH_AUTH_ERROR;
   size_t klen = strlen(filename) + 4 + 1;
 
-  pubkeyfile = malloc(klen);
+  pubkeyfile = (char*)malloc(klen);
   if (pubkeyfile == NULL) {
     ssh_set_error_oom(session);
 
@@ -384,7 +384,7 @@ ssh_public_key publickey_from_privatekey(ssh_private_key prv) {
         return NULL;
     }
 
-    privkey->type = prv->type;
+    privkey->type = (ssh_keytypes_e)prv->type;
     privkey->type_c = ssh_key_type_to_char(privkey->type);
     privkey->flags = SSH_KEY_FLAG_PRIVATE | SSH_KEY_FLAG_PUBLIC;
     privkey->dsa = prv->dsa_priv;
@@ -431,7 +431,7 @@ ssh_private_key privatekey_from_file(ssh_session session,
         return NULL;
     }
 
-    privkey = malloc(sizeof(struct ssh_private_key_struct));
+    privkey = (ssh_private_key)malloc(sizeof(struct ssh_private_key_struct));
     if (privkey == NULL) {
         ssh_key_free(key);
         return NULL;
@@ -452,7 +452,7 @@ ssh_private_key privatekey_from_file(ssh_session session,
 enum ssh_keytypes_e ssh_privatekey_type(ssh_private_key privatekey){
   if (privatekey==NULL)
     return SSH_KEYTYPE_UNKNOWN;
-  return privatekey->type;
+  return (ssh_keytypes_e)privatekey->type;
 }
 
 void privatekey_free(ssh_private_key prv) {
@@ -502,7 +502,7 @@ ssh_string publickey_from_file(ssh_session session, const char *filename,
 }
 
 const char *ssh_type_to_char(int type) {
-    return ssh_key_type_to_char(type);
+    return ssh_key_type_to_char((ssh_keytypes_e)type);
 }
 
 int ssh_type_from_name(const char *name) {
@@ -521,7 +521,7 @@ ssh_public_key publickey_from_string(ssh_session session, ssh_string pubkey_s) {
         return NULL;
     }
 
-    pubkey = malloc(sizeof(struct ssh_public_key_struct));
+    pubkey = (ssh_public_key_struct*)malloc(sizeof(struct ssh_public_key_struct));
     if (pubkey == NULL) {
         ssh_key_free(key);
         return NULL;
@@ -554,7 +554,7 @@ ssh_string publickey_to_string(ssh_public_key pubkey) {
         return NULL;
     }
 
-    key->type = pubkey->type;
+    key->type = (ssh_keytypes_e)pubkey->type;
     key->type_c = pubkey->type_c;
 
     key->dsa = pubkey->dsa_pub;
@@ -590,7 +590,7 @@ int ssh_publickey_to_file(ssh_session session,
         ssh_set_error(session, SSH_FATAL, "Invalid parameters");
         return SSH_ERROR;
     }
-    pubkey_64 = bin_to_base64(ssh_string_data(pubkey), ssh_string_len(pubkey));
+    pubkey_64 = bin_to_base64((const uint8_t*)ssh_string_data(pubkey), ssh_string_len(pubkey));
     if (pubkey_64 == NULL) {
         return SSH_ERROR;
     }
@@ -666,7 +666,7 @@ int ssh_try_publickey_from_file(ssh_session session,
     }
 
     len = strlen(keyfile) + 5;
-    pubkey_file = malloc(len);
+    pubkey_file = (char*)malloc(len);
     if (pubkey_file == NULL) {
         return -1;
     }

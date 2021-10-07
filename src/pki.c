@@ -75,7 +75,7 @@
 
 enum ssh_keytypes_e pki_privatekey_type_from_string(const char *privkey)
 {
-    char *start = NULL;
+    const char *start = NULL;
 
     start = strstr(privkey, DSA_HEADER_BEGIN);
     if (start != NULL) {
@@ -125,7 +125,7 @@ const char *ssh_pki_key_ecdsa_name(const ssh_key key)
  * @returns an empty ssh_key handle, or NULL on error.
  */
 ssh_key ssh_key_new (void) {
-  ssh_key ptr = malloc (sizeof (struct ssh_key_struct));
+  ssh_key ptr = (ssh_key)malloc (sizeof (struct ssh_key_struct));
   if (ptr == NULL) {
       return NULL;
   }
@@ -697,7 +697,7 @@ ssh_signature ssh_signature_new(void)
 {
     struct ssh_signature_struct *sig;
 
-    sig = malloc(sizeof(struct ssh_signature_struct));
+    sig = (ssh_signature_struct*)malloc(sizeof(struct ssh_signature_struct));
     if (sig == NULL) {
         return NULL;
     }
@@ -788,7 +788,7 @@ int ssh_pki_import_privkey_base64(const char *b64_key,
                                   ssh_key *pkey)
 {
     ssh_key key;
-    char *openssh_header = NULL;
+    const char *openssh_header = NULL;
 
     if (b64_key == NULL || pkey == NULL) {
         return SSH_ERROR;
@@ -870,7 +870,7 @@ int ssh_pki_export_privkey_base64(const ssh_key privkey,
         return SSH_ERROR;
     }
 
-    b64 = strndup(ssh_string_data(blob), ssh_string_len(blob));
+    b64 = strndup((const char*)ssh_string_data(blob), ssh_string_len(blob));
     SSH_STRING_FREE(blob);
     if (b64 == NULL) {
         return SSH_ERROR;
@@ -956,7 +956,7 @@ int ssh_pki_import_privkey_file(const char *filename,
         return SSH_ERROR;
     }
 
-    key_buf = malloc(sb.st_size + 1);
+    key_buf = (char*)malloc(sb.st_size + 1);
     if (key_buf == NULL) {
         fclose(file);
         SSH_LOG(SSH_LOG_WARN, "Out of memory!");
@@ -1066,7 +1066,7 @@ ssh_public_key ssh_pki_convert_key_to_publickey(const ssh_key key) {
         return NULL;
     }
 
-    pub = malloc(sizeof(struct ssh_public_key_struct));
+    pub = (ssh_public_key)malloc(sizeof(struct ssh_public_key_struct));
     if (pub == NULL) {
         ssh_key_free(tmp);
         return NULL;
@@ -1089,7 +1089,7 @@ ssh_public_key ssh_pki_convert_key_to_publickey(const ssh_key key) {
 ssh_private_key ssh_pki_convert_key_to_privatekey(const ssh_key key) {
     ssh_private_key privkey;
 
-    privkey = malloc(sizeof(struct ssh_private_key_struct));
+    privkey = (ssh_private_key)malloc(sizeof(struct ssh_private_key_struct));
     if (privkey == NULL) {
         ssh_key_free(key);
         return NULL;
@@ -1424,7 +1424,7 @@ static int pki_import_pubkey_buffer(ssh_buffer buffer,
                 goto fail;
             }
 
-            key->ed25519_pubkey = malloc(ED25519_KEY_LEN);
+            key->ed25519_pubkey = (uint8_t*)malloc(ED25519_KEY_LEN);
             if (key->ed25519_pubkey == NULL) {
                 ssh_string_burn(pubkey);
                 SSH_STRING_FREE(pubkey);
@@ -1545,7 +1545,7 @@ static int pki_import_cert_buffer(ssh_buffer buffer,
 
     key->type = type;
     key->type_c = type_c;
-    key->cert = (void*) cert;
+    key->cert = cert;
 
     *pkey = key;
     return SSH_OK;
@@ -1773,7 +1773,7 @@ int ssh_pki_import_pubkey_file(const char *filename, ssh_key *pkey)
         return SSH_ERROR;
     }
 
-    key_buf = malloc(sb.st_size + 1);
+    key_buf = (char*)malloc(sb.st_size + 1);
     if (key_buf == NULL) {
         fclose(file);
         SSH_LOG(SSH_LOG_WARN, "Out of memory!");
@@ -2084,7 +2084,7 @@ int ssh_pki_export_pubkey_base64(const ssh_key key,
         return SSH_ERROR;
     }
 
-    b64 = bin_to_base64(ssh_string_data(key_blob), ssh_string_len(key_blob));
+    b64 = bin_to_base64((const uint8_t*)ssh_string_data(key_blob), ssh_string_len(key_blob));
     SSH_STRING_FREE(key_blob);
     if (b64 == NULL) {
         return SSH_ERROR;
@@ -2497,8 +2497,9 @@ int ssh_pki_signature_verify(ssh_session session,
             return SSH_ERROR;
         }
 
-        rc = pki_verify_data_signature(session, sig, key, ssh_buffer_get(sk_buffer),
-                                       ssh_buffer_get_len(sk_buffer));
+        rc = pki_verify_data_signature(session, sig, key,
+            (const unsigned char*)ssh_buffer_get(sk_buffer),
+                                  ssh_buffer_get_len(sk_buffer));
 
         SSH_BUFFER_FREE(sk_buffer);
         explicit_bzero(input_hash, SHA256_DIGEST_LEN);
@@ -2591,7 +2592,7 @@ ssh_string ssh_pki_do_sign(ssh_session session,
 
     /* Generate the signature */
     sig = pki_do_sign(session, privkey,
-            ssh_buffer_get(sign_input),
+            (const unsigned char*)ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             hash_type);
     if (sig == NULL) {
@@ -2677,12 +2678,12 @@ LIBSSH_API const char* ssh_key_type_name(const ssh_key key)
 
 LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key)
 {
-  return is_ecdsa_key_type(key);
+  return is_ecdsa_key_type(key->cert_type);
 }
 
 LIBSSH_API int ssh_key_is_cert(const ssh_key key)
 {
-  return is_cert_type(key);
+  return is_cert_type(key->cert_type);
 }
 
 LIBSSH_API int ssh_key_is_dsa(const ssh_key key)
@@ -2742,7 +2743,7 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
 
     /* Generate the signature */
     sig = pki_do_sign(session, privkey,
-            ssh_buffer_get(sign_input),
+            (const unsigned char*)ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             digest);
     if (sig == NULL) {

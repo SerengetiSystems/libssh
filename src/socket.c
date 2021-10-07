@@ -117,7 +117,7 @@ ssh_socket ssh_socket_new(ssh_session session)
 {
     ssh_socket s;
 
-    s = calloc(1, sizeof(struct ssh_socket_struct));
+    s = (ssh_socket)calloc(1, sizeof(struct ssh_socket_struct));
     if (s == NULL) {
         ssh_set_error_oom(session);
         return NULL;
@@ -550,9 +550,9 @@ static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
         return -1;
     }
     if (s->io_callbacks && s->io_callbacks->recv)
-        rc = s->io_callbacks->recv(s->fd, s->io_callbacks->userdata, buffer, len);
+        rc = s->io_callbacks->recv(s->fd, s->io_callbacks->userdata, (char*)buffer, len);
     else if (s->fd_is_socket) {
-        rc = recv(s->fd,buffer, len, 0);
+        rc = recv(s->fd,(char*)buffer, len, 0);
     } else {
         rc = read(s->fd,buffer, len);
     }
@@ -589,9 +589,9 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
     }
 
     if (s->io_callbacks && s->io_callbacks->send)
-        w = s->io_callbacks->send(s->fd, s->io_callbacks->userdata, buffer, len);
+        w = s->io_callbacks->send(s->fd, s->io_callbacks->userdata, (const char*)buffer, len);
     else if (s->fd_is_socket) {
-        w = send(s->fd, buffer, len, flags);
+        w = send(s->fd, (const char*)buffer, len, flags);
     } else {
         w = write(s->fd, buffer, len);
     }

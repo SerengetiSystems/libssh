@@ -82,7 +82,7 @@ struct ssh_tokens_st *ssh_tokenize(const char *chain, char separator)
         return NULL;
     }
 
-    tokens = calloc(1, sizeof(struct ssh_tokens_st));
+    tokens = (ssh_tokens_st*)calloc(1, sizeof(struct ssh_tokens_st));
     if (tokens == NULL) {
         return NULL;
     }
@@ -102,7 +102,7 @@ struct ssh_tokens_st *ssh_tokenize(const char *chain, char separator)
     } while(found != NULL);
 
     /* Allocate tokens list */
-    tokens->tokens = calloc(num_tokens + 1, sizeof(char *));
+    tokens->tokens = (char**)calloc(num_tokens + 1, sizeof(char *));
     if (tokens->tokens == NULL) {
         goto error;
     }
@@ -218,7 +218,7 @@ char *ssh_find_all_matching(const char *available_list,
 
     max = MAX(strlen(available_list), strlen(preferred_list));
 
-    ret = calloc(1, max + 1);
+    ret = (char*)calloc(1, max + 1);
     if (ret == NULL) {
         return NULL;
     }
@@ -299,7 +299,7 @@ char *ssh_remove_duplicates(const char *list)
         goto out;
     }
 
-    should_copy = calloc(1, max_len);
+    should_copy = (bool*)calloc(1, max_len);
     if (should_copy == NULL) {
         goto out;
     }
@@ -330,7 +330,7 @@ char *ssh_remove_duplicates(const char *list)
 
     num_tokens = i;
 
-    ret = calloc(1, max_len);
+    ret = (char*)calloc(1, max_len);
     if (ret == NULL) {
         goto out;
     }
@@ -391,7 +391,7 @@ char *ssh_append_without_duplicates(const char *list,
 
     /* Add room for ending '\0' and for middle ',' */
     concat_len += 2;
-    concat = calloc(1, concat_len);
+    concat = (char*)calloc(1, concat_len);
     if (concat == NULL) {
         return NULL;
     }

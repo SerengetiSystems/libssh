@@ -65,7 +65,7 @@
 static void
 bcrypt_hash(ssh_blf_ctx *state, uint8_t *sha2pass, uint8_t *sha2salt, uint8_t *out)
 {
-	uint8_t ciphertext[BCRYPT_HASHSIZE] =
+	uint8_t ciphertext[BCRYPT_HASHSIZE + 1] =
 	    "OxychromaticBlowfishSwatDynamite";
 	uint32_t cdata[BCRYPT_BLOCKS];
 	int i;
@@ -83,8 +83,7 @@ bcrypt_hash(ssh_blf_ctx *state, uint8_t *sha2pass, uint8_t *sha2salt, uint8_t *o
 	/* encryption */
 	j = 0;
 	for (i = 0; i < BCRYPT_BLOCKS; i++)
-		cdata[i] = Blowfish_stream2word(ciphertext, sizeof(ciphertext),
-		    &j);
+		cdata[i] = Blowfish_stream2word(ciphertext, BCRYPT_HASHSIZE, &j);
 	for (i = 0; i < 64; i++)
 		ssh_blf_enc(state, cdata, BCRYPT_BLOCKS/2);
 
@@ -97,7 +96,7 @@ bcrypt_hash(ssh_blf_ctx *state, uint8_t *sha2pass, uint8_t *sha2salt, uint8_t *o
 	}
 
 	/* zap */
-	explicit_bzero(ciphertext, sizeof(ciphertext));
+	explicit_bzero(ciphertext, BCRYPT_HASHSIZE);
 	explicit_bzero(cdata, sizeof(cdata));
 }
 
@@ -122,14 +121,14 @@ bcrypt_pbkdf(const char *pass, size_t passlen, const uint8_t *salt, size_t saltl
 	if (passlen == 0 || saltlen == 0 || keylen == 0 ||
 	    keylen > sizeof(out) * sizeof(out) || saltlen > 1<<20)
 		return -1;
-	if ((countsalt = calloc(1, saltlen + 4)) == NULL)
+	if ((countsalt = (uint8_t * )calloc(1, saltlen + 4)) == NULL)
 		return -1;
 	stride = (keylen + sizeof(out) - 1) / sizeof(out);
 	amt = (keylen + stride - 1) / stride;
 
 	memcpy(countsalt, salt, saltlen);
 
-	state = malloc(sizeof(*state));
+	state = (ssh_blf_ctx*)malloc(sizeof(*state));
 	if (state == NULL) {
 		free(countsalt);
 		return -1;

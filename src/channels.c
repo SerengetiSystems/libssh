@@ -84,7 +84,7 @@ ssh_channel ssh_channel_new(ssh_session session)
         return NULL;
     }
 
-    channel = calloc(1, sizeof(struct ssh_channel_struct));
+    channel = (ssh_channel)calloc(1, sizeof(struct ssh_channel_struct));
     if (channel == NULL) {
         ssh_set_error_oom(session);
         return NULL;
@@ -164,7 +164,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_conf){
   channel=ssh_channel_from_local(session,channelid);
   if(channel==NULL){
     ssh_set_error(session, SSH_FATAL,
-        "Unknown channel id %"PRIu32,
+        "Unknown channel id %" PRIu32,
         (uint32_t) channelid);
     /* TODO: Set error marking in channel object */
 
@@ -192,7 +192,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_conf){
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-      "Remote window : %"PRIu32", maxpacket : %"PRIu32,
+      "Remote window : %" PRIu32 ", maxpacket : %" PRIu32,
       (uint32_t) channel->remote_window,
       (uint32_t) channel->remote_maxpacket);
 
@@ -240,7 +240,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open_fail){
   }
 
   ssh_set_error(session, SSH_REQUEST_DENIED,
-      "Channel opening failure: channel %u error (%"PRIu32") %s",
+      "Channel opening failure: channel %u error (%" PRIu32 ") %s",
       channel->local_channel,
       (uint32_t) code,
       error);
@@ -549,7 +549,7 @@ static ssh_channel channel_from_msg(ssh_session session, ssh_buffer packet) {
   channel = ssh_channel_from_local(session, chan);
   if (channel == NULL) {
     ssh_set_error(session, SSH_FATAL,
-        "Server specified invalid channel %"PRIu32,
+        "Server specified invalid channel %" PRIu32,
         (uint32_t) chan);
   }
 
@@ -2881,7 +2881,7 @@ int channel_read_buffer(ssh_channel channel, ssh_buffer buffer, uint32_t count,
       }
       if(r > 0){
         count = r;
-        buffer_tmp = ssh_buffer_allocate(buffer, count);
+        buffer_tmp = (char*)ssh_buffer_allocate(buffer, count);
         if (buffer_tmp == NULL) {
           ssh_set_error_oom(session);
           return SSH_ERROR;
@@ -2903,7 +2903,7 @@ int channel_read_buffer(ssh_channel channel, ssh_buffer buffer, uint32_t count,
     } while (r == 0);
   }
 
-  buffer_tmp = ssh_buffer_allocate(buffer, count);
+  buffer_tmp = (char*)ssh_buffer_allocate(buffer, count);
   if (buffer_tmp == NULL) {
     ssh_set_error_oom(session);
     return SSH_ERROR;
@@ -2932,7 +2932,7 @@ struct ssh_channel_read_termination_struct {
 };
 
 static int ssh_channel_read_termination(void *s){
-  struct ssh_channel_read_termination_struct *ctx = s;
+  struct ssh_channel_read_termination_struct *ctx = (struct ssh_channel_read_termination_struct*)s;
   if (ssh_buffer_get_len(ctx->buffer) >= ctx->count ||
       ctx->channel->remote_eof ||
       ctx->channel->session->session_state == SSH_SESSION_STATE_ERROR)
@@ -3300,7 +3300,7 @@ ssh_session ssh_channel_get_session(ssh_channel channel) {
 }
 
 static int ssh_channel_exit_status_termination(void *c){
-  ssh_channel channel = c;
+  ssh_channel channel = (ssh_channel)c;
   if(channel->exit_status != -1 ||
       /* When a channel is closed, no exit status message can
        * come anymore */
@@ -3469,18 +3469,18 @@ int ssh_channel_select(ssh_channel *readchans, ssh_channel *writechans,
   }
 
   /* Prepare the outgoing temporary arrays */
-  rchans = calloc(count_ptrs(readchans) + 1, sizeof(ssh_channel));
+  rchans = (ssh_channel*)calloc(count_ptrs(readchans) + 1, sizeof(ssh_channel));
   if (rchans == NULL) {
     return SSH_ERROR;
   }
 
-  wchans = calloc(count_ptrs(writechans) + 1, sizeof(ssh_channel));
+  wchans = (ssh_channel*)calloc(count_ptrs(writechans) + 1, sizeof(ssh_channel));
   if (wchans == NULL) {
     SAFE_FREE(rchans);
     return SSH_ERROR;
   }
 
-  echans = calloc(count_ptrs(exceptchans) + 1, sizeof(ssh_channel));
+  echans = (ssh_channel*)calloc(count_ptrs(exceptchans) + 1, sizeof(ssh_channel));
   if (echans == NULL) {
     SAFE_FREE(rchans);
     SAFE_FREE(wchans);

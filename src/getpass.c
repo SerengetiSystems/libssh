@@ -49,7 +49,7 @@ static int ssh_gets(const char *prompt, char *buf, size_t len, int verify) {
     char *ptr = NULL;
     int ok = 0;
 
-    tmp = calloc(1, len);
+    tmp = (char*)calloc(1, len);
     if (tmp == NULL) {
         return 0;
     }
@@ -77,9 +77,7 @@ static int ssh_gets(const char *prompt, char *buf, size_t len, int verify) {
         }
 
         if (verify) {
-            char *key_string;
-
-            key_string = calloc(1, len);
+            char *key_string = (char*)calloc(1, len);
             if (key_string == NULL) {
                 break;
             }

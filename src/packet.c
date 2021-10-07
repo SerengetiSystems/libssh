@@ -1129,7 +1129,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
                 return 0;
             }
 
-            session->in_packet = (struct packet_struct) {
+            session->in_packet = {
                 .type = 0,
             };
 
@@ -1146,7 +1146,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
             }
 
             if (!etm) {
-                ptr = ssh_buffer_allocate(session->in_buffer, lenfield_blocksize);
+                ptr = (uint8_t*)ssh_buffer_allocate(session->in_buffer, lenfield_blocksize);
                 if (ptr == NULL) {
                     goto error;
                 }
@@ -1204,7 +1204,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
             /* remaining encrypted bytes from the packet, MAC not included */
             packet_remaining =
                 packet_len - (lenfield_blocksize - sizeof(uint32_t) + etm_packet_offset);
-            cleartext_packet = ssh_buffer_allocate(session->in_buffer,
+            cleartext_packet = (uint8_t*)ssh_buffer_allocate(session->in_buffer,
                                                    packet_remaining);
             if (cleartext_packet == NULL) {
                 goto error;
@@ -1391,7 +1391,7 @@ error:
 
 static void ssh_packet_socket_controlflow_callback(int code, void *userdata)
 {
-    ssh_session session = userdata;
+    ssh_session session = (ssh_session)userdata;
     struct ssh_iterator *it;
     ssh_channel channel;
 
@@ -1561,7 +1561,7 @@ SSH_PACKET_CALLBACK(ssh_packet_unimplemented){
  */
 int ssh_packet_parse_type(struct ssh_session_struct *session)
 {
-    session->in_packet = (struct packet_struct) {
+    session->in_packet = {
         .type = 0,
     };
 
@@ -1941,7 +1941,7 @@ ssh_packet_set_newkeys(ssh_session session,
         }
 
         session_id_len = session->current_crypto->session_id_len;
-        session->next_crypto->session_id = malloc(session_id_len);
+        session->next_crypto->session_id = (unsigned char*)malloc(session_id_len);
         if (session->next_crypto->session_id == NULL) {
             ssh_set_error_oom(session);
             return SSH_ERROR;
@@ -2025,7 +2025,7 @@ ssh_packet_set_newkeys(ssh_session session,
                                         session->next_crypto->decryptIV);
         if (rc < 0) {
             /* On error, make sure it is not used */
-            session->next_crypto->used = 0;
+            session->next_crypto->used = SSH_DIRECTION_NONE;
             return SSH_ERROR;
         }
     }
@@ -2036,7 +2036,7 @@ ssh_packet_set_newkeys(ssh_session session,
                                          session->next_crypto->encryptIV);
         if (rc < 0) {
             /* On error, make sure it is not used */
-            session->next_crypto->used = 0;
+            session->next_crypto->used = SSH_DIRECTION_NONE;
             return SSH_ERROR;
         }
     }

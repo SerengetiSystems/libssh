@@ -191,7 +191,7 @@ int ssh_send_banner(ssh_session session, int server)
             }
         } else {
             len = strlen(session->opts.custombanner);
-            session->serverbanner = malloc(len + 8 + 1);
+            session->serverbanner = (char*)malloc(len + 8 + 1);
             if(session->serverbanner == NULL) {
                 goto end;
             }

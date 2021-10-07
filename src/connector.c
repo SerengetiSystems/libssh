@@ -99,7 +99,7 @@ ssh_connector ssh_connector_new(ssh_session session)
 {
     ssh_connector connector;
 
-    connector = calloc(1, sizeof(struct ssh_connector_struct));
+    connector = (ssh_connector)calloc(1, sizeof(struct ssh_connector_struct));
     if (connector == NULL){
         ssh_set_error_oom(session);
         return NULL;
@@ -391,7 +391,7 @@ static int ssh_connector_fd_cb(ssh_poll_handle p,
                                int revents,
                                void *userdata)
 {
-    ssh_connector connector = userdata;
+    ssh_connector connector = (ssh_connector)userdata;
 
     (void)p;
 
@@ -430,7 +430,7 @@ static int ssh_connector_channel_data_cb(ssh_session session,
                                          int is_stderr,
                                          void *userdata)
 {
-    ssh_connector connector = userdata;
+    ssh_connector connector = (ssh_connector)userdata;
     int w;
     size_t window;
 
@@ -520,7 +520,7 @@ static int ssh_connector_channel_write_wontblock_cb(ssh_session session,
                                                     size_t bytes,
                                                     void *userdata)
 {
-    ssh_connector connector = userdata;
+    ssh_connector connector = (ssh_connector)userdata;
     uint8_t buffer[CHUNKSIZE];
     int r, w;
 
@@ -722,7 +722,7 @@ static ssize_t ssh_connector_fd_read(ssh_connector connector,
     ssize_t nread = -1;
 
     if (connector->fd_is_socket) {
-        nread = recv(connector->in_fd,buffer, len, 0);
+        nread = recv(connector->in_fd,(char*)buffer, len, 0);
     } else {
         nread = read(connector->in_fd,buffer, len);
     }
@@ -748,7 +748,7 @@ static ssize_t ssh_connector_fd_write(ssh_connector connector,
 #endif
 
     if (connector->fd_is_socket) {
-        bwritten = send(connector->out_fd,buffer, len, flags);
+        bwritten = send(connector->out_fd,(const char*)buffer, len, flags);
     } else {
         bwritten = write(connector->out_fd, buffer, len);
     }

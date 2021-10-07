@@ -168,7 +168,7 @@ int ssh_dh_init_common(struct ssh_crypto_struct *crypto)
     struct dh_ctx *ctx;
     int rc;
 
-    ctx = calloc(1, sizeof(*ctx));
+    ctx = (struct dh_ctx*)calloc(1, sizeof(*ctx));
     if (ctx == NULL) {
         return SSH_ERROR;
     }
@@ -256,7 +256,7 @@ int ssh_dh_compute_shared_secret(struct dh_ctx *dh_ctx, int local, int remote,
         return SSH_ERROR;
     }
 
-    kstring = malloc(DH_size(dh_ctx->keypair[local]));
+    kstring = (unsigned char*)malloc(DH_size(dh_ctx->keypair[local]));
     if (kstring == NULL) {
         rc = SSH_ERROR;
         goto done;

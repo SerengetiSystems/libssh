@@ -277,7 +277,7 @@ uint8_t *bin_to_base64(const uint8_t *source, size_t len)
     size_t flen = len + (3 - (len % 3)); /* round to upper 3 multiple */
     flen = (4 * flen) / 3 + 1;
 
-    base64 = malloc(flen);
+    base64 = (uint8_t*)malloc(flen);
     if (base64 == NULL) {
         return NULL;
     }

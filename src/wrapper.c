@@ -72,7 +72,7 @@ static struct ssh_hmac_struct ssh_hmac_tab[] = {
 #ifdef WITH_INSECURE_NONE
   { "none",                          SSH_HMAC_NONE,          false },
 #endif /* WITH_INSECURE_NONE */
-  { NULL,                            0,                      false }
+  { NULL,                            SSH_HMAC_UNKNOWN,       false }
 };
 
 struct ssh_hmac_struct *ssh_get_hmactab(void) {
@@ -114,7 +114,7 @@ const char *ssh_hmac_type_to_string(enum ssh_hmac_e hmac_type, bool etm)
 static struct ssh_cipher_struct *cipher_new(int offset) {
   struct ssh_cipher_struct *cipher = NULL;
 
-  cipher = malloc(sizeof(struct ssh_cipher_struct));
+  cipher = (ssh_cipher_struct*)malloc(sizeof(struct ssh_cipher_struct));
   if (cipher == NULL) {
     return NULL;
   }
@@ -156,7 +156,7 @@ static void cipher_free(struct ssh_cipher_struct *cipher) {
 struct ssh_crypto_struct *crypto_new(void) {
    struct ssh_crypto_struct *crypto;
 
-  crypto = malloc(sizeof(struct ssh_crypto_struct));
+  crypto = (ssh_crypto_struct*)malloc(sizeof(struct ssh_crypto_struct));
   if (crypto == NULL) {
     return NULL;
   }
@@ -199,14 +199,14 @@ void crypto_free(struct ssh_crypto_struct *crypto)
     }
 #ifdef WITH_ZLIB
     if (crypto->compress_out_ctx &&
-        (deflateEnd(crypto->compress_out_ctx) != 0)) {
-        inflateEnd(crypto->compress_out_ctx);
+        (deflateEnd((z_stream*)crypto->compress_out_ctx) != 0)) {
+        inflateEnd((z_stream*)crypto->compress_out_ctx);
     }
     SAFE_FREE(crypto->compress_out_ctx);
 
     if (crypto->compress_in_ctx &&
-        (deflateEnd(crypto->compress_in_ctx) != 0)) {
-        inflateEnd(crypto->compress_in_ctx);
+        (deflateEnd((z_stream*)crypto->compress_in_ctx) != 0)) {
+        inflateEnd((z_stream*)crypto->compress_in_ctx);
     }
     SAFE_FREE(crypto->compress_in_ctx);
 #endif /* WITH_ZLIB */

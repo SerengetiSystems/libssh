@@ -109,7 +109,7 @@ char *ssh_get_user_home_dir(void) {
   char *szPath = NULL;
 
   if (SHGetSpecialFolderPathA(NULL, tmp, CSIDL_PROFILE, TRUE)) {
-    szPath = malloc(strlen(tmp) + 1);
+    szPath = (char*)malloc(strlen(tmp) + 1);
     if (szPath == NULL) {
       return NULL;
     }
@@ -350,22 +350,22 @@ int ssh_is_ipaddr(const char *str) {
 #endif /* _WIN32 */
 
 char *ssh_lowercase(const char* str) {
-  char *new, *p;
+  char *new_str, *p;
 
   if (str == NULL) {
     return NULL;
   }
 
-  new = strdup(str);
-  if (new == NULL) {
+  new_str = strdup(str);
+  if (new_str == NULL) {
     return NULL;
   }
 
-  for (p = new; *p; p++) {
+  for (p = new_str; *p; p++) {
     *p = tolower(*p);
   }
 
-  return new;
+  return new_str;
 }
 
 char *ssh_hostport(const char *host, int port)
@@ -379,7 +379,7 @@ char *ssh_hostport(const char *host, int port)
 
     /* 3 for []:, 5 for 65536 and 1 for nul */
     len = strlen(host) + 3 + 5 + 1;
-    dest = malloc(len);
+    dest = (char*)malloc(len);
     if (dest == NULL) {
         return NULL;
     }
@@ -415,7 +415,7 @@ char *ssh_get_hexa(const unsigned char *what, size_t len) {
         return NULL;
     }
 
-    hexa = malloc(hlen + 1);
+    hexa = (char*)malloc(hlen + 1);
     if (hexa == NULL) {
         return NULL;
     }
@@ -541,7 +541,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         SSH_LOG(SSH_LOG_DEBUG, "%s", buffer);
         return;
     } else {
-        printed = snprintf(buffer + count, sizeof(buffer) - count, "("SIZET_SPECIFIER" bytes):", len);
+        printed = snprintf(buffer + count, sizeof(buffer) - count, "(" SIZET_SPECIFIER " bytes):", len);
         if (printed < 0) {
             goto error;
         }
@@ -590,7 +590,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-				"  %08"PRIxPtr" ", i);
+				"  %08" PRIxPtr " ", i);
             if (printed < 0) {
                 goto error;
             }
@@ -684,7 +684,7 @@ const char *ssh_version(int req_version) {
 }
 
 struct ssh_list *ssh_list_new(void) {
-  struct ssh_list *ret=malloc(sizeof(struct ssh_list));
+  struct ssh_list *ret=(ssh_list*)malloc(sizeof(struct ssh_list));
   if(!ret)
     return NULL;
   ret->root=ret->end=NULL;
@@ -738,7 +738,7 @@ size_t ssh_list_count(const struct ssh_list *list)
 }
 
 static struct ssh_iterator *ssh_iterator_new(const void *data){
-  struct ssh_iterator *iterator=malloc(sizeof(struct ssh_iterator));
+  struct ssh_iterator *iterator=(ssh_iterator*)malloc(sizeof(struct ssh_iterator));
   if(!iterator)
     return NULL;
   iterator->next=NULL;
@@ -870,7 +870,7 @@ const void *_ssh_list_pop_head(struct ssh_list *list){
  *                      "." is returned.
  */
 char *ssh_dirname (const char *path) {
-  char *new = NULL;
+  char *new_str = NULL;
   size_t len;
 
   if (path == NULL || *path == '\0') {
@@ -899,15 +899,15 @@ char *ssh_dirname (const char *path) {
   /* Remove slashes again */
   while(len > 0 && path[len - 1] == '/') --len;
 
-  new = malloc(len + 1);
-  if (new == NULL) {
+  new_str = (char*)malloc(len + 1);
+  if (new_str == NULL) {
     return NULL;
   }
 
-  strncpy(new, path, len);
-  new[len] = '\0';
+  strncpy(new_str, path, len);
+  new_str[len] = '\0';
 
-  return new;
+  return new_str;
 }
 
 /**
@@ -925,7 +925,7 @@ char *ssh_dirname (const char *path) {
  *                      "." is returned.
  */
 char *ssh_basename (const char *path) {
-  char *new = NULL;
+  char *new_str = NULL;
   const char *s;
   size_t len;
 
@@ -953,15 +953,15 @@ char *ssh_basename (const char *path) {
     return strdup(path);
   }
 
-  new = malloc(len + 1);
-  if (new == NULL) {
+  new_str = (char*)malloc(len + 1);
+  if (new_str == NULL) {
     return NULL;
   }
 
-  strncpy(new, s, len);
-  new[len] = '\0';
+  strncpy(new_str, s, len);
+  new_str[len] = '\0';
 
-  return new;
+  return new_str;
 }
 
 /**
@@ -1102,7 +1102,7 @@ char *ssh_path_expand_tilde(const char *d) {
     }
     lh = strlen(h);
 
-    r = malloc(ld + lh + 1);
+    r = (char*)malloc(ld + lh + 1);
     if (r == NULL) {
         SAFE_FREE(h);
         return NULL;
@@ -1148,7 +1148,7 @@ char *ssh_path_expand_escape(ssh_session session, const char *s) {
         return NULL;
     }
 
-    buf = malloc(MAX_BUF_SIZE);
+    buf = (char*)malloc(MAX_BUF_SIZE);
     if (buf == NULL) {
         ssh_set_error_oom(session);
         free(r);
@@ -1241,7 +1241,7 @@ char *ssh_path_expand_escape(ssh_session session, const char *s) {
     free(r);
 
     /* strip the unused space by realloc */
-    x = realloc(buf, strlen(buf) + 1);
+    x = (char*)realloc(buf, strlen(buf) + 1);
     if (x == NULL) {
         ssh_set_error_oom(session);
         free(buf);
@@ -1384,15 +1384,15 @@ void ssh_timestamp_init(struct ssh_timestamp *ts){
  * @internal
  * @brief gets the time difference between two timestamps in ms
  * @param[in] old older value
- * @param[in] new newer value
+ * @param[in] new_str newer value
  * @returns difference in milliseconds
  */
 
 static int ssh_timestamp_difference(struct ssh_timestamp *old,
-    struct ssh_timestamp *new){
+    struct ssh_timestamp *new_str){
   long seconds, usecs, msecs;
-  seconds = new->seconds - old->seconds;
-  usecs = new->useconds - old->useconds;
+  seconds = new_str->seconds - old->seconds;
+  usecs = new_str->useconds - old->useconds;
   if (usecs < 0){
     seconds--;
     usecs += 1000000;
@@ -1527,7 +1527,7 @@ char *strndup(const char *s, size_t n)
         return NULL;
     }
 
-    x = malloc(n + 1);
+    x = (char*)malloc(n + 1);
     if (x == NULL) {
         return NULL;
     }
@@ -1788,19 +1788,19 @@ int ssh_newline_vis(const char *string, char *buf, size_t buf_len)
  * @returns -1 as error when the last 6 characters of the input to be replaced are not 'X'
  * 0 otherwise.
  */
-int ssh_tmpname(char *template)
+int ssh_tmpname(char *tmplt)
 {
     char *tmp = NULL;
     size_t i = 0;
     int rc = 0;
     uint8_t random[6];
 
-    if (template == NULL) {
+    if (tmplt == NULL) {
         goto err;
     }
 
-    tmp = template + strlen(template) - 6;
-    if (tmp < template) {
+    tmp = tmplt + strlen(tmplt) - 6;
+    if (tmp < tmplt) {
         goto err;
     }
 
@@ -1848,7 +1848,7 @@ err:
  */
 char *ssh_strreplace(const char *src, const char *pattern, const char *replace)
 {
-    char *p = NULL;
+    const char *p = NULL;
     char *src_replaced = NULL;
 
     if (src == NULL) {

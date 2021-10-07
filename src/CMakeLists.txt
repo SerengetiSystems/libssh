@@ -306,6 +306,8 @@ if (NOT WITH_NACL)
     endif (NOT HAVE_OPENSSL_ED25519)
 endif (NOT WITH_NACL)
 
+SET_SOURCE_FILES_PROPERTIES(${libssh_SRCS} PROPERTIES LANGUAGE CXX )
+
 # Set the path to the default map file
 set(MAP_PATH "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.map")
 

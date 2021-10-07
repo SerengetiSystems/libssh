@@ -47,7 +47,7 @@ sftp_client_message sftp_get_client_message(sftp_session sftp) {
   ssh_buffer payload;
   int rc;
 
-  msg = malloc(sizeof (struct sftp_client_message_struct));
+  msg = (sftp_client_message)malloc(sizeof (struct sftp_client_message_struct));
   if (msg == NULL) {
     ssh_set_error_oom(session);
     return NULL;
@@ -497,7 +497,7 @@ ssh_string sftp_handle_alloc(sftp_session sftp, void *info) {
   uint32_t i;
 
   if (sftp->handles == NULL) {
-    sftp->handles = calloc(SFTP_HANDLES, sizeof(void *));
+    sftp->handles = (void**)calloc(SFTP_HANDLES, sizeof(void *));
     if (sftp->handles == NULL) {
       return NULL;
     }

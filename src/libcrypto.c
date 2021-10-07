@@ -116,7 +116,7 @@ int ssh_get_random(void *where, int len, int strong)
 #endif /* HAVE_RAND_PRIV_BYTES */
 
     /* Returns -1 when not supported, 0 on error, 1 on success */
-    return !!RAND_bytes(where, len);
+    return !!RAND_bytes((unsigned char*)where, len);
 }
 
 SHACTX sha1_init(void)
@@ -435,7 +435,7 @@ HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type)
         return NULL;
     }
 
-    pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, len);
+    pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, (const unsigned char*)key, len);
     if (pkey == NULL) {
         goto error;
     }
@@ -540,7 +540,7 @@ static int evp_cipher_set_encrypt_key(struct ssh_cipher_struct *cipher,
 
     evp_cipher_init(cipher);
 
-    rc = EVP_EncryptInit_ex(cipher->ctx, cipher->cipher, NULL, key, IV);
+    rc = EVP_EncryptInit_ex(cipher->ctx, cipher->cipher, NULL, (const unsigned char*)key, (const unsigned char*)IV);
     if (rc != 1){
         SSH_LOG(SSH_LOG_WARNING, "EVP_EncryptInit_ex failed");
         return SSH_ERROR;
@@ -570,7 +570,7 @@ static int evp_cipher_set_decrypt_key(struct ssh_cipher_struct *cipher,
 
     evp_cipher_init(cipher);
 
-    rc = EVP_DecryptInit_ex(cipher->ctx, cipher->cipher, NULL, key, IV);
+    rc = EVP_DecryptInit_ex(cipher->ctx, cipher->cipher, NULL, (const unsigned char*)key, (const unsigned char*)IV);
     if (rc != 1){
         SSH_LOG(SSH_LOG_WARNING, "EVP_DecryptInit_ex failed");
         return SSH_ERROR;
@@ -868,11 +868,11 @@ chacha20_poly1305_set_key(struct ssh_cipher_struct *cipher,
                           UNUSED_PARAM(void *IV))
 {
     struct chacha20_poly1305_keysched *ctx = NULL;
-    uint8_t *u8key = key;
+    uint8_t *u8key = (uint8_t*)key;
     int ret = SSH_ERROR, rv;
 
     if (cipher->chacha20_schedule == NULL) {
-        ctx = calloc(1, sizeof(*ctx));
+        ctx = (chacha20_poly1305_keysched*)calloc(1, sizeof(*ctx));
         if (ctx == NULL) {
             return -1;
         }
@@ -1042,7 +1042,7 @@ chacha20_poly1305_aead_decrypt_length(struct ssh_cipher_struct *cipher,
         return SSH_ERROR;
     }
 
-    rv = EVP_CipherUpdate(ctx->header_evp, out, &outlen, in, len);
+    rv = EVP_CipherUpdate(ctx->header_evp, out, &outlen, (const unsigned char*)in, len);
     if (rv != 1 || outlen != sizeof(uint32_t)) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_CipherUpdate failed");
         return SSH_ERROR;
@@ -1141,7 +1141,7 @@ chacha20_poly1305_aead_encrypt(struct ssh_cipher_struct *cipher,
                                uint8_t *tag,
                                uint64_t seq)
 {
-    struct ssh_packet_header *in_packet = in, *out_packet = out;
+    struct ssh_packet_header *in_packet = (ssh_packet_header*)in, *out_packet = (ssh_packet_header*)out;
     struct chacha20_poly1305_keysched *ctx = cipher->chacha20_schedule;
     size_t taglen = POLY1305_TAGLEN;
     int ret, outlen = 0;
@@ -1301,8 +1301,8 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
   {
     .name = "aes128-gcm@openssh.com",
     .blocksize = AES_BLOCK_SIZE,
-    .lenfield_blocksize = 4, /* not encrypted, but authenticated */
     .ciphertype = SSH_AEAD_AES128_GCM,
+    .lenfield_blocksize = 4, /* not encrypted, but authenticated */
     .keysize = 128,
     .tag_size = AES_GCM_TAGLEN,
     .set_encrypt_key = evp_cipher_set_encrypt_key,
@@ -1315,8 +1315,8 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
   {
     .name = "aes256-gcm@openssh.com",
     .blocksize = AES_BLOCK_SIZE,
-    .lenfield_blocksize = 4, /* not encrypted, but authenticated */
     .ciphertype = SSH_AEAD_AES256_GCM,
+    .lenfield_blocksize = 4, /* not encrypted, but authenticated */
     .keysize = 256,
     .tag_size = AES_GCM_TAGLEN,
     .set_encrypt_key = evp_cipher_set_encrypt_key,
@@ -1342,9 +1342,9 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
 #endif /* HAS_DES */
   {
 #if defined(HAVE_OPENSSL_EVP_CHACHA20) && defined(HAVE_OPENSSL_EVP_POLY1305)
-    .ciphertype = SSH_AEAD_CHACHA20_POLY1305,
     .name = "chacha20-poly1305@openssh.com",
     .blocksize = CHACHA20_BLOCKSIZE/8,
+    .ciphertype = SSH_AEAD_CHACHA20_POLY1305,
     .lenfield_blocksize = 4,
     .keylen = sizeof(struct chacha20_poly1305_keysched),
     .keysize = 2 * CHACHA20_KEYLEN * 8,

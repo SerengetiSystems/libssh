@@ -58,7 +58,7 @@ struct pem_get_password_struct {
 };
 
 static int pem_get_password(char *buf, int size, int rwflag, void *userdata) {
-    struct pem_get_password_struct *pgp = userdata;
+    struct pem_get_password_struct *pgp = (struct pem_get_password_struct*)userdata;
 
     (void) rwflag; /* unused */
 
@@ -182,7 +182,7 @@ static ssh_string make_ecpoint_string(const EC_GROUP *g,
     len = EC_POINT_point2oct(g,
                              p,
                              POINT_CONVERSION_UNCOMPRESSED,
-                             ssh_string_data(s),
+                             (unsigned char*)ssh_string_data(s),
                              ssh_string_len(s),
                              NULL);
     if (len != ssh_string_len(s)) {
@@ -217,7 +217,7 @@ int pki_privkey_build_ecdsa(ssh_key key, int nid, ssh_string e, ssh_string exp)
 
     ok = EC_POINT_oct2point(g,
                             p,
-                            ssh_string_data(e),
+                            (const unsigned char*)ssh_string_data(e),
                             ssh_string_len(e),
                             NULL);
     if (!ok) {
@@ -271,7 +271,7 @@ int pki_pubkey_build_ecdsa(ssh_key key, int nid, ssh_string e)
 
     ok = EC_POINT_oct2point(g,
                             p,
-                            ssh_string_data(e),
+                            (const unsigned char*)ssh_string_data(e),
                             ssh_string_len(e),
                             NULL);
     if (!ok) {
@@ -292,24 +292,24 @@ int pki_pubkey_build_ecdsa(ssh_key key, int nid, ssh_string e)
 
 ssh_key pki_key_dup(const ssh_key key, int demote)
 {
-    ssh_key new;
+    ssh_key new_key;
     int rc;
 
-    new = ssh_key_new();
-    if (new == NULL) {
+    new_key = ssh_key_new();
+    if (new_key == NULL) {
         return NULL;
     }
 
 #ifdef WITH_PKCS11_URI
-    new->key = key->key;
+    new_key->key = key->key;
 #endif
 
-    new->type = key->type;
-    new->type_c = key->type_c;
+    new_key->type = key->type;
+    new_key->type_c = key->type_c;
     if (demote) {
-        new->flags = SSH_KEY_FLAG_PUBLIC;
+        new_key->flags = SSH_KEY_FLAG_PUBLIC;
     } else {
-        new->flags = key->flags;
+        new_key->flags = key->flags;
     }
 
     switch (key->type) {
@@ -317,8 +317,8 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
         const BIGNUM *p = NULL, *q = NULL, *g = NULL,
           *pub_key = NULL, *priv_key = NULL;
         BIGNUM *np, *nq, *ng, *npub_key, *npriv_key;
-        new->dsa = DSA_new();
-        if (new->dsa == NULL) {
+        new_key->dsa = DSA_new();
+        if (new_key->dsa == NULL) {
             goto fail;
         }
 
@@ -341,7 +341,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
         }
 
         /* Memory management of np, nq and ng is transferred to DSA object */
-        rc = DSA_set0_pqg(new->dsa, np, nq, ng);
+        rc = DSA_set0_pqg(new_key->dsa, np, nq, ng);
         if (rc == 0) {
             BN_free(np);
             BN_free(nq);
@@ -356,7 +356,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
         }
 
         /* Memory management of npubkey is transferred to DSA object */
-        rc = DSA_set0_key(new->dsa, npub_key, NULL);
+        rc = DSA_set0_key(new_key->dsa, npub_key, NULL);
         if (rc == 0) {
             goto fail;
         }
@@ -368,7 +368,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
             }
 
             /* Memory management of npriv_key is transferred to DSA object */
-            rc = DSA_set0_key(new->dsa, NULL, npriv_key);
+            rc = DSA_set0_key(new_key->dsa, NULL, npriv_key);
             if (rc == 0) {
                 goto fail;
             }
@@ -380,8 +380,8 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
     case SSH_KEYTYPE_RSA1: {
         const BIGNUM *n = NULL, *e = NULL, *d = NULL;
         BIGNUM *nn, *ne, *nd;
-        new->rsa = RSA_new();
-        if (new->rsa == NULL) {
+        new_key->rsa = RSA_new();
+        if (new_key->rsa == NULL) {
             goto fail;
         }
 
@@ -405,7 +405,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
         }
 
         /* Memory management of nn and ne is transferred to RSA object */
-        rc = RSA_set0_key(new->rsa, nn, ne, NULL);
+        rc = RSA_set0_key(new_key->rsa, nn, ne, NULL);
         if (rc == 0) {
             BN_free(nn);
             BN_free(ne);
@@ -423,7 +423,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
             }
 
             /* Memory management of nd is transferred to RSA object */
-            rc = RSA_set0_key(new->rsa, NULL, NULL, nd);
+            rc = RSA_set0_key(new_key->rsa, NULL, NULL, nd);
             if (rc == 0) {
                 goto fail;
             }
@@ -442,7 +442,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
                 }
 
                 /* Memory management of np and nq is transferred to RSA object */
-                rc = RSA_set0_factors(new->rsa, np, nq);
+                rc = RSA_set0_factors(new_key->rsa, np, nq);
                 if (rc == 0) {
                     BN_free(np);
                     BN_free(nq);
@@ -464,7 +464,7 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
 
                 /* Memory management of ndmp1, ndmq1 and niqmp is transferred
                  * to RSA object */
-                rc =  RSA_set0_crt_params(new->rsa, ndmp1, ndmq1, niqmp);
+                rc =  RSA_set0_crt_params(new_key->rsa, ndmp1, ndmq1, niqmp);
                 if (rc == 0) {
                     BN_free(ndmp1);
                     BN_free(ndmq1);
@@ -480,15 +480,15 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
     case SSH_KEYTYPE_ECDSA_P384:
     case SSH_KEYTYPE_ECDSA_P521:
 #ifdef HAVE_OPENSSL_ECC
-        new->ecdsa_nid = key->ecdsa_nid;
+        new_key->ecdsa_nid = key->ecdsa_nid;
 
         /* privkey -> pubkey */
         if (demote && ssh_key_is_private(key)) {
             const EC_POINT *p;
             int ok;
 
-            new->ecdsa = EC_KEY_new_by_curve_name(key->ecdsa_nid);
-            if (new->ecdsa == NULL) {
+            new_key->ecdsa = EC_KEY_new_by_curve_name(key->ecdsa_nid);
+            if (new_key->ecdsa == NULL) {
                 goto fail;
             }
 
@@ -497,30 +497,30 @@ ssh_key pki_key_dup(const ssh_key key, int demote)
                 goto fail;
             }
 
-            ok = EC_KEY_set_public_key(new->ecdsa, p);
+            ok = EC_KEY_set_public_key(new_key->ecdsa, p);
             if (!ok) {
                 goto fail;
             }
         } else {
-            new->ecdsa = EC_KEY_dup(key->ecdsa);
+            new_key->ecdsa = EC_KEY_dup(key->ecdsa);
         }
         break;
 #endif
     case SSH_KEYTYPE_ED25519:
-        rc = pki_ed25519_key_dup(new, key);
+        rc = pki_ed25519_key_dup(new_key, key);
         if (rc != SSH_OK) {
             goto fail;
         }
         break;
     case SSH_KEYTYPE_UNKNOWN:
     default:
-        ssh_key_free(new);
+        ssh_key_free(new_key);
         return NULL;
     }
 
-    return new;
+    return new_key;
 fail:
-    ssh_key_free(new);
+    ssh_key_free(new_key);
     return NULL;
 }
 
@@ -953,7 +953,7 @@ ssh_key pki_private_key_from_base64(const char *b64_key,
             goto fail;
         }
 
-        ed25519 = malloc(key_len);
+        ed25519 = (uint8_t*)malloc(key_len);
         if (ed25519 == NULL) {
             SSH_LOG(SSH_LOG_WARN, "Out of memory");
             goto fail;
@@ -1415,7 +1415,7 @@ static ssh_string pki_dsa_signature_to_blob(const ssh_signature sig)
     if (sig == NULL || sig->raw_sig == NULL) {
         return NULL;
     }
-    raw_sig_data = ssh_string_data(sig->raw_sig);
+    raw_sig_data = (const unsigned char*)ssh_string_data(sig->raw_sig);
     if (raw_sig_data == NULL) {
         return NULL;
     }
@@ -1500,7 +1500,7 @@ static ssh_string pki_ecdsa_signature_to_blob(const ssh_signature sig)
     if (sig == NULL || sig->raw_sig == NULL) {
         return NULL;
     }
-    raw_sig_data = ssh_string_data(sig->raw_sig);
+    raw_sig_data = (const unsigned char*)ssh_string_data(sig->raw_sig);
     if (raw_sig_data == NULL) {
         return NULL;
     }
@@ -2360,7 +2360,7 @@ int pki_verify_data_signature(ssh_session session,
 #endif
 
     /* Get the signature to be verified */
-    raw_sig_data = ssh_string_data(signature->raw_sig);
+    raw_sig_data = (unsigned char*)ssh_string_data(signature->raw_sig);
     raw_sig_len = ssh_string_len(signature->raw_sig);
     if (raw_sig_data == NULL) {
         return SSH_ERROR;
@@ -2468,14 +2468,14 @@ int pki_key_generate_ed25519(ssh_key key)
         goto error;
     }
 
-    key->ed25519_privkey = malloc(ED25519_KEY_LEN);
+    key->ed25519_privkey = (uint8_t*)malloc(ED25519_KEY_LEN);
     if (key->ed25519_privkey == NULL) {
         SSH_LOG(SSH_LOG_TRACE,
                 "Failed to allocate memory for ed25519 private key");
         goto error;
     }
 
-    key->ed25519_pubkey = malloc(ED25519_KEY_LEN);
+    key->ed25519_pubkey = (uint8_t*)malloc(ED25519_KEY_LEN);
     if (key->ed25519_pubkey == NULL) {
         SSH_LOG(SSH_LOG_TRACE,
                 "Failed to allocate memory for ed25519 public key");

@@ -65,7 +65,7 @@
 
 static ssh_message ssh_message_new(ssh_session session)
 {
-    ssh_message msg = calloc(1, sizeof(struct ssh_message_struct));
+    ssh_message msg = (ssh_message)calloc(1, sizeof(struct ssh_message_struct));
     if (msg == NULL) {
         return NULL;
     }
@@ -156,7 +156,7 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
               ssh_callbacks_exists(session->server_callbacks, auth_kbdint_reply_function) ){
               if (ssh_message_auth_kbdint_is_response(msg))
               {
-                rc = session->server_callbacks->auth_kbdint_reply_function(session, session->kbdint->nanswers, session->kbdint->answers, session->server_callbacks->userdata);
+                rc = session->server_callbacks->auth_kbdint_reply_function(session, session->kbdint->nanswers, (const char**)session->kbdint->answers, session->server_callbacks->userdata);
                 if (rc == SSH_AUTH_SUCCESS || rc == SSH_AUTH_PARTIAL) {
                   ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                 }
@@ -177,10 +177,10 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                   char * questions[10];
                   char echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
                   char * name, * instruction;
-                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, questions, echo, session->server_callbacks->userdata);
+                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, (const char**)&name, (const char**)&instruction, &nquestions, (const char**)questions, echo, session->server_callbacks->userdata);
                   if (rc == SSH_AUTH_INFO)
                   {
-                    ssh_message_auth_interactive_request(msg, name, instruction, nquestions, questions, echo);
+                    ssh_message_auth_interactive_request(msg, name, instruction, nquestions, (const char**)questions, (char*)echo);
                   }
                   else
                   {
@@ -536,7 +536,7 @@ ssh_message ssh_message_pop_head(ssh_session session){
 
 /* Returns 1 if there is a message available */
 static int ssh_message_termination(void *s){
-  ssh_session session = s;
+  ssh_session session = (ssh_session)s;
   struct ssh_iterator *it;
   if(session->session_state == SSH_SESSION_STATE_ERROR)
     return 1;
@@ -923,7 +923,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
 				rc = ssh_pki_signature_verify(session,
 					sig,
 					msg->auth_request.pubkey,
-					ssh_buffer_get(digest),
+					(const unsigned char*)ssh_buffer_get(digest),
 					ssh_buffer_get_len(digest));
 			}
         SSH_STRING_FREE(sig_blob);
@@ -1110,7 +1110,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   }
   session->kbdint->nanswers = nanswers;
 
-  session->kbdint->answers = calloc(nanswers, sizeof(char *));
+  session->kbdint->answers = (char**)calloc(nanswers, sizeof(char *));
   if (session->kbdint->answers == NULL) {
     session->kbdint->nanswers = 0;
     ssh_set_error_oom(session);

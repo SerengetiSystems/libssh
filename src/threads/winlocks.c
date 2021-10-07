@@ -30,7 +30,7 @@
 
 static int ssh_winlock_mutex_init (void **priv)
 {
-    CRITICAL_SECTION *lock = malloc(sizeof(CRITICAL_SECTION));
+    CRITICAL_SECTION *lock = (LPCRITICAL_SECTION)(malloc(sizeof(CRITICAL_SECTION)));
 
     if (lock == NULL) {
         return ENOMEM;
@@ -87,7 +87,7 @@ void ssh_mutex_lock(SSH_MUTEX *mutex)
     CRITICAL_SECTION *mutex_tmp = NULL;
 
     if (*mutex == NULL) {
-        mutex_tmp = malloc(sizeof(CRITICAL_SECTION));
+        mutex_tmp = (LPCRITICAL_SECTION)malloc(sizeof(CRITICAL_SECTION));
 
         if (mutex_tmp == NULL) {
             exit(ENOMEM);

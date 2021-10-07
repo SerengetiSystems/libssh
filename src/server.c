@@ -520,7 +520,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user) {
 
 /* returns 0 until the key exchange is not finished */
 static int ssh_server_kex_termination(void *s){
-  ssh_session session = s;
+  ssh_session session = (ssh_session)s;
   if (session->session_state != SSH_SESSION_STATE_ERROR &&
       session->session_state != SSH_SESSION_STATE_AUTHENTICATING &&
       session->session_state != SSH_SESSION_STATE_DISCONNECTED)
@@ -828,7 +828,7 @@ ssh_public_key ssh_message_auth_publickey(ssh_message msg){
 
 enum ssh_publickey_state_e ssh_message_auth_publickey_state(ssh_message msg){
 	if (msg == NULL) {
-	    return -1;
+	    return SSH_PUBLICKEY_STATE_ERROR;
 	  }
 	  return msg->auth_request.signature_state;
 }
@@ -927,7 +927,7 @@ int ssh_message_auth_interactive_request(ssh_message msg, const char *name,
 
   msg->session->kbdint->nprompts = num_prompts;
   if(num_prompts > 0) {
-    msg->session->kbdint->prompts = calloc(num_prompts, sizeof(char *));
+    msg->session->kbdint->prompts = (char**)calloc(num_prompts, sizeof(char *));
     if (msg->session->kbdint->prompts == NULL) {
       msg->session->kbdint->nprompts = 0;
       ssh_set_error_oom(msg->session);
@@ -935,7 +935,7 @@ int ssh_message_auth_interactive_request(ssh_message msg, const char *name,
       msg->session->kbdint = NULL;
       return SSH_ERROR;
     }
-    msg->session->kbdint->echo = calloc(num_prompts, sizeof(unsigned char));
+    msg->session->kbdint->echo = (unsigned char*)calloc(num_prompts, sizeof(unsigned char));
     if (msg->session->kbdint->echo == NULL) {
       ssh_set_error_oom(msg->session);
       ssh_kbdint_free(msg->session->kbdint);

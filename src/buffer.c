@@ -121,7 +121,7 @@ struct ssh_buffer_struct *ssh_buffer_new(void)
     struct ssh_buffer_struct *buf = NULL;
     int rc;
 
-    buf = calloc(1, sizeof(struct ssh_buffer_struct));
+    buf = (struct ssh_buffer_struct*)calloc(1, sizeof(struct ssh_buffer_struct));
     if (buf == NULL) {
         return NULL;
     }
@@ -181,7 +181,7 @@ void ssh_buffer_set_secure(ssh_buffer buffer)
 static int realloc_buffer(struct ssh_buffer_struct *buffer, size_t needed)
 {
     size_t smallest = 1;
-    uint8_t *new = NULL;
+    uint8_t *new_buffer = NULL;
 
     buffer_verify(buffer);
 
@@ -199,20 +199,20 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, size_t needed)
     }
 
     if (buffer->secure) {
-        new = malloc(needed);
-        if (new == NULL) {
+        new_buffer = (uint8_t*)malloc(needed);
+        if (new_buffer == NULL) {
             return -1;
         }
-        memcpy(new, buffer->data, buffer->used);
+        memcpy(new_buffer, buffer->data, buffer->used);
         explicit_bzero(buffer->data, buffer->used);
         SAFE_FREE(buffer->data);
     } else {
-        new = realloc(buffer->data, needed);
-        if (new == NULL) {
+        new_buffer = (uint8_t*)realloc(buffer->data, needed);
+        if (new_buffer == NULL) {
             return -1;
         }
     }
-    buffer->data = new;
+    buffer->data = new_buffer;
     buffer->allocated = needed;
 
     buffer_verify(buffer);
@@ -1192,7 +1192,7 @@ int ssh_buffer_unpack_va(struct ssh_buffer_struct *buffer,
                 break;
             }
 
-            *o.cstring = malloc(len + 1);
+            *o.cstring = (char*)malloc(len + 1);
             if (*o.cstring == NULL){
                 rc = SSH_ERROR;
                 break;

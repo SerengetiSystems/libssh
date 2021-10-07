@@ -152,7 +152,11 @@ static int set_tcp_nodelay(socket_t socket)
     return setsockopt(socket,
                       IPPROTO_TCP,
                       TCP_NODELAY,
+#ifdef _WIN32
+                      (const char*)&opt,
+#else
                       (void *)&opt,
+#endif
                       sizeof(opt));
 }
 

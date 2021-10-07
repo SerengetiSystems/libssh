@@ -199,7 +199,7 @@ static int pki_private_key_decrypt(ssh_string blob,
 
     rc = bcrypt_pbkdf(passphrase,
                       strlen(passphrase),
-                      ssh_string_data(salt),
+                      (const uint8_t*)ssh_string_data(salt),
                       ssh_string_len(salt),
                       key_material,
                       key_material_len,
@@ -231,7 +231,7 @@ ssh_pki_openssh_import(const char *text_key,
                        const char *passphrase,
                        ssh_auth_callback auth_fn,
                        void *auth_data,
-                       bool private)
+                       bool priv)
 {
     const char *ptr = text_key;
     const char *end;
@@ -263,7 +263,7 @@ ssh_pki_openssh_import(const char *text_key,
         SSH_LOG(SSH_LOG_WARN, "Not an OpenSSH private key (no footer)");
         goto out;
     }
-    base64 = malloc(end - ptr + 1);
+    base64 = (char*)malloc(end - ptr + 1);
     if (base64 == NULL) {
         goto out;
     }
@@ -311,7 +311,7 @@ ssh_pki_openssh_import(const char *text_key,
     /* If we are interested only in public key do not progress
      * to the key decryption later
      */
-    if (!private) {
+    if (!priv) {
         rc = ssh_pki_import_pubkey_blob(pubkey0, &key);
         if (rc != SSH_OK) {
             SSH_LOG(SSH_LOG_WARN, "Failed to import public key blob");
@@ -501,7 +501,7 @@ static int pki_private_key_encrypt(ssh_buffer privkey_buffer,
 
     rc = bcrypt_pbkdf(passphrase,
                       strlen(passphrase),
-                      ssh_string_data(salt),
+                      (const uint8_t*)ssh_string_data(salt),
                       ssh_string_len(salt),
                       key_material,
                       key_material_len,
@@ -670,7 +670,7 @@ ssh_string ssh_pki_openssh_privkey_export(const ssh_key privkey,
         goto error;
     }
 
-    b64 = bin_to_base64(ssh_buffer_get(buffer),
+    b64 = bin_to_base64((const uint8_t*)ssh_buffer_get(buffer),
                         ssh_buffer_get_len(buffer));
     if (b64 == NULL){
         goto error;

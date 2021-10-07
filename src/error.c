@@ -55,7 +55,7 @@ void _ssh_set_error(void *error,
                     const char *function,
                     const char *descr, ...)
 {
-    struct ssh_common_struct *err = error;
+    struct ssh_common_struct *err = (struct ssh_common_struct*)error;
     va_list va;
 
     va_start(va, descr);
@@ -83,7 +83,7 @@ void _ssh_set_error(void *error,
  */
 void _ssh_set_error_oom(void *error, const char *function)
 {
-    struct error_struct *err = error;
+    struct error_struct *err = (struct error_struct*)error;
 
     snprintf(err->error_buffer, sizeof(err->error_buffer),
             "%s: Out of memory", function);
@@ -115,7 +115,7 @@ void _ssh_set_error_invalid(void *error, const char *function)
  */
 void ssh_reset_error(void *error)
 {
-    struct ssh_common_struct *err = error;
+    struct ssh_common_struct *err = (struct ssh_common_struct*)error;
 
     ZERO_STRUCT(err->error.error_buffer);
     err->error.error_code = 0;
@@ -129,7 +129,7 @@ void ssh_reset_error(void *error)
  * @return A static string describing the error.
  */
 const char *ssh_get_error(void *error) {
-  struct error_struct *err = error;
+  struct error_struct *err = (error_struct*)error;
 
   return err->error_buffer;
 }
@@ -149,7 +149,7 @@ const char *ssh_get_error(void *error) {
  *         SSH_FATAL.
  */
 int ssh_get_error_code(void *error) {
-  struct error_struct *err = error;
+  struct error_struct *err = (error_struct*)error;
 
   return err->error_code;
 }
