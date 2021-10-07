@@ -75,18 +75,9 @@
 
 #elif defined(HAVE_LIBCRYPTO)
 # ifdef HAVE_OPENSSL_AES_H
-#  ifdef HAVE_OPENSSL_EVP_AES_GCM
-#   define GCM "aes256-gcm@openssh.com,aes128-gcm@openssh.com,"
-#  else
-#   define GCM ""
-#  endif /* HAVE_OPENSSL_EVP_AES_GCM */
-#  ifdef BROKEN_AES_CTR
-#   define AES GCM
-#   define AES_CBC "aes256-cbc,aes192-cbc,aes128-cbc,"
-#  else /* BROKEN_AES_CTR */
-#   define AES GCM "aes256-ctr,aes192-ctr,aes128-ctr,"
-#   define AES_CBC "aes256-cbc,aes192-cbc,aes128-cbc,"
-#  endif /* BROKEN_AES_CTR */
+#  define GCM "aes256-gcm@openssh.com,aes128-gcm@openssh.com,"
+#  define AES GCM "aes256-ctr,aes192-ctr,aes128-ctr,"
+#  define AES_CBC "aes256-cbc,aes192-cbc,aes128-cbc,"
 # else /* HAVE_OPENSSL_AES_H */
 #  define AES ""
 #  define AES_CBC ""
@@ -1258,11 +1249,13 @@ int ssh_make_sessionid(ssh_session session)
         }
         memcpy(session->next_crypto->session_id, session->next_crypto->secret_hash,
                 session->next_crypto->digest_len);
+	/* Initial length is the same as secret hash */
+	session->next_crypto->session_id_len = session->next_crypto->digest_len;
     }
 #ifdef DEBUG_CRYPTO
-    printf("Session hash: \n");
+    SSH_LOG(SSH_LOG_DEBUG, "Session hash: \n");
     ssh_log_hexdump("secret hash", session->next_crypto->secret_hash, session->next_crypto->digest_len);
-    ssh_log_hexdump("session id", session->next_crypto->session_id, session->next_crypto->digest_len);
+    ssh_log_hexdump("session id", session->next_crypto->session_id, session->next_crypto->session_id_len);
 #endif
 
     rc = SSH_OK;

@@ -122,14 +122,13 @@ int ssh_get_random(void *where, int len, int strong)
 SHACTX sha1_init(void)
 {
     int rc;
-    SHACTX c = EVP_MD_CTX_create();
+    SHACTX c = EVP_MD_CTX_new();
     if (c == NULL) {
         return NULL;
     }
-    EVP_MD_CTX_init(c);
     rc = EVP_DigestInit_ex(c, EVP_sha1(), NULL);
     if (rc == 0) {
-        EVP_MD_CTX_destroy(c);
+        EVP_MD_CTX_free(c);
         c = NULL;
     }
     return c;
@@ -145,7 +144,7 @@ void sha1_final(unsigned char *md, SHACTX c)
     unsigned int mdlen = 0;
 
     EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_destroy(c);
+    EVP_MD_CTX_free(c);
 }
 
 void sha1(const unsigned char *digest, int len, unsigned char *hash)
@@ -214,14 +213,13 @@ void evp_final(EVPCTX ctx, unsigned char *md, unsigned int *mdlen)
 SHA256CTX sha256_init(void)
 {
     int rc;
-    SHA256CTX c = EVP_MD_CTX_create();
+    SHA256CTX c = EVP_MD_CTX_new();
     if (c == NULL) {
         return NULL;
     }
-    EVP_MD_CTX_init(c);
     rc = EVP_DigestInit_ex(c, EVP_sha256(), NULL);
     if (rc == 0) {
-        EVP_MD_CTX_destroy(c);
+        EVP_MD_CTX_free(c);
         c = NULL;
     }
     return c;
@@ -237,7 +235,7 @@ void sha256_final(unsigned char *md, SHA256CTX c)
     unsigned int mdlen = 0;
 
     EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_destroy(c);
+    EVP_MD_CTX_free(c);
 }
 
 void sha256(const unsigned char *digest, int len, unsigned char *hash)
@@ -252,14 +250,13 @@ void sha256(const unsigned char *digest, int len, unsigned char *hash)
 SHA384CTX sha384_init(void)
 {
     int rc;
-    SHA384CTX c = EVP_MD_CTX_create();
+    SHA384CTX c = EVP_MD_CTX_new();
     if (c == NULL) {
         return NULL;
     }
-    EVP_MD_CTX_init(c);
     rc = EVP_DigestInit_ex(c, EVP_sha384(), NULL);
     if (rc == 0) {
-        EVP_MD_CTX_destroy(c);
+        EVP_MD_CTX_free(c);
         c = NULL;
     }
     return c;
@@ -275,7 +272,7 @@ void sha384_final(unsigned char *md, SHA384CTX c)
     unsigned int mdlen = 0;
 
     EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_destroy(c);
+    EVP_MD_CTX_free(c);
 }
 
 void sha384(const unsigned char *digest, int len, unsigned char *hash)
@@ -290,14 +287,13 @@ void sha384(const unsigned char *digest, int len, unsigned char *hash)
 SHA512CTX sha512_init(void)
 {
     int rc = 0;
-    SHA512CTX c = EVP_MD_CTX_create();
+    SHA512CTX c = EVP_MD_CTX_new();
     if (c == NULL) {
         return NULL;
     }
-    EVP_MD_CTX_init(c);
     rc = EVP_DigestInit_ex(c, EVP_sha512(), NULL);
     if (rc == 0) {
-        EVP_MD_CTX_destroy(c);
+        EVP_MD_CTX_free(c);
         c = NULL;
     }
     return c;
@@ -313,7 +309,7 @@ void sha512_final(unsigned char *md, SHA512CTX c)
     unsigned int mdlen = 0;
 
     EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_destroy(c);
+    EVP_MD_CTX_free(c);
 }
 
 void sha512(const unsigned char *digest, int len, unsigned char *hash)
@@ -328,14 +324,13 @@ void sha512(const unsigned char *digest, int len, unsigned char *hash)
 MD5CTX md5_init(void)
 {
     int rc;
-    MD5CTX c = EVP_MD_CTX_create();
+    MD5CTX c = EVP_MD_CTX_new();
     if (c == NULL) {
         return NULL;
     }
-    EVP_MD_CTX_init(c);
     rc = EVP_DigestInit_ex(c, EVP_md5(), NULL);
     if(rc == 0) {
-        EVP_MD_CTX_destroy(c);
+        EVP_MD_CTX_free(c);
         c = NULL;
     }
     return c;
@@ -351,7 +346,7 @@ void md5_final(unsigned char *md, MD5CTX c)
     unsigned int mdlen = 0;
 
     EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_destroy(c);
+    EVP_MD_CTX_free(c);
 }
 
 #ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
@@ -401,7 +396,7 @@ int ssh_kdf(struct ssh_crypto_struct *crypto,
         goto out;
     }
     rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_SSHKDF_SESSION_ID,
-                      crypto->session_id, crypto->digest_len);
+                      crypto->session_id, crypto->session_id_len);
     if (rc != 1) {
         goto out;
     }
@@ -429,56 +424,70 @@ int ssh_kdf(struct ssh_crypto_struct *crypto,
 }
 #endif
 
-HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
-  HMACCTX ctx = NULL;
+HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type)
+{
+    HMACCTX ctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    int rc = -1;
 
-  ctx = HMAC_CTX_new();
-  if (ctx == NULL) {
-    return NULL;
-  }
+    ctx = EVP_MD_CTX_new();
+    if (ctx == NULL) {
+        return NULL;
+    }
 
+    pkey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, len);
+    if (pkey == NULL) {
+        goto error;
+    }
 
-  switch(type) {
+    switch (type) {
     case SSH_HMAC_SHA1:
-      HMAC_Init_ex(ctx, key, len, EVP_sha1(), NULL);
-      break;
+        rc = EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, pkey);
+        break;
     case SSH_HMAC_SHA256:
-      HMAC_Init_ex(ctx, key, len, EVP_sha256(), NULL);
-      break;
+        rc = EVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, pkey);
+        break;
     case SSH_HMAC_SHA512:
-      HMAC_Init_ex(ctx, key, len, EVP_sha512(), NULL);
-      break;
+        rc = EVP_DigestSignInit(ctx, NULL, EVP_sha512(), NULL, pkey);
+        break;
     case SSH_HMAC_MD5:
-      HMAC_Init_ex(ctx, key, len, EVP_md5(), NULL);
-      break;
+        rc = EVP_DigestSignInit(ctx, NULL, EVP_md5(), NULL, pkey);
+        break;
     default:
-      HMAC_CTX_free(ctx);
-      ctx = NULL;
-  }
+        rc = -1;
+        break;
+    }
 
-  return ctx;
+    EVP_PKEY_free(pkey);
+    if (rc != 1) {
+        goto error;
+    }
+    return ctx;
+
+error:
+    EVP_MD_CTX_free(ctx);
+    return NULL;
 }
 
-void hmac_update(HMACCTX ctx, const void *data, unsigned long len) {
-  HMAC_Update(ctx, data, len);
+void hmac_update(HMACCTX ctx, const void *data, unsigned long len)
+{
+    EVP_DigestSignUpdate(ctx, data, len);
 }
 
-void hmac_final(HMACCTX ctx, unsigned char *hashmacbuf, unsigned int *len) {
-  HMAC_Final(ctx,hashmacbuf,len);
-
-#if OPENSSL_VERSION_NUMBER > 0x10100000L
-  HMAC_CTX_free(ctx);
-  ctx = NULL;
-#else
-  HMAC_cleanup(ctx);
-  SAFE_FREE(ctx);
-  ctx = NULL;
-#endif
+void hmac_final(HMACCTX ctx, unsigned char *hashmacbuf, unsigned int *len)
+{
+    size_t res;
+    EVP_DigestSignFinal(ctx, hashmacbuf, &res);
+    EVP_MD_CTX_free(ctx);
+    *len = res;
 }
 
-static void evp_cipher_init(struct ssh_cipher_struct *cipher) {
+static void evp_cipher_init(struct ssh_cipher_struct *cipher)
+{
     if (cipher->ctx == NULL) {
         cipher->ctx = EVP_CIPHER_CTX_new();
+    } else {
+        EVP_CIPHER_CTX_init(cipher->ctx);
     }
 
     switch(cipher->ciphertype){
@@ -491,7 +500,6 @@ static void evp_cipher_init(struct ssh_cipher_struct *cipher) {
     case SSH_AES256_CBC:
         cipher->cipher = EVP_aes_256_cbc();
         break;
-#ifdef HAVE_OPENSSL_EVP_AES_CTR
     case SSH_AES128_CTR:
         cipher->cipher = EVP_aes_128_ctr();
         break;
@@ -501,26 +509,12 @@ static void evp_cipher_init(struct ssh_cipher_struct *cipher) {
     case SSH_AES256_CTR:
         cipher->cipher = EVP_aes_256_ctr();
         break;
-#else
-    case SSH_AES128_CTR:
-    case SSH_AES192_CTR:
-    case SSH_AES256_CTR:
-        SSH_LOG(SSH_LOG_WARNING, "This cipher is not available in evp_cipher_init");
-        break;
-#endif
-#ifdef HAVE_OPENSSL_EVP_AES_GCM
     case SSH_AEAD_AES128_GCM:
         cipher->cipher = EVP_aes_128_gcm();
         break;
     case SSH_AEAD_AES256_GCM:
         cipher->cipher = EVP_aes_256_gcm();
         break;
-#else
-    case SSH_AEAD_AES128_GCM:
-    case SSH_AEAD_AES256_GCM:
-        SSH_LOG(SSH_LOG_WARNING, "This cipher is not available in evp_cipher_init");
-        break;
-#endif /* HAVE_OPENSSL_EVP_AES_GCM */
     case SSH_3DES_CBC:
         cipher->cipher = EVP_des_ede3_cbc();
         break;
@@ -545,7 +539,6 @@ static int evp_cipher_set_encrypt_key(struct ssh_cipher_struct *cipher,
     int rc;
 
     evp_cipher_init(cipher);
-    EVP_CIPHER_CTX_reset(cipher->ctx);
 
     rc = EVP_EncryptInit_ex(cipher->ctx, cipher->cipher, NULL, key, IV);
     if (rc != 1){
@@ -553,7 +546,6 @@ static int evp_cipher_set_encrypt_key(struct ssh_cipher_struct *cipher,
         return SSH_ERROR;
     }
 
-#ifdef HAVE_OPENSSL_EVP_AES_GCM
     /* For AES-GCM we need to set IV in specific way */
     if (cipher->ciphertype == SSH_AEAD_AES128_GCM ||
         cipher->ciphertype == SSH_AEAD_AES256_GCM) {
@@ -566,7 +558,6 @@ static int evp_cipher_set_encrypt_key(struct ssh_cipher_struct *cipher,
             return SSH_ERROR;
         }
     }
-#endif /* HAVE_OPENSSL_EVP_AES_GCM */
 
     EVP_CIPHER_CTX_set_padding(cipher->ctx, 0);
 
@@ -578,7 +569,6 @@ static int evp_cipher_set_decrypt_key(struct ssh_cipher_struct *cipher,
     int rc;
 
     evp_cipher_init(cipher);
-    EVP_CIPHER_CTX_reset(cipher->ctx);
 
     rc = EVP_DecryptInit_ex(cipher->ctx, cipher->cipher, NULL, key, IV);
     if (rc != 1){
@@ -586,7 +576,6 @@ static int evp_cipher_set_decrypt_key(struct ssh_cipher_struct *cipher,
         return SSH_ERROR;
     }
 
-#ifdef HAVE_OPENSSL_EVP_AES_GCM
     /* For AES-GCM we need to set IV in specific way */
     if (cipher->ciphertype == SSH_AEAD_AES128_GCM ||
         cipher->ciphertype == SSH_AEAD_AES256_GCM) {
@@ -599,7 +588,6 @@ static int evp_cipher_set_decrypt_key(struct ssh_cipher_struct *cipher,
             return SSH_ERROR;
         }
     }
-#endif /* HAVE_OPENSSL_EVP_AES_GCM */
 
     EVP_CIPHER_CTX_set_padding(cipher->ctx, 0);
 
@@ -665,68 +653,6 @@ static void evp_cipher_cleanup(struct ssh_cipher_struct *cipher) {
     }
 }
 
-#ifndef HAVE_OPENSSL_EVP_AES_CTR
-/* Some OS (osx, OpenIndiana, ...) have no support for CTR ciphers in EVP_aes */
-
-struct ssh_aes_key_schedule {
-    AES_KEY key;
-    uint8_t IV[AES_BLOCK_SIZE];
-};
-
-static int aes_ctr_set_key(struct ssh_cipher_struct *cipher, void *key,
-    void *IV) {
-    int rc;
-
-    if (cipher->aes_key == NULL) {
-        cipher->aes_key = malloc(sizeof (struct ssh_aes_key_schedule));
-    }
-    if (cipher->aes_key == NULL) {
-        return SSH_ERROR;
-    }
-    ZERO_STRUCTP(cipher->aes_key);
-    /* CTR doesn't need a decryption key */
-    rc = AES_set_encrypt_key(key, cipher->keysize, &cipher->aes_key->key);
-    if (rc < 0) {
-        SAFE_FREE(cipher->aes_key);
-        return SSH_ERROR;
-    }
-    memcpy(cipher->aes_key->IV, IV, AES_BLOCK_SIZE);
-    return SSH_OK;
-}
-
-static void
-aes_ctr_encrypt(struct ssh_cipher_struct *cipher,
-                void *in,
-                void *out,
-                size_t len)
-{
-  unsigned char tmp_buffer[AES_BLOCK_SIZE];
-  unsigned int num=0;
-  /* Some things are special with ctr128 :
-   * In this case, tmp_buffer is not being used, because it is used to store temporary data
-   * when an encryption is made on lengths that are not multiple of blocksize.
-   * Same for num, which is being used to store the current offset in blocksize in CTR
-   * function.
-   */
-#ifdef HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT
-  CRYPTO_ctr128_encrypt(in, out, len, &cipher->aes_key->key, cipher->aes_key->IV, tmp_buffer, &num, (block128_f)AES_encrypt);
-#else
-  AES_ctr128_encrypt(in, out, len, &cipher->aes_key->key, cipher->aes_key->IV, tmp_buffer, &num);
-#endif /* HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT */
-}
-
-static void aes_ctr_cleanup(struct ssh_cipher_struct *cipher){
-    if (cipher != NULL) {
-        if (cipher->aes_key != NULL) {
-            explicit_bzero(cipher->aes_key, sizeof(*cipher->aes_key));
-        }
-        SAFE_FREE(cipher->aes_key);
-    }
-}
-
-#endif /* HAVE_OPENSSL_EVP_AES_CTR */
-
-#ifdef HAVE_OPENSSL_EVP_AES_GCM
 static int
 evp_cipher_aead_get_length(struct ssh_cipher_struct *cipher,
                            void *in,
@@ -896,8 +822,6 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
 
     return SSH_OK;
 }
-
-#endif /* HAVE_OPENSSL_EVP_AES_GCM */
 
 #if defined(HAVE_OPENSSL_EVP_CHACHA20) && defined(HAVE_OPENSSL_EVP_POLY1305)
 
@@ -1182,7 +1106,7 @@ chacha20_poly1305_aead_decrypt(struct ssh_cipher_struct *cipher,
 #endif /* DEBUG_CRYPTO */
 
     /* Verify the calculated MAC matches the attached MAC */
-    cmp = memcmp(tag, mac, POLY1305_TAGLEN);
+    cmp = CRYPTO_memcmp(tag, mac, POLY1305_TAGLEN);
     if (cmp != 0) {
         /* mac error */
         SSH_LOG(SSH_LOG_PACKET, "poly1305 verify error");
@@ -1308,11 +1232,6 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
   },
 #endif
 #ifdef HAS_AES
-#ifndef BROKEN_AES_CTR
-/* OpenSSL until 0.9.7c has a broken AES_ctr128_encrypt implementation which
- * increments the counter from 2^64 instead of 1. It's better not to use it
- */
-#ifdef HAVE_OPENSSL_EVP_AES_CTR
   {
     .name = "aes128-ctr",
     .blocksize = AES_BLOCK_SIZE,
@@ -1346,42 +1265,6 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
     .decrypt = evp_cipher_decrypt,
     .cleanup = evp_cipher_cleanup
   },
-#else /* HAVE_OPENSSL_EVP_AES_CTR */
-  {
-    .name = "aes128-ctr",
-    .blocksize = AES_BLOCK_SIZE,
-    .ciphertype = SSH_AES128_CTR,
-    .keysize = 128,
-    .set_encrypt_key = aes_ctr_set_key,
-    .set_decrypt_key = aes_ctr_set_key,
-    .encrypt = aes_ctr_encrypt,
-    .decrypt = aes_ctr_encrypt,
-    .cleanup = aes_ctr_cleanup
-  },
-  {
-    .name = "aes192-ctr",
-    .blocksize = AES_BLOCK_SIZE,
-    .ciphertype = SSH_AES192_CTR,
-    .keysize = 192,
-    .set_encrypt_key = aes_ctr_set_key,
-    .set_decrypt_key = aes_ctr_set_key,
-    .encrypt = aes_ctr_encrypt,
-    .decrypt = aes_ctr_encrypt,
-    .cleanup = aes_ctr_cleanup
-  },
-  {
-    .name = "aes256-ctr",
-    .blocksize = AES_BLOCK_SIZE,
-    .ciphertype = SSH_AES256_CTR,
-    .keysize = 256,
-    .set_encrypt_key = aes_ctr_set_key,
-    .set_decrypt_key = aes_ctr_set_key,
-    .encrypt = aes_ctr_encrypt,
-    .decrypt = aes_ctr_encrypt,
-    .cleanup = aes_ctr_cleanup
-  },
-#endif /* HAVE_OPENSSL_EVP_AES_CTR */
-#endif /* BROKEN_AES_CTR */
   {
     .name = "aes128-cbc",
     .blocksize = AES_BLOCK_SIZE,
@@ -1415,7 +1298,6 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
     .decrypt = evp_cipher_decrypt,
     .cleanup = evp_cipher_cleanup
   },
-#ifdef HAVE_OPENSSL_EVP_AES_GCM
   {
     .name = "aes128-gcm@openssh.com",
     .blocksize = AES_BLOCK_SIZE,
@@ -1444,7 +1326,6 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
     .aead_decrypt = evp_cipher_aead_decrypt,
     .cleanup = evp_cipher_cleanup
   },
-#endif /* HAVE_OPENSSL_EVP_AES_GCM */
 #endif /* HAS_AES */
 #ifdef HAS_DES
   {

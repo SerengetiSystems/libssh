@@ -58,8 +58,14 @@ elseif(WITH_MBEDTLS)
       message(FATAL_ERROR "Could not find mbedTLS")
     endif (NOT MBEDTLS_FOUND)
 else (WITH_GCRYPT)
-  find_package(OpenSSL)
-  if (NOT OPENSSL_FOUND)
+  find_package(OpenSSL 1.0.1)
+  if (OPENSSL_FOUND)
+    # On CMake < 3.16, OPENSSL_CRYPTO_LIBRARIES is usually a synonym for OPENSSL_CRYPTO_LIBRARY, but is not defined
+    # when building on Windows outside of Cygwin. We provide the synonym here, if FindOpenSSL didn't define it already.
+    if (NOT DEFINED OPENSSL_CRYPTO_LIBRARIES)
+      set(OPENSSL_CRYPTO_LIBRARIES ${OPENSSL_CRYPTO_LIBRARY})
+    endif (NOT DEFINED OPENSSL_CRYPTO_LIBRARIES)
+  else (OPENSSL_FOUND)
     find_package(GCrypt)
     if (NOT GCRYPT_FOUND)
       find_package(MbedTLS)
@@ -67,7 +73,7 @@ else (WITH_GCRYPT)
         message(FATAL_ERROR "Could not find OpenSSL, GCrypt or mbedTLS")
       endif (NOT MBEDTLS_FOUND)
     endif (NOT GCRYPT_FOUND)
-  endif (NOT OPENSSL_FOUND)
+  endif (OPENSSL_FOUND)
 endif(WITH_GCRYPT)
 
 if (UNIT_TESTING)
@@ -118,7 +124,7 @@ add_subdirectory(include)
 add_subdirectory(src)
 
 # pkg-config file
-if (UNIX)
+if (UNIX OR MINGW)
 configure_file(libssh.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libssh.pc)
 install(
   FILES
@@ -128,7 +134,7 @@ install(
   COMPONENT
     pkgconfig
 )
-endif (UNIX)
+endif (UNIX OR MINGW)
 
 # CMake config files
 include(CMakePackageConfigHelpers)
@@ -210,10 +216,10 @@ if (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
     endif(UPDATE_ABI)
 endif (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
 
-add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET})
+add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET} VERBATIM)
 
 # Link compile database for clangd
-execute_process(COMMAND cmake -E create_symlink
+execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
                 "${CMAKE_BINARY_DIR}/compile_commands.json"
                 "${CMAKE_SOURCE_DIR}/compile_commands.json")
 

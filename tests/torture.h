@@ -113,6 +113,7 @@ ssh_bind torture_ssh_bind(const char *addr,
                           const char *private_key_file);
 
 struct torture_sftp *torture_sftp_session(ssh_session session);
+struct torture_sftp *torture_sftp_session_channel(ssh_session session, ssh_channel channel);
 void torture_sftp_close(struct torture_sftp *t);
 
 void torture_write_file(const char *filename, const char *data);
@@ -144,7 +145,11 @@ void torture_setup_libssh_server(void **state, const char *server_path);
 /*
  * This function must be defined in every unit test file.
  */
+#if ((defined _WIN32) || (defined _WIN64)) && (defined USE_ATTRIBUTE_WEAK)
+__attribute__((weak)) int torture_run_tests(void);
+#else
 int torture_run_tests(void);
+#endif
 
 char *torture_make_temp_dir(const char *template);
 char *torture_create_temp_file(const char *template);

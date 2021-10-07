@@ -50,6 +50,7 @@ struct ssh_bind_struct {
   bool config_processed;
   char *config_dir;
   char *pubkey_accepted_key_types;
+  char* moduli_file;
 };
 
 ssh_poll_handle ssh_bind_get_poll(struct ssh_bind_struct *sshbind);

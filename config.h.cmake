@@ -114,26 +114,8 @@
 
 /*************************** FUNCTIONS ***************************/
 
-/* Define to 1 if you have the `EVP_aes128_ctr' function. */
-#cmakedefine HAVE_OPENSSL_EVP_AES_CTR 1
-
-/* Define to 1 if you have the `EVP_aes128_cbc' function. */
-#cmakedefine HAVE_OPENSSL_EVP_AES_CBC 1
-
-/* Define to 1 if you have the `EVP_aes128_gcm' function. */
-#cmakedefine HAVE_OPENSSL_EVP_AES_GCM 1
-
 /* Define to 1 if you have the `EVP_chacha20' function. */
 #cmakedefine HAVE_OPENSSL_EVP_CHACHA20 1
-
-/* Define to 1 if you have the `CRYPTO_THREADID_set_callback' function. */
-#cmakedefine HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK 1
-
-/* Define to 1 if you have the `CRYPTO_ctr128_encrypt' function. */
-#cmakedefine HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT 1
-
-/* Define to 1 if you have the `EVP_CIPHER_CTX_new' function. */
-#cmakedefine HAVE_OPENSSL_EVP_CIPHER_CTX_NEW 1
 
 /* Define to 1 if you have the `EVP_KDF_CTX_new_id' function. */
 #cmakedefine HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID 1

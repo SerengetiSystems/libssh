@@ -543,7 +543,6 @@ int pki_key_generate_rsa(ssh_key key, int parameter){
 
 int pki_key_generate_dss(ssh_key key, int parameter){
     int rc;
-#if OPENSSL_VERSION_NUMBER > 0x00908000L
     key->dsa = DSA_new();
     if (key->dsa == NULL) {
         return SSH_ERROR;
@@ -560,13 +559,6 @@ int pki_key_generate_dss(ssh_key key, int parameter){
         key->dsa = NULL;
         return SSH_ERROR;
     }
-#else
-    key->dsa = DSA_generate_parameters(parameter, NULL, 0, NULL, NULL,
-            NULL, NULL);
-    if(key->dsa == NULL){
-        return SSH_ERROR;
-    }
-#endif
     rc = DSA_generate_key(key->dsa);
     if (rc != 1){
         DSA_free(key->dsa);
@@ -840,7 +832,12 @@ ssh_string pki_private_key_to_pem(const ssh_key key,
         goto err;
     }
 
-    ssh_string_fill(blob, buf->data, buf->length);
+    rc = ssh_string_fill(blob, buf->data, buf->length);
+    if (rc < 0) {
+        ssh_string_free(blob);
+        goto err;
+    }
+
     BIO_free(mem);
 
     return blob;
@@ -1411,6 +1408,7 @@ static ssh_string pki_dsa_signature_to_blob(const ssh_signature sig)
 
     const unsigned char *raw_sig_data = NULL;
     size_t raw_sig_len;
+    int rc;
 
     DSA_SIG *dsa_sig;
 
@@ -1467,7 +1465,11 @@ static ssh_string pki_dsa_signature_to_blob(const ssh_signature sig)
         return NULL;
     }
 
-    ssh_string_fill(sig_blob, buffer, 40);
+    rc = ssh_string_fill(sig_blob, buffer, 40);
+    if (rc < 0) {
+        SSH_STRING_FREE(sig_blob);
+        return NULL;
+    }
 
     return sig_blob;
 
@@ -1544,7 +1546,10 @@ static ssh_string pki_ecdsa_signature_to_blob(const ssh_signature sig)
         goto error;
     }
 
-    ssh_string_fill(sig_blob, ssh_buffer_get(buf), ssh_buffer_get_len(buf));
+    rc = ssh_string_fill(sig_blob, ssh_buffer_get(buf), ssh_buffer_get_len(buf));
+    if (rc < 0) {
+        goto error;
+    }
 
     SSH_STRING_FREE(r);
     SSH_STRING_FREE(s);
@@ -1554,6 +1559,7 @@ static ssh_string pki_ecdsa_signature_to_blob(const ssh_signature sig)
     return sig_blob;
 
 error:
+    SSH_STRING_FREE(sig_blob);
     SSH_STRING_FREE(r);
     SSH_STRING_FREE(s);
     ECDSA_SIG_free(ecdsa_sig);
@@ -1619,7 +1625,7 @@ static int pki_signature_from_rsa_blob(ssh_session session, const ssh_key pubkey
     }
 
 #ifdef DEBUG_CRYPTO
-    SSH_LOG_COMMON(session, SSH_LOG_WARN, "RSA signature len: %lu", (unsigned long)len);
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "RSA signature len: %lu", (unsigned long)len);
     ssh_log_hexdump("RSA signature", ssh_string_data(sig_blob), len);
 #endif
 
@@ -1698,7 +1704,11 @@ static int pki_signature_from_dsa_blob(ssh_session session, UNUSED_PARAM(const s
     if (r == NULL) {
         goto error;
     }
-    ssh_string_fill(r, ssh_string_data(sig_blob), 20);
+    rc = ssh_string_fill(r, ssh_string_data(sig_blob), 20);
+    if (rc < 0) {
+        SSH_STRING_FREE(r);
+        goto error;
+    }
 
     pr = ssh_make_string_bn(r);
     ssh_string_burn(r);
@@ -1711,7 +1721,11 @@ static int pki_signature_from_dsa_blob(ssh_session session, UNUSED_PARAM(const s
     if (s == NULL) {
         goto error;
     }
-    ssh_string_fill(s, (char *)ssh_string_data(sig_blob) + 20, 20);
+    rc = ssh_string_fill(s, (char *)ssh_string_data(sig_blob) + 20, 20);
+    if (rc < 0) {
+        SSH_STRING_FREE(s);
+        goto error;
+    }
 
     ps = ssh_make_string_bn(s);
     ssh_string_burn(s);
