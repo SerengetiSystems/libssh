@@ -2451,12 +2451,12 @@ LIBSSH_API const char* ssh_key_type_name(const ssh_key key)
 
 LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key)
 {
-  return is_ecdsa_key_type(key);
+  return is_ecdsa_key_type(key->type);
 }
 
 LIBSSH_API int ssh_key_is_cert(const ssh_key key)
 {
-  return is_cert_type(key);
+  return is_cert_type(key->type);
 }
 
 LIBSSH_API int ssh_key_is_dsa(const ssh_key key)
