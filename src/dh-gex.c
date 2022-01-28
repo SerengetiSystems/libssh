@@ -39,7 +39,7 @@
 #include "libssh/session.h"
 
 /* Minimum, recommended and maximum size of DH group */
-#define DH_PMIN 2048
+#define DH_PMIN 1024
 #define DH_PREQ 2048
 #define DH_PMAX 8192
 
