@@ -21,3 +21,5 @@ endmacro()
 
 fuzzer(ssh_client_fuzzer)
 fuzzer(ssh_server_fuzzer)
+fuzzer(ssh_client_config_fuzzer)
+fuzzer(ssh_bind_config_fuzzer)
