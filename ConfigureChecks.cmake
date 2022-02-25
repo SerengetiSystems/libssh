@@ -303,22 +303,21 @@ endif ()
 # OPTIONS
 
 if (WITH_THREADLOCAL_LOGGING)
-
-check_c_source_compiles("
+  message(STATUS "Logging functions and userdata are thread local")
+    check_c_source_compiles("
 __thread int tls;
 
 int main(void) {
     return 0;
 }" HAVE_GCC_THREAD_LOCAL_STORAGE)
 
-check_c_source_compiles("
+    check_c_source_compiles("
 __declspec(thread) int tls;
 
 int main(void) {
     return 0;
 }" HAVE_MSC_THREAD_LOCAL_STORAGE)
-
-endif()
+endif (WITH_THREADLOCAL_LOGGING)
 
 ###########################################################
 # For detecting attributes we need to treat warnings as
