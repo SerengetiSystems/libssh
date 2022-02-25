@@ -526,10 +526,6 @@ LIBSSH_API int ssh_channel_listen_forward(ssh_session session,
 LIBSSH_API void ssh_free(ssh_session session);
 LIBSSH_API const char *ssh_get_disconnect_message(ssh_session session);
 LIBSSH_API const char *ssh_get_error(void *error);
-LIBSSH_API void _ssh_set_error(void* error,
-                               int code,
-                               const char* function,
-                               const char* descr, ...);
 LIBSSH_API int ssh_get_error_code(void *error);
 LIBSSH_API socket_t ssh_get_fd(ssh_session session);
 LIBSSH_API char *ssh_get_hexa(const unsigned char *what, size_t len);
@@ -834,6 +830,7 @@ LIBSSH_API void ssh_buffer_free(ssh_buffer buffer);
 LIBSSH_API int ssh_buffer_reinit(ssh_buffer buffer);
 LIBSSH_API int ssh_buffer_add_data(ssh_buffer buffer, const void *data, uint32_t len);
 LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, uint32_t requestedlen);
+LIBSSH_API uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, uint32_t len);
 LIBSSH_API void *ssh_buffer_get(ssh_buffer buffer);
 LIBSSH_API uint32_t ssh_buffer_get_len(ssh_buffer buffer);
 
