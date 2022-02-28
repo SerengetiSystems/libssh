@@ -69,6 +69,11 @@ int ssh_buffer_get_u64(ssh_buffer buffer, uint64_t *data);
 
 /* ssh_buffer_get_ssh_string() is an exception. if the String read is too large or invalid, it will answer NULL. */
 ssh_string ssh_buffer_get_ssh_string(ssh_buffer buffer);
+//to avoid unnecessary allocations use this. Returns -1 of len if too small or string is otherwise invalid
+ssize_t ssh_buffer_get_raw_string(ssh_buffer buffer, void* output, uint32_t len);
+//Avoid extra allocation by creating string then allocating buffer and copying to buffer. Do it in one step.
+char* ssh_buffer_get_char_string(ssh_buffer buffer, uint32_t* phostlen);
+int ssh_buffer_pass_string(struct ssh_buffer_struct* buffer);
 
 /* ssh_buffer_pass_bytes acts as if len bytes have been read (used for padding) */
 uint32_t ssh_buffer_pass_bytes_end(ssh_buffer buffer, uint32_t len);

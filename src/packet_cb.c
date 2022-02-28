@@ -47,9 +47,8 @@
  */
 SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
   int rc;
-  uint32_t code = 0;
+  uint32_t errorlen, code = 0;
   char *error = NULL;
-  ssh_string error_s;
   (void)user;
   (void)type;
 
@@ -58,11 +57,7 @@ SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
     code = ntohl(code);
   }
 
-  error_s = ssh_buffer_get_ssh_string(packet);
-  if (error_s != NULL) {
-    error = ssh_string_to_char(error_s);
-    SSH_STRING_FREE(error_s);
-  }
+  error = ssh_buffer_get_char_string(packet, &errorlen);
   SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received SSH_MSG_DISCONNECT %d:%s",
                           code, error != NULL ? error : "no error");
   ssh_set_error(session, SSH_FATAL,
