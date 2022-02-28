@@ -407,7 +407,6 @@ ssh_key ssh_agent_get_next_ident(struct ssh_session_struct *session,
     char **comment) {
     struct ssh_key_struct *key;
     struct ssh_string_struct *blob = NULL;
-    struct ssh_string_struct *tmp = NULL;
     int rc;
 
     if (session->agent->count == 0) {
@@ -421,22 +420,11 @@ ssh_key ssh_agent_get_next_ident(struct ssh_session_struct *session,
     }
 
     /* get the comment */
-    tmp = ssh_buffer_get_ssh_string(session->agent->ident);
-    if (tmp == NULL) {
+    *comment = ssh_buffer_get_char_string(session->agent->ident);
+    if (*comment == NULL) {
         SSH_STRING_FREE(blob);
-
         return NULL;
     }
-
-    if (comment) {
-        *comment = ssh_string_to_char(tmp);
-    } else {
-        SSH_STRING_FREE(blob);
-        SSH_STRING_FREE(tmp);
-
-        return NULL;
-    }
-    SSH_STRING_FREE(tmp);
 
     /* get key from blob */
     rc = ssh_pki_import_pubkey_blob(blob, &key);

@@ -30,6 +30,7 @@
 #include "nacl/crypto_scalarmult_curve25519.h"
 #endif
 
+#include "libssh/priv.h"
 #include "libssh/ssh2.h"
 #include "libssh/buffer.h"
 #include "libssh/priv.h"
