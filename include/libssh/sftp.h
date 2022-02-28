@@ -548,6 +548,42 @@ LIBSSH_API int sftp_async_read_begin(sftp_file file, uint32_t len);
 LIBSSH_API int sftp_async_read(sftp_file file, void *data, uint32_t len, uint32_t id);
 
 /**
+ * @brief start an asynchronous write and save the message id.
+ *
+ * @param file          The opened sftp file handle to be read from.
+ *
+ * @param data          Pointer to buffer contianing data to send.
+ *
+ * @param len           Size of the data in bytes.
+ *
+ * @return              Id of write request, SSH_ERROR if an error
+ *                      occured, SSH_AGAIN if the file is opened in nonblocking
+ *                      mode and the request hasn't been executed yet.
+ *
+ * @see sftp_open()
+ * @see sftp_async_write_end()
+ */
+LIBSSH_API int sftp_async_write_begin(sftp_file file, const void* buf, size_t count);
+
+/**
+ * @brief check completion status of a write id returned from sftp_async_write_begin.
+ *
+ * @param file          The opened sftp file handle to be read from.
+ *
+ * @param id            message id returned by sftp_async_write_begin
+ *
+ * @return              SSH_OK on success, SSH_ERROR if an error
+ *                      occured, SSH_AGAIN if the socket is opened in nonblocking
+ *                      mode and the response hasn't been read yet.
+ *
+ * @warning             A call to this function with an invalid identifier
+ *                      will never return.
+ *
+ * @see sftp_async_write_begin()
+ */
+LIBSSH_API int sftp_async_write_end(sftp_file file, int id);
+
+/**
  * @brief Write to a file using an opened sftp file handle.
  *
  * @param file          Open sftp file handle to write to.

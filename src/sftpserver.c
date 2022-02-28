@@ -251,7 +251,7 @@ sftp_client_message sftp_get_client_message(sftp_session sftp) {
 
 /* Send an sftp client message. Can be used in cas of proxying */
 int sftp_send_client_message(sftp_session sftp, sftp_client_message msg){
-	return sftp_packet_write(sftp, msg->type, msg->complete_message);
+	return (int)sftp_packet_write(sftp, msg->type, msg->complete_message);
 }
 
 uint8_t sftp_client_message_get_type(sftp_client_message msg){
