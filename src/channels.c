@@ -575,7 +575,7 @@ SSH_PACKET_CALLBACK(channel_rcv_change_window) {
     return SSH_PACKET_USED;
   }
 
-  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Adding %d bytes to channel (%d:%d) (from %d bytes)",
       bytes,
       channel->local_channel,

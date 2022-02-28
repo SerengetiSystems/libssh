@@ -139,7 +139,7 @@ ssh_bind ssh_bind_new(void) {
     }
     ptr->bindfd = SSH_INVALID_SOCKET;
     ptr->bindport = 22;
-    ptr->common.log_verbosity = 0;
+    ptr->common.log_verbosity = ssh_get_log_level();
 
     return ptr;
 }

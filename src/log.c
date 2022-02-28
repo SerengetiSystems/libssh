@@ -81,7 +81,7 @@ static void ssh_log_stderr(int verbosity,
                            const char *function,
                            const char *buffer)
 {
-    char date[128] = {0};
+    char date[64] = {0};
     int rc;
 
     rc = current_timestring(1, date, sizeof(date));
@@ -118,13 +118,14 @@ void _ssh_log(int verbosity,
               const char *function,
               const char *format, ...)
 {
-    char buffer[1024];
+    char buffer[512];
     va_list va;
 
     if (verbosity <= ssh_get_log_level()) {
         va_start(va, format);
         vsnprintf(buffer, sizeof(buffer), format, va);
         va_end(va);
+        buffer[_countof(buffer) - 1] = 0;
         ssh_log_function(verbosity, function, buffer);
     }
 }
@@ -135,14 +136,15 @@ void ssh_log(ssh_session session,
              int verbosity,
              const char *format, ...)
 {
-  char buffer[1024];
+  char buffer[512];
   va_list va;
 
   if (verbosity <= session->common.log_verbosity) {
     va_start(va, format);
     vsnprintf(buffer, sizeof(buffer), format, va);
     va_end(va);
-	if (session->common.callbacks && session->common.callbacks->log_function)
+    buffer[_countof(buffer) - 1] = 0;
+    if (session->common.callbacks && session->common.callbacks->log_function)
 		session->common.callbacks->log_function(session, verbosity, buffer, session->common.callbacks->userdata);
 	else
 	    ssh_log_function(verbosity, "", buffer);
@@ -160,21 +162,22 @@ void ssh_log_common(struct ssh_common_struct *common,
                     const char *function,
                     const char *format, ...)
 {
-    char buffer[1024];
+    char buffer[512];
     va_list va;
 
     if (verbosity <= common->log_verbosity) {
-		va_start(va, format);
-		vsnprintf(buffer, sizeof(buffer), format, va);
-		va_end(va);
-		if (common->callbacks && common->callbacks->log_function)
-		{
-			common->callbacks->log_function(common, verbosity, buffer, common->callbacks->userdata);
-		}
-		else
-		{
-			ssh_log_function(verbosity, function, buffer);
-		}
+	  va_start(va, format);
+	  vsnprintf(buffer, sizeof(buffer), format, va);
+	  va_end(va);
+          buffer[_countof(buffer) - 1] = 0;
+          if (common->callbacks && common->callbacks->log_function)
+	  {
+	      common->callbacks->log_function(common, verbosity, buffer, common->callbacks->userdata);
+	  }
+	  else
+	  {
+	      ssh_log_function(verbosity, function, buffer);
+	  }
     }
 }
 
@@ -193,7 +196,7 @@ int ssh_set_log_level(int level) {
     return SSH_ERROR;
   }
 
-  ssh_log_level = level;
+  ssh_log_level = level & 0xFFFFU;
 
   return SSH_OK;
 }

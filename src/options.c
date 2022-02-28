@@ -726,7 +726,7 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 }
 
                 session->common.log_verbosity = *x & 0xffffU;
-                ssh_set_log_level(*x & 0xffffU);
+                ssh_set_log_level(*x);
             }
             break;
         case SSH_OPTIONS_LOG_VERBOSITY_STR:
@@ -752,7 +752,7 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 }
 
                 session->common.log_verbosity = i & 0xffffU;
-                ssh_set_log_level(i & 0xffffU);
+                ssh_set_log_level(i);
             }
             break;
         case SSH_OPTIONS_CIPHERS_C_S:
