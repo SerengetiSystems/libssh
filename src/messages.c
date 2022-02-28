@@ -115,6 +115,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                     ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                 } else {
                     ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                 }
 
                 return SSH_OK;
@@ -129,6 +131,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                    ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                  } else {
                    ssh_message_reply_default(msg);
+                   if (rc == SSH_AUTH_ERROR)
+                     ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                  }
                } else {
                  if (rc == SSH_AUTH_SUCCESS) {
@@ -147,6 +151,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                     ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                 } else {
                     ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                 }
 
                 return SSH_OK;
@@ -167,6 +173,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                 }
                 else {
                   ssh_message_reply_default(msg);
+                  if (rc == SSH_AUTH_ERROR)
+                    ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                 }
               }
               else
@@ -841,22 +849,22 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
   }
 
   else if (strcmp(method, "keyboard-interactive") == 0) {
-    ssh_string lang = NULL;
-    ssh_string submethods = NULL;
+    char discard[64];
 
     msg->auth_request.method = SSH_AUTH_METHOD_INTERACTIVE;
-    lang = ssh_buffer_get_ssh_string(packet);
-    if (lang == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "language string invalid");
       goto error;
     }
     /* from the RFC 4256
      * 3.1.  Initial Exchange
      * "The language tag is deprecated and SHOULD be the empty string."
      */
-    SSH_STRING_FREE(lang);
 
-    submethods = ssh_buffer_get_ssh_string(packet);
-    if (submethods == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "submethods string invalid");
       goto error;
     }
     /* from the RFC 4256
@@ -865,8 +873,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
      *  server is that, unless the user may use multiple different
      *  submethods, the server ignores this field."
      */
-    SSH_STRING_FREE(submethods);
-
     goto end;
   }
 
@@ -1035,7 +1041,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
 SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   uint32_t nanswers;
   uint32_t i;
-  ssh_string tmp;
   int rc;
 
   ssh_message msg = NULL;
@@ -1121,7 +1126,8 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   }
 
   for (i = 0; i < nanswers; i++) {
-    tmp = ssh_buffer_get_ssh_string(packet);
+    uint32_t len;
+    char *tmp = ssh_buffer_get_char_string(packet, &len);
     if (tmp == NULL) {
       ssh_set_error(session, SSH_FATAL, "Short INFO_RESPONSE packet");
       session->kbdint->nanswers = i;
@@ -1130,16 +1136,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
 
       goto error;
     }
-    session->kbdint->answers[i] = ssh_string_to_char(tmp);
-    SSH_STRING_FREE(tmp);
-    if (session->kbdint->answers[i] == NULL) {
-      ssh_set_error_oom(session);
-      session->kbdint->nanswers = i;
-      ssh_kbdint_free(session->kbdint);
-      session->kbdint = NULL;
-
-      goto error;
-    }
+    session->kbdint->answers[i] = tmp;
   }
 
   ssh_message_queue(session,msg);

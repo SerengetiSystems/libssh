@@ -158,7 +158,7 @@ static bool bsd_socket_reset(int sock_err)
     return false;
 }
 
-static short bsd_socket_compute_revents(int fd, short events)
+static short bsd_socket_compute_revents(socket_t fd, short events)
 {
     int save_errno = errno;
     int sock_errno = errno;
@@ -709,6 +709,7 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
             ctx->pollfds[i].events = 0;
             p->lock = 1;
             if (p->cb && (ret = p->cb(p, fd, revents, p->cb_data)) < 0) {
+                p->lock = 0;
                 if (ret == -2) {
                     return -1;
                 }
