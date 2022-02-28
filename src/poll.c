@@ -158,7 +158,7 @@ static bool bsd_socket_reset(int sock_err)
     return false;
 }
 
-static short bsd_socket_compute_revents(int fd, short events)
+static short bsd_socket_compute_revents(socket_t fd, short events)
 {
     int save_errno = errno;
     int sock_errno = errno;

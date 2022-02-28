@@ -453,7 +453,11 @@ void ssh_socket_close(ssh_socket s){
   if (ssh_socket_is_open(s)) {
     if (s->io_callbacks && s->io_callbacks->closecb)
     {
-      s->io_callbacks->closecb(s->fd, s->io_callbacks->userdata);
+      if ((s->fd) != SSH_INVALID_SOCKET)
+      { 
+        s->io_callbacks->closecb(s->fd, s->io_callbacks->userdata);
+        (s->fd) = SSH_INVALID_SOCKET;
+      }
     }
     else
     {
@@ -554,7 +558,7 @@ static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
     else if (s->fd_is_socket) {
         rc = recv(s->fd,buffer, len, 0);
     } else {
-        rc = read(s->fd,buffer, len);
+        rc = read((int)s->fd,buffer, len);
     }
 #ifdef _WIN32
     s->last_errno = WSAGetLastError();
@@ -593,7 +597,7 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
     else if (s->fd_is_socket) {
         w = send(s->fd, buffer, len, flags);
     } else {
-        w = write(s->fd, buffer, len);
+        w = write((int)s->fd, buffer, len);
     }
 #ifdef _WIN32
     s->last_errno = WSAGetLastError();
