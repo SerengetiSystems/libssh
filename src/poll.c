@@ -361,7 +361,8 @@ void ssh_poll_free(ssh_poll_handle p) {
 		ssh_poll_ctx_remove(p->ctx,p);
 		p->ctx=NULL;
 	}
-  SAFE_FREE(p);
+  if(!p->lock)   /*don't free if this is currently in use */
+    SAFE_FREE(p);/*it will be freed in ssh_poll_ctx_dopoll*/
 }
 
 /**
@@ -699,7 +700,6 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
             i++;
         } else {
             int ret;
-
             p = ctx->pollptrs[i];
             fd = ctx->pollfds[i].fd;
             revents = ctx->pollfds[i].revents;
@@ -707,6 +707,10 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
             ctx->pollfds[i].events = 0;
             p->lock = 1;
             if (p->cb && (ret = p->cb(p, fd, revents, p->cb_data)) < 0) {
+                if (p->ctx == NULL) //the poll handle got released during cb
+                    free(p);
+                else
+                    p->lock = 0; //unlock it now that we are done handling it
                 if (ret == -2) {
                     return -1;
                 }
