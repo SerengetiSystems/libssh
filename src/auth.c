@@ -247,10 +247,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_failure) {
                       "Access denied for '%s'. Authentication that can continue: %s",
                       current_method,
                       auth_methods);
-        SSH_LOG_COMMON(session, SSH_LOG_INFO,
-                "%s",
-                ssh_get_error(session));
-
     }
     session->auth.supported_methods = 0;
     if (strstr(auth_methods, "password") != NULL) {
@@ -441,7 +437,8 @@ int ssh_userauth_none(ssh_session session, const char *username) {
     session->pending_call_state = SSH_PENDING_CALL_AUTH_NONE;
     rc = ssh_packet_send(session);
     if (rc == SSH_ERROR) {
-        return SSH_AUTH_ERROR;
+      session->pending_call_state = SSH_PENDING_CALL_NONE;
+      return SSH_AUTH_ERROR;
     }
 
 pending:
@@ -565,7 +562,8 @@ int ssh_userauth_try_publickey(ssh_session session,
     session->pending_call_state = SSH_PENDING_CALL_AUTH_OFFER_PUBKEY;
     rc = ssh_packet_send(session);
     if (rc == SSH_ERROR) {
-        return SSH_AUTH_ERROR;
+      session->pending_call_state = SSH_PENDING_CALL_NONE;
+      return SSH_AUTH_ERROR;
     }
 
 pending:
@@ -1444,7 +1442,7 @@ static int ssh_userauth_kbdint_init(ssh_session session,
         goto fail;
     }
 
-
+    session->auth.current_method = SSH_AUTH_METHOD_INTERACTIVE;
     session->auth.state = SSH_AUTH_STATE_KBDINT_SENT;
     session->pending_call_state = SSH_PENDING_CALL_AUTH_KBDINT_INIT;
 

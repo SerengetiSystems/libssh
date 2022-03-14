@@ -849,8 +849,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
   }
 
   else if (strcmp(method, "keyboard-interactive") == 0) {
-    char discard[64];
-
     msg->auth_request.method = SSH_AUTH_METHOD_INTERACTIVE;
     if (ssh_buffer_pass_string(packet) < 0)
     {

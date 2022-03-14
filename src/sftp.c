@@ -2352,7 +2352,6 @@ int sftp_async_write_end(sftp_file file, int id)
       /* something nasty has happened */
       return SSH_ERROR;
     }
-
     msg = sftp_dequeue(sftp, id);
   }
 
@@ -2361,7 +2360,7 @@ int sftp_async_write_end(sftp_file file, int id)
     status = parse_status_msg(msg);
     sftp_message_free(msg);
     if (status == NULL) {
-      return -1;
+      return SSH_ERROR;
     }
     sftp_set_error(sftp, status->status);
     switch (status->status) {
@@ -2372,17 +2371,17 @@ int sftp_async_write_end(sftp_file file, int id)
       ssh_set_error(sftp->session, SSH_REQUEST_DENIED,
         "SFTP server: %s", status->errormsg);
       status_msg_free(status);
-      return -1;
+      return SSH_ERROR;
     }
   default:
     ssh_set_error(sftp->session, SSH_FATAL,
       "Received %s during write!", sftp_message_type(msg->packet_type));
     sftp_message_free(msg);
     sftp_set_error(sftp, SSH_FX_BAD_MESSAGE);
-    return -1;
+    return SSH_ERROR;
   }
 
-  return -1; /* not reached */
+  return SSH_ERROR; /* not reached */
 }
 
 /* Seek to a specific location in a file. */
