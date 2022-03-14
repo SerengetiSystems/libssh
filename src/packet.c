@@ -1864,7 +1864,7 @@ int ssh_packet_send(ssh_session session)
     return rc;
 }
 
-static void
+static uint64_t
 ssh_init_rekey_state(struct ssh_session_struct *session,
                      struct ssh_cipher_struct *cipher)
 {
@@ -1886,9 +1886,7 @@ ssh_init_rekey_state(struct ssh_session_struct *session,
                                  session->opts.rekey_data / cipher->blocksize);
     }
 
-    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-            "Set rekey after %" PRIu64 " blocks",
-            cipher->max_blocks);
+    return cipher->max_blocks;
 }
 
 /*
@@ -1899,6 +1897,7 @@ int
 ssh_packet_set_newkeys(ssh_session session,
                        enum ssh_crypto_direction_e direction)
 {
+    uint64_t rekey_after;
     struct ssh_cipher_struct *in_cipher = NULL, *out_cipher = NULL;
     int rc;
 
@@ -2009,9 +2008,14 @@ ssh_packet_set_newkeys(ssh_session session,
         return SSH_ERROR;
     }
 
+
     /* Initialize rekeying states */
     ssh_init_rekey_state(session, out_cipher);
     ssh_init_rekey_state(session, in_cipher);
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
+      "Set rekey after %" PRIu64 " blocks",
+      rekey_after);
+
     if (session->opts.rekey_time != 0) {
         ssh_timestamp_init(&session->last_rekey_time);
         SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Set rekey after %" PRIu32 " seconds",

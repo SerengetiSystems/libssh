@@ -2310,6 +2310,95 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
   return -1; /* not reached */
 }
 
+int sftp_async_write_begin(sftp_file file, const void* buf, size_t count) {
+  sftp_session sftp = file->sftp;
+  ssh_channel channel = sftp->channel;
+  ssh_string handle = file->handle;
+  ssh_buffer buffer;
+  ssize_t len;
+  int rc, id;
+
+  buffer = ssh_buffer_new();
+  if (buffer == NULL) {
+    ssh_set_error_oom(sftp->session);
+    sftp_set_error(sftp, SSH_FX_FAILURE);
+    return -1;
+  }
+
+  id = sftp_get_new_id(file->sftp);
+
+  rc = ssh_buffer_pack(buffer,
+    "dSqdP",
+    id,
+    file->handle,
+    file->offset,
+    count, /* len of datastring */
+    (size_t)count, buf);
+  if (rc != SSH_OK) {
+    ssh_set_error_oom(sftp->session);
+    SSH_BUFFER_FREE(buffer);
+    sftp_set_error(sftp, SSH_FX_FAILURE);
+    return -1;
+  }
+  len = sftp_packet_write(file->sftp, SSH_FXP_WRITE, buffer);
+  SSH_BUFFER_FREE(buffer);
+  if (len < 0) {
+    return -1;
+  }
+  file->offset += count;
+  return id;
+}
+
+int sftp_async_write_end(sftp_file file, int id)
+{
+  sftp_session sftp = file->sftp;
+  sftp_message msg = NULL;
+  sftp_status_message status;
+
+  while (msg == NULL) {
+    if (file->nonblocking) {
+      if (ssh_channel_poll(sftp->channel, 0) == 0) {
+        /* we cannot block */
+        return SSH_AGAIN;
+      }
+    }
+
+    if (sftp_read_and_dispatch(sftp) < 0) {
+      /* something nasty has happened */
+      return SSH_ERROR;
+    }
+    msg = sftp_dequeue(sftp, id);
+  }
+
+  switch (msg->packet_type) {
+  case SSH_FXP_STATUS:
+    status = parse_status_msg(msg);
+    sftp_message_free(msg);
+    if (status == NULL) {
+      return SSH_ERROR;
+    }
+    sftp_set_error(sftp, status->status);
+    switch (status->status) {
+    case SSH_FX_OK:
+      status_msg_free(status);
+      return 0;
+    default:
+      ssh_set_error(sftp->session, SSH_REQUEST_DENIED,
+        "SFTP server: %s", status->errormsg);
+      status_msg_free(status);
+      return SSH_ERROR;
+    }
+  default:
+    ssh_set_error(sftp->session, SSH_FATAL,
+      "Received %s during write!", sftp_message_type(msg->packet_type));
+    sftp_message_free(msg);
+    sftp_set_error(sftp, SSH_FX_BAD_MESSAGE);
+    return SSH_ERROR;
+  }
+
+  return SSH_ERROR; /* not reached */
+}
+
 /* Seek to a specific location in a file. */
 int sftp_seek(sftp_file file, uint32_t new_offset) {
   if (file == NULL) {

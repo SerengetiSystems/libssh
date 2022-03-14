@@ -842,22 +842,20 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
   }
 
   else if (strcmp(method, "keyboard-interactive") == 0) {
-    ssh_string lang = NULL;
-    ssh_string submethods = NULL;
-
     msg->auth_request.method = SSH_AUTH_METHOD_INTERACTIVE;
-    lang = ssh_buffer_get_ssh_string(packet);
-    if (lang == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "language string invalid");
       goto error;
     }
     /* from the RFC 4256
      * 3.1.  Initial Exchange
      * "The language tag is deprecated and SHOULD be the empty string."
      */
-    SSH_STRING_FREE(lang);
 
-    submethods = ssh_buffer_get_ssh_string(packet);
-    if (submethods == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "submethods string invalid");
       goto error;
     }
     /* from the RFC 4256
@@ -866,8 +864,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
      *  server is that, unless the user may use multiple different
      *  submethods, the server ignores this field."
      */
-    SSH_STRING_FREE(submethods);
-
     goto end;
   }
 
