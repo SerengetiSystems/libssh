@@ -1,7 +1,9 @@
 #include "config.h"
 
 #include "torture.h"
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
 
 const char template[] = "temp_dir_XXXXXX";
 

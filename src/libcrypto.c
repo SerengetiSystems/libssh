@@ -614,7 +614,7 @@ static void evp_cipher_encrypt(struct ssh_cipher_struct *cipher,
     }
     if (outlen != (int)len){
         SSH_LOG(SSH_LOG_WARNING,
-                "EVP_EncryptUpdate: output size %d for " SIZET_SPECIFIER " in",
+                "EVP_EncryptUpdate: output size %d for %" PRIuS " in",
                 outlen,
                 len);
         return;
@@ -640,7 +640,7 @@ static void evp_cipher_decrypt(struct ssh_cipher_struct *cipher,
     }
     if (outlen != (int)len){
         SSH_LOG(SSH_LOG_WARNING,
-                "EVP_DecryptUpdate: output size %d for " SIZET_SPECIFIER " in",
+                "EVP_DecryptUpdate: output size %d for %" PRIuS " in",
                 outlen,
                 len);
         return;
@@ -716,7 +716,7 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
                            (unsigned char *)out + aadlen,
                            &tmplen,
                            (unsigned char *)in + aadlen,
-                           (int)len - aadlen);
+                           (int)(len - aadlen));
     outlen = tmplen;
     if (rc != 1 || outlen != (int)len - aadlen) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_EncryptUpdate failed");
@@ -734,7 +734,7 @@ evp_cipher_aead_encrypt(struct ssh_cipher_struct *cipher,
 
     rc = EVP_CIPHER_CTX_ctrl(cipher->ctx,
                              EVP_CTRL_GCM_GET_TAG,
-                             authlen,
+                             (int)authlen,
                              (unsigned char *)tag);
     if (rc != 1) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_CTRL_GCM_GET_TAG failed");
@@ -772,7 +772,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
     /* set tag for authentication */
     rc = EVP_CIPHER_CTX_ctrl(cipher->ctx,
                              EVP_CTRL_GCM_SET_TAG,
-                             authlen,
+                             (int)authlen,
                              (unsigned char *)complete_packet + aadlen + encrypted_size);
     if (rc == 0) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_CTRL_GCM_SET_TAG failed");
@@ -797,7 +797,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
                            (unsigned char *)out,
                            &outlen,
                            (unsigned char *)complete_packet + aadlen,
-                           encrypted_size /* already substracted aadlen*/);
+                           (int)encrypted_size /* already substracted aadlen*/);
     if (rc != 1) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_DecryptUpdate failed");
         return SSH_ERROR;
@@ -805,7 +805,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
 
     if (outlen != (int)encrypted_size) {
         SSH_LOG(SSH_LOG_WARNING,
-			    "EVP_DecryptUpdate: output size %d for " SIZET_SPECIFIER " in",
+			    "EVP_DecryptUpdate: output size %d for %" PRIuS " in",
                 outlen,
                 encrypted_size);
         return SSH_ERROR;

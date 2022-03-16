@@ -98,7 +98,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user)
     char *buffer = (char *)data;
     ssh_session session=(ssh_session) user;
     char *str = NULL;
-    size_t i;
+    uint32_t i;
     int ret=0;
 
     if (session->session_state != SSH_SESSION_STATE_SOCKET_CONNECTED) {
@@ -219,7 +219,7 @@ int ssh_send_banner(ssh_session session, int server)
                  terminator);
     }
 
-    rc = ssh_socket_write(session->socket, buffer, strlen(buffer));
+    rc = ssh_socket_write(session->socket, buffer, (int)strlen(buffer));
     if (rc == SSH_ERROR) {
         goto end;
     }
@@ -228,8 +228,8 @@ int ssh_send_banner(ssh_session session, int server)
         ssh_pcap_context_write(session->pcap_ctx,
                                SSH_PCAP_DIR_OUT,
                                buffer,
-                               strlen(buffer),
-                               strlen(buffer));
+                               (uint32_t)strlen(buffer),
+                               (uint32_t)strlen(buffer));
     }
 #endif
 

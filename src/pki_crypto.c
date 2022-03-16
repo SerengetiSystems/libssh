@@ -74,7 +74,7 @@ static int pem_get_password(char *buf, int size, int rwflag, void *userdata) {
                      buf, size, 0, 0,
                      pgp->data);
         if (rc == 0) {
-            return strlen(buf);
+            return (int)strlen(buf);
         }
     }
 
@@ -1407,7 +1407,7 @@ static ssh_string pki_dsa_signature_to_blob(const ssh_signature sig)
     int s_len, s_offset_in, s_offset_out;
 
     const unsigned char *raw_sig_data = NULL;
-    size_t raw_sig_len;
+    uint32_t raw_sig_len;
     int rc;
 
     DSA_SIG *dsa_sig;
@@ -1491,7 +1491,7 @@ static ssh_string pki_ecdsa_signature_to_blob(const ssh_signature sig)
     const BIGNUM *pr = NULL, *ps = NULL;
 
     const unsigned char *raw_sig_data = NULL;
-    size_t raw_sig_len;
+    uint32_t raw_sig_len;
 
     ECDSA_SIG *ecdsa_sig;
 
@@ -1598,7 +1598,7 @@ ssh_string pki_signature_to_blob(const ssh_signature sig)
     return sig_blob;
 }
 
-static int pki_signature_from_rsa_blob(ssh_session session, const ssh_key pubkey,
+static int pki_signature_from_rsa_blob(const ssh_key pubkey,
                                        const ssh_string sig_blob,
                                        ssh_signature sig)
 {
@@ -1607,17 +1607,17 @@ static int pki_signature_from_rsa_blob(ssh_session session, const ssh_key pubkey
     char *blob_padded_data = NULL;
     ssh_string sig_blob_padded = NULL;
 
-    size_t rsalen = 0;
-    size_t len = ssh_string_len(sig_blob);
+    uint32_t rsalen = 0;
+    uint32_t len = ssh_string_len(sig_blob);
 
     if (pubkey->rsa == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Pubkey RSA field NULL");
+        SSH_LOG(SSH_LOG_WARN, "Pubkey RSA field NULL");
         goto errout;
     }
 
     rsalen = RSA_size(pubkey->rsa);
     if (len > rsalen) {
-        SSH_LOG_COMMON(session, SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_WARN,
                 "Signature is too big: %lu > %lu",
                 (unsigned long)len,
                 (unsigned long)rsalen);
@@ -1625,7 +1625,7 @@ static int pki_signature_from_rsa_blob(ssh_session session, const ssh_key pubkey
     }
 
 #ifdef DEBUG_CRYPTO
-    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "RSA signature len: %lu", (unsigned long)len);
+    SSH_LOG(SSH_LOG_DEBUG, "RSA signature len: %" PRIu32, len);
     ssh_log_hexdump("RSA signature", ssh_string_data(sig_blob), len);
 #endif
 
@@ -1633,7 +1633,7 @@ static int pki_signature_from_rsa_blob(ssh_session session, const ssh_key pubkey
         sig->raw_sig = ssh_string_copy(sig_blob);
     } else {
         /* pad the blob to the expected rsalen size */
-        SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
+        SSH_LOG(SSH_LOG_DEBUG,
                 "RSA signature len %lu < %lu",
                 (unsigned long)len,
                 (unsigned long)rsalen);
@@ -1667,7 +1667,7 @@ errout:
     return SSH_ERROR;
 }
 
-static int pki_signature_from_dsa_blob(ssh_session session, UNUSED_PARAM(const ssh_key pubkey),
+static int pki_signature_from_dsa_blob(UNUSED_PARAM(const ssh_key pubkey),
                                        const ssh_string sig_blob,
                                        ssh_signature sig)
 {
@@ -1689,7 +1689,7 @@ static int pki_signature_from_dsa_blob(ssh_session session, UNUSED_PARAM(const s
 
     /* 40 is the dual signature blob len. */
     if (len != 40) {
-        SSH_LOG_COMMON(session, SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_WARN,
                 "Signature has wrong size: %lu",
                 (unsigned long)len);
         goto error;
@@ -1794,7 +1794,7 @@ error:
     return SSH_ERROR;
 }
 
-static int pki_signature_from_ecdsa_blob(ssh_session session, UNUSED_PARAM(const ssh_key pubkey),
+static int pki_signature_from_ecdsa_blob(UNUSED_PARAM(const ssh_key pubkey),
                                          const ssh_string sig_blob,
                                          ssh_signature sig)
 {
@@ -1852,7 +1852,7 @@ static int pki_signature_from_ecdsa_blob(ssh_session session, UNUSED_PARAM(const
     if (rlen != 0) {
         ssh_string_burn(s);
         SSH_STRING_FREE(s);
-        SSH_LOG_COMMON(session, SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_WARN,
                 "Signature has remaining bytes in inner "
                 "sigblob: %lu",
                 (unsigned long)rlen);
@@ -1932,8 +1932,7 @@ error:
     return SSH_ERROR;
 }
 
-ssh_signature pki_signature_from_blob(ssh_session session,
-                                      const ssh_key pubkey,
+ssh_signature pki_signature_from_blob(const ssh_key pubkey,
                                       const ssh_string sig_blob,
                                       enum ssh_keytypes_e type,
                                       enum ssh_digest_e hash_type)
@@ -1942,7 +1941,7 @@ ssh_signature pki_signature_from_blob(ssh_session session,
     int rc;
 
     if (ssh_key_type_plain(pubkey->type) != type) {
-        SSH_LOG_COMMON(session, SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_WARN,
                 "Incompatible public key provided (%d) expecting (%d)",
                 type,
                 pubkey->type);
@@ -1960,14 +1959,14 @@ ssh_signature pki_signature_from_blob(ssh_session session,
 
     switch(type) {
         case SSH_KEYTYPE_DSS:
-            rc = pki_signature_from_dsa_blob(session, pubkey, sig_blob, sig);
+            rc = pki_signature_from_dsa_blob(pubkey, sig_blob, sig);
             if (rc != SSH_OK) {
                 goto error;
             }
             break;
         case SSH_KEYTYPE_RSA:
         case SSH_KEYTYPE_RSA1:
-            rc = pki_signature_from_rsa_blob(session, pubkey, sig_blob, sig);
+            rc = pki_signature_from_rsa_blob(pubkey, sig_blob, sig);
             if (rc != SSH_OK) {
                 goto error;
             }
@@ -1988,7 +1987,7 @@ ssh_signature pki_signature_from_blob(ssh_session session,
         case SSH_KEYTYPE_SK_ECDSA:
         case SSH_KEYTYPE_SK_ECDSA_CERT01:
 #ifdef HAVE_OPENSSL_ECC
-            rc = pki_signature_from_ecdsa_blob(session, pubkey, sig_blob, sig);
+            rc = pki_signature_from_ecdsa_blob(pubkey, sig_blob, sig);
             if (rc != SSH_OK) {
                 goto error;
             }
@@ -1996,7 +1995,7 @@ ssh_signature pki_signature_from_blob(ssh_session session,
 #endif
         default:
         case SSH_KEYTYPE_UNKNOWN:
-            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Unknown signature type");
+            SSH_LOG(SSH_LOG_WARN, "Unknown signature type");
             goto error;
     }
 
@@ -2159,8 +2158,7 @@ error:
  *
  * @return  a newly allocated ssh_signature or NULL on error.
  */
-ssh_signature pki_sign_data(ssh_session session, 
-                            const ssh_key privkey,
+ssh_signature pki_sign_data(const ssh_key privkey,
                             enum ssh_digest_e hash_type,
                             const unsigned char *input,
                             size_t input_len)
@@ -2177,13 +2175,13 @@ ssh_signature pki_sign_data(ssh_session session,
     int rc;
 
     if (privkey == NULL || !ssh_key_is_private(privkey) || input == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG(SSH_LOG_WARN, "Bad parameter provided to "
                                "pki_sign_data()");
         return NULL;
     }
 
     /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(session, privkey, hash_type);
+    rc = pki_key_check_hash_compatible(privkey, hash_type);
     if (rc != SSH_OK) {
         return NULL;
     }
@@ -2214,21 +2212,21 @@ ssh_signature pki_sign_data(ssh_session session,
     raw_sig_len = (size_t)EVP_PKEY_size(pkey);
     raw_sig_data = (unsigned char *)malloc(raw_sig_len);
     if (raw_sig_data == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Out of memory");
+        SSH_LOG(SSH_LOG_WARN, "Out of memory");
         goto out;
     }
 
     /* Create the context */
     ctx = EVP_MD_CTX_create();
     if (ctx == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Out of memory");
+        SSH_LOG(SSH_LOG_WARN, "Out of memory");
         goto out;
     }
 
     /* Sign the data */
     rc = EVP_DigestSignInit(ctx, NULL, md, NULL, pkey);
     if (rc != 1){
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignInit() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2237,7 +2235,7 @@ ssh_signature pki_sign_data(ssh_session session,
 #ifdef HAVE_OPENSSL_EVP_DIGESTSIGN
     rc = EVP_DigestSign(ctx, raw_sig_data, &raw_sig_len, input, input_len);
     if (rc != 1) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSign() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2245,7 +2243,7 @@ ssh_signature pki_sign_data(ssh_session session,
 #else
     rc = EVP_DigestSignUpdate(ctx, input, input_len);
     if (rc != 1) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignUpdate() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2253,7 +2251,7 @@ ssh_signature pki_sign_data(ssh_session session,
 
     rc = EVP_DigestSignFinal(ctx, raw_sig_data, &raw_sig_len);
     if (rc != 1) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignFinal() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2315,8 +2313,7 @@ out:
  *
  * @return  SSH_OK if the signature is valid; SSH_ERROR otherwise.
  */
-int pki_verify_data_signature(ssh_session session,
-                              ssh_signature signature,
+int pki_verify_data_signature(ssh_signature signature,
                               const ssh_key pubkey,
                               const unsigned char *input,
                               size_t input_len)
@@ -2338,13 +2335,13 @@ int pki_verify_data_signature(ssh_session session,
 #endif
         ))
     {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG(SSH_LOG_WARN, "Bad parameter provided to "
                                "pki_verify_data_signature()");
         return SSH_ERROR;
     }
 
     /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(session, pubkey, signature->hash_type);
+    rc = pki_key_check_hash_compatible(pubkey, signature->hash_type);
     if (rc != SSH_OK) {
         return SSH_ERROR;
     }
@@ -2383,7 +2380,7 @@ int pki_verify_data_signature(ssh_session session,
     /* Create the context */
     ctx = EVP_MD_CTX_create();
     if (ctx == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "Failed to create EVP_MD_CTX: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2392,7 +2389,7 @@ int pki_verify_data_signature(ssh_session session,
     /* Verify the signature */
     evp_rc = EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey);
     if (evp_rc != 1){
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestVerifyInit() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -2412,10 +2409,10 @@ int pki_verify_data_signature(ssh_session session,
     evp_rc = EVP_DigestVerifyFinal(ctx, raw_sig_data, raw_sig_len);
 #endif
     if (evp_rc == 1) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Signature valid");
+        SSH_LOG(SSH_LOG_TRACE, "Signature valid");
         rc = SSH_OK;
     } else {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "Signature invalid: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         rc = SSH_ERROR;

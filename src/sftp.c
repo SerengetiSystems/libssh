@@ -67,10 +67,10 @@ struct sftp_ext_struct {
 
 #ifdef __GNUC__
 # define thread_local __thread
-#elif __STDC_VERSION__ >= 201112L
-# define thread_local _Thread_local
 #elif defined(_MSC_VER)
 # define thread_local __declspec(thread)
+#elif __STDC_VERSION__ >= 201112L
+# define thread_local _Thread_local
 #else
 # error Cannot define thread_local
 #endif
@@ -465,7 +465,7 @@ void sftp_free(sftp_session sftp)
     SAFE_FREE(sftp);
 }
 
-uint32_t sftp_packet_id(ssh_buffer payload)
+static uint32_t sftp_packet_id(ssh_buffer payload)
 {
   uint32_t network = 0;
   ssh_buffer_peek_data(payload, &network, sizeof(network));
@@ -505,7 +505,7 @@ ssize_t sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
       sftp_message_type(type));
 
     if ((uint32_t)size != ssh_buffer_get_len(payload)) {
-        SSH_LOG_COMMON(sftp->session, SSH_LOG_INFO, "Had to write %d bytes, wrote only " SIZET_SPECIFIER,
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_INFO, "Had to write %" PRIu32 " bytes, wrote only %" PRIuS,
                 ssh_buffer_get_len(payload),
                 size);
     }
@@ -1197,8 +1197,6 @@ sftp_dir sftp_opendir(sftp_session sftp, const char *path)
 static sftp_attributes sftp_parse_attr_4(sftp_session sftp, ssh_buffer buf,
     int expectnames) {
   sftp_attributes attr;
-  ssh_string owner = NULL;
-  ssh_string group = NULL;
   uint32_t flags = 0;
   int ok = 0;
 
@@ -2291,8 +2289,6 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
 
 int sftp_async_write_begin(sftp_file file, const void* buf, size_t count) {
   sftp_session sftp = file->sftp;
-  ssh_channel channel = sftp->channel;
-  ssh_string handle = file->handle;
   ssh_buffer buffer;
   ssize_t len;
   int rc, id;

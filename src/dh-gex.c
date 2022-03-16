@@ -317,6 +317,8 @@ error:
 
 #ifdef WITH_SERVER
 
+#include <libssh/server.h>
+
 #define DEFAULT_MODULI_FILE "/etc/ssh/moduli"
 /* 2     "Safe" prime; (p-1)/2 is also prime. */
 #define SAFE_PRIME 2

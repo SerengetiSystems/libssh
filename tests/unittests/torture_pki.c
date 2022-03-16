@@ -1,6 +1,8 @@
 #include "config.h"
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -10,8 +12,8 @@
 #include "torture_key.h"
 #include "pki.c"
 
-const unsigned char INPUT[] = "1234567890123456789012345678901234567890"
-                              "123456789012345678901234";
+const unsigned char INPUTDATA[] = "1234567890123456789012345678901234567890"
+                                  "123456789012345678901234";
 
 const char template[] = "temp_dir_XXXXXX";
 
@@ -258,7 +260,7 @@ static void torture_pki_verify_mismatch(void **state)
     ssh_session session = ssh_new();
     enum ssh_keytypes_e key_type, sig_type;
     enum ssh_digest_e hash;
-    size_t input_length = sizeof(INPUT);
+    size_t input_length = sizeof(INPUTDATA);
     struct key_attrs skey_attrs, vkey_attrs;
 
     (void) state;
@@ -300,7 +302,7 @@ static void torture_pki_verify_mismatch(void **state)
 
             if (skey_attrs.expect_success == 0) {
                 /* Expect error */
-                sign = pki_do_sign(key, INPUT, input_length, hash);
+                sign = pki_do_sign(key, INPUTDATA, input_length, hash);
                 assert_null(sign);
 
                 SSH_KEY_FREE(key);
@@ -312,7 +314,7 @@ static void torture_pki_verify_mismatch(void **state)
             assert_non_null(pubkey);
 
             /* Create a valid signature using this key */
-            sign = pki_do_sign(key, INPUT, input_length, hash);
+            sign = pki_do_sign(key, INPUTDATA, input_length, hash);
             assert_non_null(sign);
             assert_int_equal(sign->type, key->type);
             assert_string_equal(sign->type_c, skey_attrs.sig_type_c);
@@ -334,7 +336,7 @@ static void torture_pki_verify_mismatch(void **state)
             rc = ssh_pki_signature_verify(session,
                                       import_sig,
                                       pubkey,
-                                      INPUT,
+                                      INPUTDATA,
                                       input_length);
             assert_true(rc == SSH_OK);
 
@@ -377,7 +379,7 @@ static void torture_pki_verify_mismatch(void **state)
                 rc = ssh_pki_signature_verify(session,
                                           sign,
                                           verify_pubkey,
-                                          INPUT,
+                                          INPUTDATA,
                                           input_length);
                 assert_true(rc != SSH_OK);
 
@@ -385,7 +387,7 @@ static void torture_pki_verify_mismatch(void **state)
                 rc = ssh_pki_signature_verify(session,
                                           import_sig,
                                           verify_pubkey,
-                                          INPUT,
+                                          INPUTDATA,
                                           input_length);
                 assert_true(rc != SSH_OK);
 
@@ -404,7 +406,7 @@ static void torture_pki_verify_mismatch(void **state)
                     rc = ssh_pki_signature_verify(session,
                                               new_sig,
                                               verify_pubkey,
-                                              INPUT,
+                                              INPUTDATA,
                                               input_length);
                     assert_true(rc != SSH_OK);
 
