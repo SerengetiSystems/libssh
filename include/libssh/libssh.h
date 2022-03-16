@@ -483,10 +483,10 @@ LIBSSH_API int ssh_channel_select(ssh_channel *readchans, ssh_channel *writechan
 LIBSSH_API void ssh_channel_set_blocking(ssh_channel channel, int blocking);
 LIBSSH_API void ssh_channel_set_counter(ssh_channel channel,
                                         ssh_counter counter);
-LIBSSH_API int ssh_channel_write(ssh_channel channel, const void *data, uint32_t len);
+LIBSSH_API int ssh_channel_write(ssh_channel channel, const void *data, size_t len);
 LIBSSH_API int ssh_channel_write_stderr(ssh_channel channel,
                                         const void *data,
-                                        uint32_t len);
+                                        size_t len);
 LIBSSH_API uint32_t ssh_channel_window_size(ssh_channel channel);
 LIBSSH_API uint32_t ssh_channel_local_packet_size(ssh_channel channel);
 LIBSSH_API uint32_t ssh_channel_remote_packet_size(ssh_channel channel);
@@ -791,7 +791,7 @@ LIBSSH_API int ssh_string_fill(ssh_string str, const void *data, size_t len);
     do { if ((x) != NULL) { ssh_string_free(x); x = NULL; } } while(0)
 LIBSSH_API void ssh_string_free(ssh_string str);
 LIBSSH_API ssh_string ssh_string_from_char(const char *what);
-LIBSSH_API size_t ssh_string_len(ssh_string str);
+LIBSSH_API uint32_t ssh_string_len(ssh_string str);
 LIBSSH_API ssh_string ssh_string_new(size_t size);
 LIBSSH_API const char *ssh_string_get_char(ssh_string str);
 LIBSSH_API char *ssh_string_to_char(ssh_string str);
@@ -828,9 +828,9 @@ LIBSSH_API void ssh_buffer_free(ssh_buffer buffer);
 #define SSH_BUFFER_FREE(x) \
     do { if ((x) != NULL) { ssh_buffer_free(x); x = NULL; } } while(0)
 LIBSSH_API int ssh_buffer_reinit(ssh_buffer buffer);
-LIBSSH_API int ssh_buffer_add_data(ssh_buffer buffer, const void *data, uint32_t len);
-LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, uint32_t requestedlen);
-LIBSSH_API uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, uint32_t len);
+LIBSSH_API int ssh_buffer_add_data(ssh_buffer buffer, const void *data, size_t len);
+LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, size_t requestedlen);
+LIBSSH_API uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, size_t len);
 LIBSSH_API void *ssh_buffer_get(ssh_buffer buffer);
 LIBSSH_API uint32_t ssh_buffer_get_len(ssh_buffer buffer);
 

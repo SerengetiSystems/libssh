@@ -67,7 +67,7 @@ struct ssh_string_struct *ssh_string_new(size_t size)
         return NULL;
     }
 
-    str->size = htonl(size);
+    str->size = htonl((uint32_t)size);
     str->data[0] = 0;
 
     return str;
@@ -133,8 +133,8 @@ struct ssh_string_struct *ssh_string_from_char(const char *what) {
  *
  * @return The size of the content of the string, 0 on error.
  */
-size_t ssh_string_len(struct ssh_string_struct *s) {
-    size_t size;
+uint32_t ssh_string_len(struct ssh_string_struct *s) {
+    uint32_t size;
 
     if (s == NULL) {
         return 0;

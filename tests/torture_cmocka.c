@@ -23,7 +23,9 @@
 
 #include "config.h"
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
 
 #include "torture.h"
 

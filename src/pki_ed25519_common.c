@@ -261,13 +261,13 @@ ssh_string pki_ed25519_signature_to_blob(ssh_signature sig)
  *
  * @return SSH_ERROR on error, SSH_OK on success
  */
-int pki_signature_from_ed25519_blob(ssh_session session, ssh_signature sig, ssh_string sig_blob)
+int pki_signature_from_ed25519_blob(ssh_signature sig, ssh_string sig_blob)
 {
-    size_t len;
+    uint32_t len;
 
     len = ssh_string_len(sig_blob);
     if (len != ED25519_SIG_LEN){
-	SSH_LOG_COMMON(session, SSH_LOG_WARN, "Invalid ssh-ed25519 signature len: " SIZET_SPECIFIER, len);
+	SSH_LOG(SSH_LOG_WARN, "Invalid ssh-ed25519 signature len: %" PRIu32, len);
         return SSH_ERROR;
     }
 

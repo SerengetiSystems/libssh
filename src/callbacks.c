@@ -30,21 +30,6 @@
 #define is_callback_valid(session, cb) \
     (cb->size <= 0 || cb->size > 1024 * sizeof(void *))
 
-/* LEGACY */
-static void ssh_legacy_log_callback(int priority,
-                                    const char *function,
-                                    const char *buffer,
-                                    void *userdata)
-{
-    ssh_session session = (ssh_session)userdata;
-    ssh_log_callback log_fn = session->common.callbacks->log_function;
-    void *log_data = session->common.callbacks->userdata;
-
-    (void)function; /* unused */
-
-    log_fn(session, priority, buffer, log_data);
-}
-
 int ssh_set_callbacks(ssh_session session, ssh_callbacks cb) {
   if (session == NULL || cb == NULL) {
     return SSH_ERROR;

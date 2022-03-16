@@ -239,7 +239,7 @@ static int crypt_set_algorithms2(ssh_session session)
     const char *wanted = NULL;
     struct ssh_cipher_struct *ssh_ciphertab=ssh_get_ciphertab();
     struct ssh_hmac_struct *ssh_hmactab=ssh_get_hmactab();
-    size_t i = 0;
+    int i = 0;
     int cmp;
 
     /*
@@ -388,7 +388,7 @@ int crypt_set_algorithms_client(ssh_session session)
 #ifdef WITH_SERVER
 int crypt_set_algorithms_server(ssh_session session){
     const char *method = NULL;
-    size_t i = 0;
+    int i = 0;
     struct ssh_cipher_struct *ssh_ciphertab=ssh_get_ciphertab();
     struct ssh_hmac_struct   *ssh_hmactab=ssh_get_hmactab();
     int cmp;

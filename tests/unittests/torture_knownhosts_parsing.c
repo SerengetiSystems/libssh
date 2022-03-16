@@ -2,7 +2,10 @@
 
 #include <sys/stat.h>
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
+
 #include <libssh/priv.h>
 #include "torture.h"
 

@@ -23,7 +23,6 @@ jobs:
             -DWITH_DEBUG_PACKET=ON -DWITH_DEBUG_CALLTRACE=ON \
             -DUNIT_TESTING=ON -DCLIENT_TESTING=ON -DSERVER_TESTING=ON
       - run: cmake --build obj
-      - run: cd obj
-      - run: ctest --output-on-failure
+      - run: ctest --test-dir obj --output-on-failure
 
 

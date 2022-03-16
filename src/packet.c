@@ -1104,7 +1104,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
     }
 #ifdef DEBUG_PACKET
     SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-            "rcv packet cb (len=%u, state=%s)",
+            "rcv packet cb (len=%" PRIuS ", state=%s)",
             receivedlen,
             session->packet_state == PACKET_STATE_INIT ?
                 "INIT" :
@@ -1122,7 +1122,7 @@ int ssh_packet_socket_callback(const void *data, size_t receivedlen, void *user)
                  */
 #ifdef DEBUG_PACKET
                 SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-                        "Waiting for more data (%u < %u)",
+                        "Waiting for more data (%" PRIuS " < %" PRIu32 ")",
                         receivedlen,
                         lenfield_blocksize);
 #endif

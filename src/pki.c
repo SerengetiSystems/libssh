@@ -901,7 +901,7 @@ int ssh_pki_import_privkey_file(const char *filename,
         return SSH_ERROR;
     }
 
-    size = fread(key_buf, 1, sb.st_size, file);
+    size = (off_t)fread(key_buf, 1, sb.st_size, file);
     fclose(file);
 
     if (size != sb.st_size) {
@@ -978,7 +978,7 @@ int ssh_pki_export_privkey_file(const ssh_key privkey,
         return -1;
     }
 
-    rc = fwrite(ssh_string_data(blob), ssh_string_len(blob), 1, fp);
+    rc = (int)fwrite(ssh_string_data(blob), ssh_string_len(blob), 1, fp);
     SSH_STRING_FREE(blob);
     if (rc != 1 || ferror(fp)) {
         fclose(fp);
@@ -1632,7 +1632,7 @@ int ssh_pki_import_pubkey_file(const char *filename, ssh_key *pkey)
         return SSH_ERROR;
     }
 
-    size = fread(key_buf, 1, sb.st_size, file);
+    size = (off_t)fread(key_buf, 1, sb.st_size, file);
     fclose(file);
 
     if (size != sb.st_size) {
@@ -1990,7 +1990,7 @@ int ssh_pki_export_pubkey_file(const ssh_key key,
     if (fp == NULL) {
         return SSH_ERROR;
     }
-    rc = fwrite(key_buf, strlen(key_buf), 1, fp);
+    rc = (int)fwrite(key_buf, strlen(key_buf), 1, fp);
     if (rc != 1 || ferror(fp)) {
         fclose(fp);
         unlink(filename);
@@ -2150,7 +2150,7 @@ int ssh_pki_import_signature_blob(ssh_session session,
         return SSH_ERROR;
     }
 
-    sig = pki_signature_from_blob(session, pubkey, blob, type, hash_type);
+    sig = pki_signature_from_blob(pubkey, blob, type, hash_type);
     SSH_STRING_FREE(blob);
     if (sig == NULL) {
         return SSH_ERROR;
@@ -2171,11 +2171,11 @@ int ssh_pki_import_signature_blob(ssh_session session,
  *
  * @return  SSH_OK if compatible; SSH_ERROR otherwise
  */
-int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
+int pki_key_check_hash_compatible(ssh_key key,
                                   enum ssh_digest_e hash_type)
 {
     if (key == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Null pointer provided as key to "
+        SSH_LOG(SSH_LOG_WARN, "Null pointer provided as key to "
                                "pki_key_check_hash_compatible()");
         return SSH_ERROR;
     }
@@ -2185,7 +2185,7 @@ int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
     case SSH_KEYTYPE_DSS:
         if (hash_type == SSH_DIGEST_SHA1) {
             if (ssh_fips_mode()) {
-                SSH_LOG_COMMON(session, SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
+                SSH_LOG(SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
                 return SSH_ERROR;
             } else {
                 return SSH_OK;
@@ -2196,7 +2196,7 @@ int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
     case SSH_KEYTYPE_RSA:
         if (hash_type == SSH_DIGEST_SHA1) {
             if (ssh_fips_mode()) {
-                SSH_LOG_COMMON(session, SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
+                SSH_LOG(SSH_LOG_WARN, "SHA1 is not allowed in FIPS mode");
                 return SSH_ERROR;
             } else {
                 return SSH_OK;
@@ -2236,11 +2236,11 @@ int pki_key_check_hash_compatible(ssh_session session, ssh_key key,
     case SSH_KEYTYPE_RSA1:
     case SSH_KEYTYPE_ECDSA:
     case SSH_KEYTYPE_UNKNOWN:
-        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Unknown key type %d", key->type);
+        SSH_LOG(SSH_LOG_WARN, "Unknown key type %d", key->type);
         return SSH_ERROR;
     }
 
-    SSH_LOG_COMMON(session, SSH_LOG_WARN, "Key type %d incompatible with hash type  %d",
+    SSH_LOG(SSH_LOG_WARN, "Key type %d incompatible with hash type  %d",
             key->type, hash_type);
 
     return SSH_ERROR;
@@ -2256,7 +2256,7 @@ int ssh_pki_signature_verify(ssh_session session,
     enum ssh_keytypes_e key_type;
 
     if (session == NULL || sig == NULL || key == NULL || input == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Bad parameter provided to "
                                "ssh_pki_signature_verify()");
         return SSH_ERROR;
     }
@@ -2274,37 +2274,24 @@ int ssh_pki_signature_verify(ssh_session session,
     }
 
     /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(session, key, sig->hash_type);
+    rc = pki_key_check_hash_compatible(key, sig->hash_type);
     if (rc != SSH_OK) {
         return SSH_ERROR;
     }
 
-    rc = pki_verify_data_signature(session, sig, key, input, input_len);
+    rc = pki_verify_data_signature(sig, key, input, input_len);
 
     return rc;
 }
 
-ssh_signature pki_do_sign(ssh_session session, 
-                          const ssh_key privkey,
+ssh_signature pki_do_sign(const ssh_key privkey,
                           const unsigned char *input,
                           size_t input_len,
                           enum ssh_digest_e hash_type)
 {
-    int rc;
-
-    if (privkey == NULL || input == NULL) {
-        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
-                               "pki_do_sign()");
-        return NULL;
-    }
-
-    /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(session, privkey, hash_type);
-    if (rc != SSH_OK) {
-        return NULL;
-    }
-
-    return pki_sign_data(session, privkey, hash_type, input, input_len);
+    //JQS: TODO: this function was doing nothing that wasn't duplicated in pki_sign_data
+    //JQS:       we should remove this function entirely and just call pki_sign_data
+    return pki_sign_data(privkey, hash_type, input, input_len);
 }
 
 /*
@@ -2364,7 +2351,7 @@ ssh_string ssh_pki_do_sign(ssh_session session,
     }
 
     /* Generate the signature */
-    sig = pki_do_sign(session, privkey,
+    sig = pki_do_sign(privkey,
             ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             hash_type);
@@ -2443,6 +2430,7 @@ ssh_string ssh_pki_do_sign_agent(ssh_session session,
 #endif /* _WIN32 */
 
 #ifdef WITH_SERVER
+#include <libssh/server.h>
 //these functions are needed to verify key types before using them on the bind member of server
 LIBSSH_API const char* ssh_key_type_name(const ssh_key key)
 {
@@ -2515,7 +2503,7 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
     }
 
     /* Generate the signature */
-    sig = pki_do_sign(session, privkey,
+    sig = pki_do_sign(privkey,
             ssh_buffer_get(sign_input),
             ssh_buffer_get_len(sign_input),
             digest);

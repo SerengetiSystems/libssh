@@ -407,6 +407,7 @@ ssh_key ssh_agent_get_first_ident(struct ssh_session_struct *session,
 /* caller has to free commment */
 ssh_key ssh_agent_get_next_ident(struct ssh_session_struct *session,
     char **comment) {
+    uint32_t len;
     struct ssh_key_struct *key;
     struct ssh_string_struct *blob = NULL;
     int rc;
@@ -422,7 +423,7 @@ ssh_key ssh_agent_get_next_ident(struct ssh_session_struct *session,
     }
 
     /* get the comment */
-    *comment = ssh_buffer_get_char_string(session->agent->ident);
+    *comment = ssh_buffer_get_char_string(session->agent->ident, &len);
     if (*comment == NULL) {
         SSH_STRING_FREE(blob);
         return NULL;

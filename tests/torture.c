@@ -39,6 +39,7 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #elif (defined _WIN32) || (defined _WIN64)
+#define strdup _strdup
 #include <direct.h>
 #include <io.h>
 #define read _read

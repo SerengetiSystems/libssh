@@ -261,7 +261,7 @@ typedef int (*ssh_auth_kbdint_start_callback) (ssh_session session, const char *
  * @returns SSH_AUTH_PARTIAL Partial authentication, more authentication means are needed.
  * @returns SSH_AUTH_DENIED Authentication failed.
  */
-typedef int (*ssh_auth_kbdint_reply_callback) (ssh_session session, uint32_t nanswers, const char** answers, void* userdata);
+typedef int (*ssh_auth_kbdint_reply_callback) (ssh_session session, uint32_t nanswers, char** answers, void* userdata);
 
 /**
  * @brief Handles an SSH service request

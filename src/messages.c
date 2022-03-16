@@ -182,9 +182,9 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
               label:
                 {
                   uint32_t nquestions = 10;
-                  char * questions[10];
+                  const char * questions[10];
                   char echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-                  char * name, * instruction;
+                  const char * name, * instruction;
                   rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, questions, echo, session->server_callbacks->userdata);
                   if (rc == SSH_AUTH_INFO)
                   {
@@ -193,6 +193,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                   else
                   {
                     ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                   }
                 }
               }
@@ -925,7 +927,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
 				&sig);
 			if (rc == SSH_OK) {
 				rc = ssh_pki_signature_verify(session,
-					sig,
+                                        sig,
 					msg->auth_request.pubkey,
 					ssh_buffer_get(digest),
 					ssh_buffer_get_len(digest));
@@ -1086,13 +1088,15 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   } else if (session->kbdint->answers != NULL) {
       uint32_t n;
 
-      for (n = 0; n < session->kbdint->nanswers; n++) {
-            explicit_bzero(session->kbdint->answers[n],
-                           strlen(session->kbdint->answers[n]));
-            SAFE_FREE(session->kbdint->answers[n]);
+      ssh_kbdint kbdint = session->kbdint;
+
+      for (n = 0; n < kbdint->nanswers; n++) {
+        char* answer = kbdint->answers[n];
+        explicit_bzero(answer, strlen(answer));
+        free(answer);
       }
-      SAFE_FREE(session->kbdint->answers);
-      session->kbdint->nanswers = 0;
+      SAFE_FREE(kbdint->answers);
+      kbdint->nanswers = 0;
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,"kbdint: %d answers",nanswers);

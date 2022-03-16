@@ -51,9 +51,9 @@ static LIBSSH_THREAD void *ssh_log_userdata;
  * @{
  */
 
-static int current_timestring(int hires, char *buf, size_t len)
+static int current_timestring(char *buf, size_t len)
 {
-    char tbuf[64];
+    size_t tlen;
     struct timeval tv;
     struct tm *tm;
     time_t t;
@@ -66,13 +66,11 @@ static int current_timestring(int hires, char *buf, size_t len)
         return -1;
     }
 
-    if (hires) {
-        strftime(tbuf, sizeof(tbuf) - 1, "%Y/%m/%d %H:%M:%S", tm);
-        snprintf(buf, len, "%s.%06ld", tbuf, (long)tv.tv_usec);
-    } else {
-        strftime(tbuf, sizeof(tbuf) - 1, "%Y/%m/%d %H:%M:%S", tm);
-        snprintf(buf, len, "%s", tbuf);
-    }
+    tlen = strftime(buf, len, "%Y/%m/%d %H:%M:%S", tm);
+    buf += tlen;
+    len -= tlen;
+    snprintf(buf, len, ".%06ld", (long)tv.tv_usec);
+    buf[len - 1] = 0;
 
     return 0;
 }
@@ -81,10 +79,10 @@ static void ssh_log_stderr(int verbosity,
                            const char *function,
                            const char *buffer)
 {
-    char date[64] = {0};
+    char date[128] = {0};
     int rc;
 
-    rc = current_timestring(1, date, sizeof(date));
+    rc = current_timestring(date, sizeof(date));
     if (rc == 0) {
         fprintf(stderr, "[%s, %d] %s:", date, verbosity, function);
     } else {
@@ -125,7 +123,7 @@ void _ssh_log(int verbosity,
         va_start(va, format);
         vsnprintf(buffer, sizeof(buffer), format, va);
         va_end(va);
-        buffer[_countof(buffer) - 1] = 0;
+        buffer[sizeof(buffer) - 1] = 0;
         ssh_log_function(verbosity, function, buffer);
     }
 }
@@ -143,7 +141,7 @@ void ssh_log(ssh_session session,
     va_start(va, format);
     vsnprintf(buffer, sizeof(buffer), format, va);
     va_end(va);
-    buffer[_countof(buffer) - 1] = 0;
+    buffer[sizeof(buffer) - 1] = 0;
     if (session->common.callbacks && session->common.callbacks->log_function)
 		session->common.callbacks->log_function(session, verbosity, buffer, session->common.callbacks->userdata);
 	else
@@ -169,7 +167,7 @@ void ssh_log_common(struct ssh_common_struct *common,
 	  va_start(va, format);
 	  vsnprintf(buffer, sizeof(buffer), format, va);
 	  va_end(va);
-          buffer[_countof(buffer) - 1] = 0;
+          buffer[sizeof(buffer) - 1] = 0;
           if (common->callbacks && common->callbacks->log_function)
 	  {
 	      common->callbacks->log_function(common, verbosity, buffer, common->callbacks->userdata);

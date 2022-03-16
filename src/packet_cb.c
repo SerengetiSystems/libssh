@@ -144,7 +144,7 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
         }
     }
 
-    rc = ssh_pki_signature_verify(session,
+    rc = ssh_pki_signature_verify(session, 
                                   sig,
                                   server_key,
                                   session->next_crypto->secret_hash,

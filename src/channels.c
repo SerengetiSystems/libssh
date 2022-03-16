@@ -515,11 +515,6 @@ error:
   return SSH_ERROR;
 }
 
-int ssh_channel_grow_window(ssh_channel channel)
-{
-	return grow_window(channel->session, channel, 0);
-}
-
 /**
  * @internal
  *
@@ -592,7 +587,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   ssh_channel channel;
   ssh_string str;
   ssh_buffer buf;
-  size_t len;
+  uint32_t len;
   int is_stderr;
   int rest;
   (void)user;
@@ -625,7 +620,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   len = ssh_string_len(str);
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Channel receiving %" PRIdS " bytes data in %d (local win=%d remote win=%d)",
+      "Channel receiving %" PRIu32 " bytes data in %d (local win=%" PRIu32 " remote win=%" PRIu32 ")",
       len,
       is_stderr,
       channel->local_window,
@@ -634,7 +629,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   /* What shall we do in this case? Let's accept it anyway */
   if (len > channel->local_window) {
     SSH_LOG_COMMON(session, SSH_LOG_RARE,
-        "Data packet too big for our window(%" PRIdS " vs %d)",
+        "Data packet too big for our window(%" PRIu32 " vs %" PRIu32 ")",
         len,
         channel->local_window);
   }
@@ -653,7 +648,7 @@ SSH_PACKET_CALLBACK(channel_rcv_data){
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Channel windows are now (local win=%d remote win=%d)",
+      "Channel windows are now (local win=%" PRIu32 " remote win=%" PRIu32 ")",
       channel->local_window,
       channel->remote_window);
 
@@ -709,7 +704,7 @@ SSH_PACKET_CALLBACK(channel_rcv_eof) {
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Received eof on channel (%d:%d)",
+      "Received eof on channel (%" PRIu32 ":%" PRIu32 ")",
       channel->local_channel,
       channel->remote_channel);
   /* channel->remote_window = 0; */
@@ -737,7 +732,7 @@ SSH_PACKET_CALLBACK(channel_rcv_close) {
 	}
 
 	SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-			"Received close on channel (%d:%d)",
+			"Received close on channel (%" PRIu32 ":%" PRIu32 ")",
 			channel->local_channel,
 			channel->remote_channel);
 
@@ -775,8 +770,8 @@ SSH_PACKET_CALLBACK(channel_rcv_close) {
 SSH_PACKET_CALLBACK(channel_rcv_request) {
 	ssh_channel channel;
 	char *request=NULL;
-    uint8_t status;
-    int rc;
+        uint8_t status;
+        int rc;
 	(void)user;
 	(void)type;
 
@@ -945,7 +940,7 @@ int channel_default_bufferize(ssh_channel channel,
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-          "placing " SIZET_SPECIFIER " bytes into channel buffer (%s)",
+          "placing %" PRIuS " bytes into channel buffer (%s)",
           len,
           is_stderr ? "stderr" : "stdout");
   if (!is_stderr) {
@@ -1332,7 +1327,7 @@ int ssh_channel_send_eof(ssh_channel channel)
 
     rc = ssh_packet_send(session);
     SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-        "Sent a EOF on client channel (%d:%d)",
+        "Sent a EOF on client channel (%" PRIu32 ":%" PRIu32 ")",
         channel->local_channel,
         channel->remote_channel);
     if (rc != SSH_OK) {
@@ -1397,7 +1392,7 @@ int ssh_channel_close(ssh_channel channel)
 
     rc = ssh_packet_send(session);
     SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-            "Sent a close on client channel (%d:%d)",
+            "Sent a close on client channel (%" PRIu32 ":%" PRIu32 ")",
             channel->local_channel,
             channel->remote_channel);
 
@@ -1458,10 +1453,10 @@ int ssh_channel_flush(ssh_channel channel){
 
 static int channel_write_common(ssh_channel channel,
                                 const void *data,
-                                uint32_t len, int is_stderr)
+                                size_t len, int is_stderr)
 {
   ssh_session session;
-  uint32_t origlen = len;
+  size_t origlen = len;
   size_t effectivelen;
   size_t maxpacketlen;
   int rc;
@@ -1477,7 +1472,7 @@ static int channel_write_common(ssh_channel channel,
 
   if (len > INT_MAX) {
       SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-              "Length (%u) is bigger than INT_MAX", len);
+              "Length (%" PRIuS ") is bigger than INT_MAX", len);
       return SSH_ERROR;
   }
 
@@ -1489,7 +1484,7 @@ static int channel_write_common(ssh_channel channel,
 
   if (channel->local_eof) {
     ssh_set_error(session, SSH_REQUEST_DENIED,
-        "Can't write to channel %d:%d  after EOF was sent",
+        "Can't write to channel %" PRIu32 ":%" PRIu32 "  after EOF was sent",
         channel->local_channel,
         channel->remote_channel);
     return -1;
@@ -1514,7 +1509,7 @@ static int channel_write_common(ssh_channel channel,
   while (len > 0) {
     if (channel->remote_window < len) {
       SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
-          "Remote window is %d bytes. going to write %d bytes",
+          "Remote window is %" PRIu32 " bytes. going to write %" PRIuS " bytes",
           channel->remote_window,
           len);
       /* What happens when the channel window is zero? */
@@ -1574,9 +1569,9 @@ static int channel_write_common(ssh_channel channel,
     }
 
     SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-        "channel_write wrote %ld bytes", (long int) effectivelen);
+        "channel_write wrote %" PRIuS " bytes", effectivelen);
 
-    channel->remote_window -= effectivelen;
+    channel->remote_window -= (uint32_t)effectivelen;
     len -= effectivelen;
     data = ((uint8_t*)data + effectivelen);
     if (channel->counter != NULL) {
@@ -1643,7 +1638,7 @@ uint32_t ssh_channel_remote_packet_size(ssh_channel channel)
  *
  * @see ssh_channel_read()
  */
-int ssh_channel_write(ssh_channel channel, const void *data, uint32_t len) {
+int ssh_channel_write(ssh_channel channel, const void *data, size_t len) {
   return channel_write_common(channel, data, len, 0);
 }
 
@@ -1735,7 +1730,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_success){
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Received SSH_CHANNEL_SUCCESS on channel (%d:%d)",
+      "Received SSH_CHANNEL_SUCCESS on channel (%" PRIu32 ":%" PRIu32 ")",
       channel->local_channel,
       channel->remote_channel);
   if(channel->request_state != SSH_CHANNEL_REQ_STATE_PENDING){
@@ -1766,7 +1761,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_failure){
   }
 
   SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-      "Received SSH_CHANNEL_FAILURE on channel (%d:%d)",
+      "Received SSH_CHANNEL_FAILURE on channel (%" PRIu32 ":%" PRIu32 ")",
       channel->local_channel,
       channel->remote_channel);
   if(channel->request_state != SSH_CHANNEL_REQ_STATE_PENDING){
@@ -3081,7 +3076,7 @@ int ssh_channel_read_nonblocking(ssh_channel channel,
                                  int is_stderr)
 {
     ssh_session session;
-    ssize_t to_read;
+    int to_read;
     int rc;
     int blocking;
 
@@ -3103,10 +3098,9 @@ int ssh_channel_read_nonblocking(ssh_channel channel,
         }
 
         return to_read; /* may be an error code */
-    }
-
-    if ((size_t)to_read > count) {
-        to_read = (ssize_t)count;
+    } 
+    else if ((ssize_t)to_read > (ssize_t)count) {
+        to_read = (int)count;
     }
     blocking = ssh_is_blocking(session);
     ssh_set_blocking(session, 0);
@@ -3536,7 +3530,7 @@ void ssh_channel_set_counter(ssh_channel channel,
  *
  * @see ssh_channel_read()
  */
-int ssh_channel_write_stderr(ssh_channel channel, const void *data, uint32_t len) {
+int ssh_channel_write_stderr(ssh_channel channel, const void *data, size_t len) {
   return channel_write_common(channel, data, len, 1);
 }
 
