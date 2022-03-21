@@ -91,9 +91,9 @@ char *strndup(const char *s, size_t n);
 #  define PRIx32 "x"
 # endif /* PRIx32 */
 
-# ifndef PRIxPtr
-#  define PRIxPtr "zx"
-# endif /* PRIx32 */
+# ifndef PRIxS
+#  define PRIxS "zx"
+# endif /* PRIxS */
 
 # ifndef PRIuS
 #  define PRIuS "zu"
