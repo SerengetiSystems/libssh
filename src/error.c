@@ -63,7 +63,7 @@ void _ssh_set_error(void *error,
     va_end(va);
    
     err->error.error_code = code;
-    ssh_log_common(err, SSH_LOG_WARN, function, err->error.error_buffer);
+    ssh_log_common(err, SSH_LOG_WARN, function, "%s", err->error.error_buffer);
 }
 
 /**

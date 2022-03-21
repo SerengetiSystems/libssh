@@ -172,14 +172,17 @@ int gettimeofday(struct timeval *__p, void *__t);
 #else /* _WIN32 */
 
 #include <unistd.h>
-#ifndef PRIuS
-#define PRIuS "zu"
-#endif
-#ifndef PRIdS
-#define PRIdS "zd"
-#endif
+# ifndef PRIxS
+#  define PRIxS "zx"
+# endif /* PRIx32 */
+# ifndef PRIuS
+#  define PRIuS "zu"
+# endif
+# ifndef PRIdS
+#  define PRIdS "zd"
+# endif
 
-#define _XCLOSESOCKET close
+# define _XCLOSESOCKET close
 
 #endif /* _WIN32 */
 

@@ -121,7 +121,7 @@ static void ssh_log_function(int verbosity,
     ssh_log_stderr(verbosity, function, buffer);
 }
 
-static void ssh_vlog(int verbosity,
+void ssh_vlog(int verbosity,
               const char *function,
               const char *format,
               va_list *va)
