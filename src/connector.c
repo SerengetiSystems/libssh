@@ -693,7 +693,7 @@ static bool ssh_connector_fd_is_socket(socket_t s)
 
     rc = fstat(s, &sb);
     if (rc != 0) {
-        SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_TRACE,
                 "error %i in fstat() for fd %d",
                 errno,
                 s);
