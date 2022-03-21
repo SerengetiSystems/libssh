@@ -541,7 +541,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         SSH_LOG(SSH_LOG_DEBUG, "%s", buffer);
         return;
     } else {
-        printed = snprintf(buffer + count, sizeof(buffer) - count, "("SIZET_SPECIFIER" bytes):", len);
+        printed = snprintf(buffer + count, sizeof(buffer) - count, "(%" PRIuS " bytes):", len);
         if (printed < 0) {
             goto error;
         }

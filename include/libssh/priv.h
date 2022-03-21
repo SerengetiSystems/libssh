@@ -95,6 +95,15 @@ char *strndup(const char *s, size_t n);
 #  define PRIxPtr "zx"
 # endif /* PRIx32 */
 
+# ifndef PRIuS
+#  define PRIuS "zu"
+# endif
+
+# ifndef PRIdS
+#  define PRIdS "zd"
+# endif
+
+
 # ifdef _MSC_VER
 #  include <stdio.h>
 #  include <stdarg.h> /* va_copy define check */
@@ -163,7 +172,12 @@ int gettimeofday(struct timeval *__p, void *__t);
 #else /* _WIN32 */
 
 #include <unistd.h>
+#ifndef PRIuS
 #define PRIuS "zu"
+#endif
+#ifndef PRIdS
+#define PRIdS "zd"
+#endif
 
 #define _XCLOSESOCKET close
 

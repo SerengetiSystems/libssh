@@ -1973,7 +1973,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
             break;
         case SSH_KEYTYPE_ED25519:
         case SSH_KEYTYPE_SK_ED25519:
-            rc = pki_signature_from_ed25519_blob(session, sig, sig_blob);
+            rc = pki_signature_from_ed25519_blob(sig, sig_blob);
             if (rc != SSH_OK){
                 goto error;
             }

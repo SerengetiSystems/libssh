@@ -2010,8 +2010,8 @@ ssh_packet_set_newkeys(ssh_session session,
 
 
     /* Initialize rekeying states */
-    ssh_init_rekey_state(session, out_cipher);
-    ssh_init_rekey_state(session, in_cipher);
+    rekey_after = ssh_init_rekey_state(session, out_cipher);
+    rekey_after = ssh_init_rekey_state(session, in_cipher);
     SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
       "Set rekey after %" PRIu64 " blocks",
       rekey_after);
