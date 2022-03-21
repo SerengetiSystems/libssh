@@ -257,18 +257,11 @@ int ssh_get_key_params(ssh_session session,
                        enum ssh_digest_e *digest);
 
 /* LOGGING */
-void ssh_log_function(int verbosity,
-                      const char *function,
-                      const char *buffer);
 #define SSH_LOG(priority, ...) \
     _ssh_log(priority, __func__, __VA_ARGS__)
 
 #define SSH_LOG_COMMON(bos, priority, ...) \
     ssh_log_common(&bos->common, priority, __func__, __VA_ARGS__)
-
-#define SSH_LOG_COMMON_NULLABLE(bos, priority, ...) \
-    do{ if(bos) ssh_log_common(&bos->common, priority, __func__, __VA_ARGS__); \
-        else _ssh_log(priority, __func__, __VA_ARGS__); } while(0)
 
 /* LEGACY */
 void ssh_log_common(struct ssh_common_struct *common,

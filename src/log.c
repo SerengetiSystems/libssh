@@ -107,7 +107,7 @@ static void ssh_log_custom(ssh_logging_callback log_fn,
     log_fn(verbosity, function, buf, ssh_get_log_userdata());
 }
 
-void ssh_log_function(int verbosity,
+static void ssh_log_function(int verbosity,
                       const char *function,
                       const char *buffer)
 {
@@ -121,7 +121,7 @@ void ssh_log_function(int verbosity,
     ssh_log_stderr(verbosity, function, buffer);
 }
 
-void ssh_vlog(int verbosity,
+static void ssh_vlog(int verbosity,
               const char *function,
               const char *format,
               va_list *va)
@@ -133,7 +133,7 @@ void ssh_vlog(int verbosity,
     ssh_log_function(verbosity, function, buffer);
 }
 
-void ssh_vlog_common(
+static void ssh_vlog_common(
     struct ssh_common_struct *common,
     int verbosity,
     const char* function,
