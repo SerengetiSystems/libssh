@@ -209,6 +209,34 @@ int ssh_server_init_kex(ssh_session session) {
     return server_set_kex(session);
 }
 
+int ssh_server_send_auth_banner(ssh_session session, const char* message, const char *lang)
+{
+    int rc;
+
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Sending SSH_MSG_USERAUTH_BANNER");
+
+    rc = ssh_buffer_pack(session->out_buffer,
+        "bss",
+        SSH2_MSG_USERAUTH_BANNER,
+        message,
+        lang);
+
+    if (rc != SSH_OK) {
+        goto error;
+    }
+
+    rc = ssh_packet_send(session);
+    if (rc == SSH_ERROR) {
+        goto error;
+    }
+
+    return SSH_OK;
+error:
+    ssh_buffer_reinit(session->out_buffer);
+
+    return SSH_ERROR;
+}
+
 static int ssh_server_send_extensions(ssh_session session) {
     int rc;
     const char *hostkey_algorithms;
@@ -475,7 +503,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user) {
     char *buffer = (char *) data;
     ssh_session session = (ssh_session) user;
     char *str = NULL;
-    size_t i;
+    uint32_t i;
     int ret=0;
 
     for (i = 0; i < len; i++) {

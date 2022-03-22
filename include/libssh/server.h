@@ -244,6 +244,21 @@ LIBSSH_API void ssh_bind_free(ssh_bind ssh_bind_o);
  */
 LIBSSH_API void ssh_set_auth_methods(ssh_session session, int auth_methods);
 
+/**
+ * @brief Send a user authentication banner.
+ *
+ * This can be done any time between the first authentication request until authentication is completed.
+ *
+ * @param[in]  session  The server session
+ *
+ * @param[in]  message  The UTF8 encoded authentication banner message to send to the client.
+ *
+ * @param[in]  lang  The language code as per RFC 3066
+ *
+ * @return SSH_OK if banner sent successfully
+ */
+LIBSSH_API int ssh_server_send_auth_banner(ssh_session session, const char* message, const char *lang);
+
 /**********************************************************
  * SERVER MESSAGING
  **********************************************************/
