@@ -1,4 +1,5 @@
-[![pipeline status](https://gitlab.com/libssh/libssh-mirror/badges/master/pipeline.svg)](https://gitlab.com/libssh/libssh-mirror/commits/master)
+![ubuntu-openssl-x64](https://github.com/smatechnologies/libssh/actions/workflows/push-ci-actions.yml/badge.svg)
+![windows-openssl-x64](https://github.com/smatechnologies/libssh/actions/workflows/push-ci-actions.yml/badge.svg)
 
 ```
   _   _   _                          _
