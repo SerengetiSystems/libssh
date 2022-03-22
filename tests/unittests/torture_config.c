@@ -9,6 +9,7 @@
 #include "libssh/session.h"
 #include "libssh/config_parser.h"
 #include "match.c"
+#include "config.c"
 
 extern LIBSSH_THREAD int ssh_log_level;
 
@@ -310,6 +311,25 @@ static int teardown_config_files(void **state)
 }
 
 static int setup(void **state)
+{
+    ssh_session session = NULL;
+    char *wd = NULL;
+    int verbosity;
+
+    session = ssh_new();
+
+    verbosity = torture_libssh_verbosity();
+    ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
+    wd = torture_get_current_working_dir();
+    ssh_options_set(session, SSH_OPTIONS_SSH_DIR, wd);
+    free(wd);
+
+    *state = session;
+
+    return 0;
+}
+
+static int setup_no_sshdir(void **state)
 {
     ssh_session session = NULL;
     int verbosity;
@@ -1661,6 +1681,55 @@ static void torture_config_identity(void **state)
     assert_string_equal(id, "id_rsa_one");
 }
 
+/* Make absolute path for config include
+ */
+static void torture_config_make_absolute_int(void **state, bool no_sshdir_fails)
+{
+    ssh_session session = *state;
+    char *result = NULL;
+
+    /* Absolute path already -- should not change in any case */
+    result = ssh_config_make_absolute(session, "/etc/ssh/ssh_config.d/*.conf", 1);
+    assert_string_equal(result, "/etc/ssh/ssh_config.d/*.conf");
+    free(result);
+    result = ssh_config_make_absolute(session, "/etc/ssh/ssh_config.d/*.conf", 0);
+    assert_string_equal(result, "/etc/ssh/ssh_config.d/*.conf");
+    free(result);
+
+    /* Global is relative to /etc/ssh/ */
+    result = ssh_config_make_absolute(session, "ssh_config.d/test.conf", 1);
+    assert_string_equal(result, "/etc/ssh/ssh_config.d/test.conf");
+    free(result);
+    result = ssh_config_make_absolute(session, "./ssh_config.d/test.conf", 1);
+    assert_string_equal(result, "/etc/ssh/./ssh_config.d/test.conf");
+    free(result);
+
+    /* User config is relative to sshdir -- here faked to /tmp/ssh/ */
+    result = ssh_config_make_absolute(session, "my_config", 0);
+    if (no_sshdir_fails) {
+        assert_null(result);
+    } else {
+        /* The path depends on the PWD so lets skip checking the actual path here */
+        assert_non_null(result);
+    }
+    free(result);
+
+    /* User config is relative to sshdir -- here faked to /tmp/ssh/ */
+    ssh_options_set(session, SSH_OPTIONS_SSH_DIR, "/tmp/ssh");
+    result = ssh_config_make_absolute(session, "my_config", 0);
+    assert_string_equal(result, "/tmp/ssh/my_config");
+    free(result);
+}
+
+static void torture_config_make_absolute(void **state)
+{
+    torture_config_make_absolute_int(state, 0);
+}
+
+static void torture_config_make_absolute_no_sshdir(void **state)
+{
+    torture_config_make_absolute_int(state, 1);
+}
 
 int torture_run_tests(void)
 {
@@ -1726,6 +1795,10 @@ int torture_run_tests(void)
                                         setup, teardown),
         cmocka_unit_test_setup_teardown(torture_config_identity,
                                         setup, teardown),
+        cmocka_unit_test_setup_teardown(torture_config_make_absolute,
+                                        setup, teardown),
+        cmocka_unit_test_setup_teardown(torture_config_make_absolute_no_sshdir,
+                                        setup_no_sshdir, teardown),
     };
 
 
