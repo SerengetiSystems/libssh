@@ -188,20 +188,23 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, size_t needed)
     /* Find the smallest power of two which is greater or equal to needed */
     while(smallest <= needed) {
         if (smallest == 0) {
-            return -1;
+          SSH_LOG(SSH_LOG_WARN, "no power of two greater than  %" PRIuS , needed);
+          return -1;
         }
         smallest <<= 1;
     }
     needed = smallest;
 
     if (needed > BUFFER_SIZE_MAX) {
-        return -1;
+      SSH_LOG(SSH_LOG_WARN, "requested BUFFFER_SIZE_MAX < %" PRIuS, needed);
+      return -1;
     }
 
     if (buffer->secure) {
         new = malloc(needed);
         if (new == NULL) {
-            return -1;
+          SSH_LOG(SSH_LOG_WARN, "malloc failed requesting %" PRIuS, needed);
+          return -1;
         }
         memcpy(new, buffer->data, buffer->used);
         explicit_bzero(buffer->data, buffer->used);
@@ -209,6 +212,7 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, size_t needed)
     } else {
         new = realloc(buffer->data, needed);
         if (new == NULL) {
+            SSH_LOG(SSH_LOG_WARN, "realloc failed requesting %" PRIuS, needed);
             return -1;
         }
     }
@@ -310,6 +314,7 @@ int ssh_buffer_add_data(struct ssh_buffer_struct *buffer, const void *data, size
     }
 
     if (buffer->used + len < len) {
+        SSH_LOG(SSH_LOG_WARN, "size_t overflow %" PRIuS " + %" PRIuS , buffer->used, len);
         return -1;
     }
 
@@ -532,6 +537,7 @@ int ssh_buffer_prepend_data(struct ssh_buffer_struct *buffer, const void *data,
   }
   /* pos isn't high enough */
   if (buffer->used - buffer->pos + len < len) {
+    SSH_LOG(SSH_LOG_WARN, "prepend failed requesting %" PRIu32, len);
     return -1;
   }
 
@@ -968,7 +974,7 @@ static int ssh_buffer_pack_allocate_va(struct ssh_buffer_struct *buffer,
             cstring = NULL;
             break;
         case 'P':
-            len = va_arg(ap, size_t);
+            len = va_arg(ap, unsigned int);
             needed_size += len;
             va_arg(ap, void *);
             count++; /* increase argument count */
@@ -1091,7 +1097,7 @@ int ssh_buffer_pack_va(struct ssh_buffer_struct *buffer,
             cstring = NULL;
             break;
         case 'P':
-            len = va_arg(ap, size_t);
+            len = va_arg(ap, unsigned int);
 
             o.data = va_arg(ap, void *);
             count++; /* increase argument count */
@@ -1120,12 +1126,13 @@ int ssh_buffer_pack_va(struct ssh_buffer_struct *buffer,
             rc = SSH_ERROR;
         }
         if (rc != SSH_OK){
-            break;
+          SSH_LOG(SSH_LOG_WARN, "Buffer pack error at %c", *p);
+          break;
         }
     }
 
     if (argc != count) {
-        return SSH_ERROR;
+        rc = SSH_ERROR;
     }
 
     if (rc != SSH_ERROR){
@@ -1134,6 +1141,10 @@ int ssh_buffer_pack_va(struct ssh_buffer_struct *buffer,
         if (canary != SSH_BUFFER_PACK_END) {
             abort();
         }
+    }
+    else
+    {
+      SSH_LOG(SSH_LOG_WARN, "Buffer pack error formatting '%s'", format);
     }
     return rc;
 }
