@@ -48,6 +48,37 @@ static void torture_growing_buffer(void **state) {
 }
 
 /*
+ * Test if this specific case works. on x64 windows
+ * The size argument had to be cast to size_t when buffer_pack was called
+ * or the size was padded with garbage in the function.
+ * We are never going to need more than an unsigned int to specify a buffer size
+ * I changed the functions to expect unsigned int instead of size_t and they now work
+ * This is something to do with vagueries of size_t integer promotion and va_arg
+ */
+static void torture_cookie_buffer(void** state) {
+  unsigned char cookie[] = { 0x7f, 0xff, 0xff, 0xff, 0x7f, 0xff, 0xff, 0xff, 0x7f, 0xff, 0xff, 0xff, 0x7f, 0xff, 0xff, 0xff };
+  size_t size = sizeof(cookie);
+  ssh_buffer buffer = *state;
+  //this did not work on windows x64. 
+  //The va_arg(ap, size_t) resulted in garbage
+  //changing it to va_arg(ap, unsigned) fixed it
+  assert_int_equal(SSH_OK, ssh_buffer_pack(buffer,
+    "bP",
+    20,
+    16,
+    cookie)); /* cookie */
+  assert_int_equal(17, ssh_buffer_get_len(buffer));
+  assert_int_equal(SSH_OK, ssh_buffer_reinit(buffer));
+  //make sure we didn't break the case where the arugment was already size_t
+  assert_int_equal(SSH_OK, ssh_buffer_pack(buffer,
+    "bP",
+    20,
+    size,
+    cookie)); /* cookie */
+  assert_int_equal(17, ssh_buffer_get_len(buffer));
+}
+
+/*
  * Test if the continuously growing buffer size never exceeds 2 time its
  * real capacity, when we remove 1 byte after each call (sliding window)
  */
@@ -264,6 +295,7 @@ static void torture_buffer_pack_badformat(void **state){
 int torture_run_tests(void) {
     int rc;
     struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(torture_cookie_buffer, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_growing_buffer, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_growing_buffer_shifting, setup, teardown),
         cmocka_unit_test_setup_teardown(torture_buffer_prepend, setup, teardown),
