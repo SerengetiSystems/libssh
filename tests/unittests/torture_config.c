@@ -39,6 +39,7 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define LIBSSH_TESTCONFIG12 "libssh_testconfig12.tmp"
 #define LIBSSH_TESTCONFIGGLOB "libssh_testc*[36].tmp"
 #define LIBSSH_TEST_PUBKEYTYPES "libssh_test_PubkeyAcceptedKeyTypes.tmp"
+#define LIBSSH_TEST_PUBKEYALGORITHMS "libssh_test_PubkeyAcceptedAlgorithms.tmp"
 #define LIBSSH_TEST_NONEWLINEEND "libssh_test_NoNewLineEnd.tmp"
 #define LIBSSH_TEST_NONEWLINEONELINE "libssh_test_NoNewLineOneline.tmp"
 #define LIBSSH_TEST_RECURSIVE_INCLUDE "libssh_test_recursive_include.tmp"
@@ -54,7 +55,7 @@ extern LIBSSH_THREAD int ssh_log_level;
     "\n\nIdentityFile "ID_FILE"\n" \
     "\n\nKexAlgorithms "KEXALGORITHMS"\n" \
     "\n\nHostKeyAlgorithms "HOSTKEYALGORITHMS"\n" \
-    "\n\nPubkeyAcceptedTypes "PUBKEYACCEPTEDTYPES"\n" \
+    "\n\nPubkeyAcceptedAlgorithms "PUBKEYACCEPTEDTYPES"\n" \
     "\n\nMACs "MACS"\n"
 
 /* Multiple Port settings -> parsing returns early. */
@@ -180,6 +181,9 @@ extern LIBSSH_THREAD int ssh_log_level;
 #define LIBSSH_TEST_PUBKEYTYPES_STRING \
     "PubkeyAcceptedKeyTypes "PUBKEYACCEPTEDTYPES"\n"
 
+#define LIBSSH_TEST_PUBKEYALGORITHMS_STRING \
+    "PubkeyAcceptedAlgorithms "PUBKEYACCEPTEDTYPES"\n"
+
 #define LIBSSH_TEST_NONEWLINEEND_STRING \
     "ConnectTimeout 30\n" \
     "LogLevel DEBUG3"
@@ -232,6 +236,7 @@ static int setup_config_files(void **state)
     unlink(LIBSSH_TESTCONFIG11);
     unlink(LIBSSH_TESTCONFIG12);
     unlink(LIBSSH_TEST_PUBKEYTYPES);
+    unlink(LIBSSH_TEST_PUBKEYALGORITHMS);
     unlink(LIBSSH_TEST_NONEWLINEEND);
     unlink(LIBSSH_TEST_NONEWLINEONELINE);
 
@@ -280,6 +285,9 @@ static int setup_config_files(void **state)
     torture_write_file(LIBSSH_TEST_PUBKEYTYPES,
                        LIBSSH_TEST_PUBKEYTYPES_STRING);
 
+    torture_write_file(LIBSSH_TEST_PUBKEYALGORITHMS,
+                       LIBSSH_TEST_PUBKEYALGORITHMS_STRING);
+
     torture_write_file(LIBSSH_TEST_NONEWLINEEND,
                        LIBSSH_TEST_NONEWLINEEND_STRING);
 
@@ -306,6 +314,7 @@ static int teardown_config_files(void **state)
     unlink(LIBSSH_TESTCONFIG11);
     unlink(LIBSSH_TESTCONFIG12);
     unlink(LIBSSH_TEST_PUBKEYTYPES);
+    unlink(LIBSSH_TEST_PUBKEYALGORITHMS);
 
     return 0;
 }
@@ -1294,6 +1303,22 @@ static void torture_config_pubkeytypes_string(void **state)
 }
 
 /**
+ * @brief test parsing PubkeyAcceptedKAlgorithms from file
+ */
+static void torture_config_pubkeyalgorithms_file(void **state)
+{
+    torture_config_pubkeytypes(state, LIBSSH_TEST_PUBKEYALGORITHMS, NULL);
+}
+
+/**
+ * @brief test parsing PubkeyAcceptedAlgorithms from string
+ */
+static void torture_config_pubkeyalgorithms_string(void **state)
+{
+    torture_config_pubkeytypes(state, NULL, LIBSSH_TEST_PUBKEYALGORITHMS_STRING);
+}
+
+/**
  * @brief Verify the configuration parser handles
  * missing newline in the end
  */
@@ -1778,6 +1803,10 @@ int torture_run_tests(void)
         cmocka_unit_test_setup_teardown(torture_config_pubkeytypes_file,
                                         setup, teardown),
         cmocka_unit_test_setup_teardown(torture_config_pubkeytypes_string,
+                                        setup, teardown),
+        cmocka_unit_test_setup_teardown(torture_config_pubkeyalgorithms_file,
+                                        setup, teardown),
+        cmocka_unit_test_setup_teardown(torture_config_pubkeyalgorithms_string,
                                         setup, teardown),
         cmocka_unit_test_setup_teardown(torture_config_nonewlineend_file,
                                         setup, teardown),

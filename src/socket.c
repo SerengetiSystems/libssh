@@ -492,7 +492,7 @@ void ssh_socket_close(ssh_socket s){
             }
         }
         if (!WIFEXITED(status)) {
-            SSH_LOG_COMMON(s->session, SSH_LOG_WARN, "Proxy command exitted abnormally");
+            SSH_LOG_COMMON(s->session, SSH_LOG_WARN, "Proxy command exited abnormally");
             return;
         }
         SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "Proxy command returned %d", WEXITSTATUS(status));
@@ -505,7 +505,7 @@ void ssh_socket_close(ssh_socket s){
  * @brief sets the file descriptor of the socket.
  * @param[out] s ssh_socket to update
  * @param[in] fd file descriptor to set
- * @warning this function updates boths the input and output
+ * @warning this function updates both the input and output
  * file descriptors
  */
 void ssh_socket_set_fd(ssh_socket s, socket_t fd)
@@ -844,7 +844,7 @@ int ssh_socket_set_blocking(socket_t fd)
 /**
  * @internal
  * @brief Launches a socket connection
- * If a the socket connected callback has been defined and
+ * If the socket connected callback has been defined and
  * a poll object exists, this call will be non blocking.
  * @param s    socket to connect.
  * @param host hostname or ip address to connect to.

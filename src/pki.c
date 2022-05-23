@@ -404,6 +404,42 @@ int ssh_key_algorithm_allowed(ssh_session session, const char *type)
     return ssh_match_group(allowed_list, type);
 }
 
+bool ssh_key_size_allowed_rsa(int min_size, ssh_key key)
+{
+    int key_size = ssh_key_size(key);
+
+    if (min_size < 768) {
+        if (ssh_fips_mode()) {
+            min_size = 2048;
+        } else {
+            min_size = 1024;
+        }
+    }
+    return (key_size >= min_size);
+}
+
+/**
+ * @brief Check the given key is acceptable in regards to the key size policy
+ * specified by the configuration
+ *
+ * @param[in] session The SSH session
+ * @param[in] key     The SSH key
+ * @returns           true if the key is allowed, false otherwise
+ */
+bool ssh_key_size_allowed(ssh_session session, ssh_key key)
+{
+    int min_size = 0;
+
+    switch (ssh_key_type(key)) {
+    case SSH_KEYTYPE_RSA:
+    case SSH_KEYTYPE_RSA_CERT01:
+        min_size = session->opts.rsa_min_size;
+        return ssh_key_size_allowed_rsa(min_size, key);
+    default:
+        return true;
+    }
+}
+
 /**
  * @brief Convert a key type to a hash type. This is usually unambiguous
  * for all the key types, unless the SHA2 extension (RFC 8332) is
@@ -764,7 +800,7 @@ void ssh_signature_free(ssh_signature sig)
 }
 
 /**
- * @brief import a base64 formated key from a memory c-string
+ * @brief import a base64 formatted key from a memory c-string
  *
  * @param[in]  b64_key  The c-string holding the base64 encoded key
  *
@@ -1557,7 +1593,7 @@ fail:
 }
 
 /**
- * @brief Import a base64 formated public key from a memory c-string.
+ * @brief Import a base64 formatted public key from a memory c-string.
  *
  * @param[in]  b64_key  The base64 key to format.
  *
@@ -1835,7 +1871,7 @@ int ssh_pki_import_pubkey_file(const char *filename, ssh_key *pkey)
 }
 
 /**
- * @brief Import a base64 formated certificate from a memory c-string.
+ * @brief Import a base64 formatted certificate from a memory c-string.
  *
  * @param[in]  b64_cert  The base64 cert to format.
  *
@@ -2426,6 +2462,7 @@ int ssh_pki_signature_verify(ssh_session session,
                              size_t input_len)
 {
     int rc;
+    bool allowed;
     enum ssh_keytypes_e key_type;
 
     if (session == NULL || sig == NULL || key == NULL || input == NULL) {
@@ -2443,6 +2480,13 @@ int ssh_pki_signature_verify(ssh_session session,
         SSH_LOG_COMMON(session, SSH_LOG_WARN,
                 "Can not verify %s signature with %s key",
                 sig->type_c, key->type_c);
+        return SSH_ERROR;
+    }
+
+    allowed = ssh_key_size_allowed(session, key);
+    if (!allowed) {
+        ssh_set_error(session, SSH_FATAL, "The '%s' key of size %d is not "
+                      "allowd by RSA_MIN_SIZE", key->type_c, ssh_key_size(key));
         return SSH_ERROR;
     }
 
@@ -2693,7 +2737,7 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
                                          const enum ssh_digest_e digest)
 {
     struct ssh_crypto_struct *crypto = NULL;
-
+    bool allowed;
     ssh_signature sig = NULL;
     ssh_string sig_blob = NULL;
 
@@ -2705,11 +2749,17 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
         return NULL;
     }
 
+    allowed = ssh_key_size_allowed(session, privkey);
+    if (!allowed) {
+        ssh_set_error(session, SSH_FATAL, "The hostkey size too small");
+        return NULL;
+    }
+
     crypto = session->next_crypto ? session->next_crypto :
                                     session->current_crypto;
 
     if (crypto->secret_hash == NULL){
-        ssh_set_error(session,SSH_FATAL,"Missing secret_hash");
+        ssh_set_error(session, SSH_FATAL, "Missing secret_hash");
         return NULL;
     }
 
@@ -2730,9 +2780,9 @@ ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
 
     /* Generate the signature */
     sig = pki_do_sign(privkey,
-            ssh_buffer_get(sign_input),
-            ssh_buffer_get_len(sign_input),
-            digest);
+                      ssh_buffer_get(sign_input),
+                      ssh_buffer_get_len(sign_input),
+                      digest);
     if (sig == NULL) {
         goto end;
     }

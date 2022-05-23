@@ -175,6 +175,10 @@ ssh_public_key ssh_pki_convert_key_to_publickey(const ssh_key key);
 ssh_private_key ssh_pki_convert_key_to_privatekey(const ssh_key key);
 
 int ssh_key_algorithm_allowed(ssh_session session, const char *type);
+bool ssh_key_size_allowed(ssh_session session, ssh_key key);
+
+/* Return the key size in bits */
+int ssh_key_size(ssh_key key);
 
 /* PKCS11 URI function to check if filename is a path or a PKCS11 URI */
 bool ssh_pki_is_uri(const char *filename);

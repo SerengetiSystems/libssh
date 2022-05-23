@@ -339,7 +339,7 @@ static int ssh_bind_poll_callback(ssh_poll_handle sshpoll,
 }
 
 /** @internal
- * @brief returns the current poll handle, or create it
+ * @brief returns the current poll handle, or creates it
  * @param sshbind the ssh_bind object
  * @returns a ssh_poll handle suitable for operation
  */
@@ -502,6 +502,8 @@ int ssh_bind_accept_fd(ssh_bind sshbind, ssh_session session, socket_t fd){
             return SSH_ERROR;
         }
     }
+
+    session->opts.rsa_min_size = sshbind->rsa_min_size;
 
     ssh_socket_free(session->socket);
     session->socket = ssh_socket_new(session);

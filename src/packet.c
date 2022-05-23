@@ -364,7 +364,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
          * Transitions:
          * - session->dh_handshake_state = DH_STATE_INIT_SENT
          * then calls dh_handshake_server which triggers:
-         * - session->dh_handhsake_state = DH_STATE_NEWKEYS_SENT
+         * - session->dh_handshake_state = DH_STATE_NEWKEYS_SENT
          * */
 
         if (session->session_state != SSH_SESSION_STATE_DH) {
@@ -392,7 +392,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
          *   or dh_handshake_state == DH_STATE_REQUEST_SENT (dh-gex)
          *
          * Transitions:
-         * - session->dh_handhsake_state = DH_STATE_NEWKEYS_SENT
+         * - session->dh_handshake_state = DH_STATE_NEWKEYS_SENT
          * */
 
         if (session->session_state != SSH_SESSION_STATE_DH) {
@@ -426,7 +426,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
         /*
          * States required:
          * - session_state == SSH_SESSION_STATE_AUTHENTICATING
-         * - dh_hanshake_state == DH_STATE_FINISHED
+         * - dh_handshake_state == DH_STATE_FINISHED
          *
          * Transitions:
          * - if authentication was successful:
@@ -455,7 +455,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
         /*
          * States required:
          * - session_state == SSH_SESSION_STATE_AUTHENTICATING
-         * - dh_hanshake_state == DH_STATE_FINISHED
+         * - dh_handshake_state == DH_STATE_FINISHED
          * - session->auth.state == SSH_AUTH_STATE_KBDINT_SENT
          *   or session->auth.state == SSH_AUTH_STATE_PUBKEY_OFFER_SENT
          *   or session->auth.state == SSH_AUTH_STATE_PUBKEY_AUTH_SENT
@@ -493,7 +493,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
         /*
          * States required:
          * - session_state == SSH_SESSION_STATE_AUTHENTICATING
-         * - dh_hanshake_state == DH_STATE_FINISHED
+         * - dh_handshake_state == DH_STATE_FINISHED
          * - session->auth.state == SSH_AUTH_STATE_KBDINT_SENT
          *   or session->auth.state == SSH_AUTH_STATE_PUBKEY_AUTH_SENT
          *   or session->auth.state == SSH_AUTH_STATE_PASSWORD_AUTH_SENT

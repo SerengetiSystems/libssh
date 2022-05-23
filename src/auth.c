@@ -58,7 +58,7 @@
 /**
  * @internal
  *
- * @brief Ask access to the ssh-userauth service.
+ * @brief Ask for access to the ssh-userauth service.
  *
  * @param[in] session   The SSH session handle.
  *
@@ -360,7 +360,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_pk_ok) {
  *
  * @param[in] username  Deprecated, set to NULL.
  *
- * @returns             A bitfield of the fllowing values:
+ * @returns             A bitfield of the following values:
  *                      - SSH_AUTH_METHOD_PASSWORD
  *                      - SSH_AUTH_METHOD_PUBLICKEY
  *                      - SSH_AUTH_METHOD_HOSTBASED
@@ -489,6 +489,7 @@ int ssh_userauth_try_publickey(ssh_session session,
 {
     ssh_string pubkey_s = NULL;
     const char *sig_type_c = NULL;
+    bool allowed;
     int rc;
 
     if (session == NULL) {
@@ -520,11 +521,19 @@ int ssh_userauth_try_publickey(ssh_session session,
                       "Invalid key type (unknown)");
         return SSH_AUTH_DENIED;
     }
-    if (!ssh_key_algorithm_allowed(session, sig_type_c)) {
+    rc = ssh_key_algorithm_allowed(session, sig_type_c);
+    if (!rc) {
         ssh_set_error(session, SSH_REQUEST_DENIED,
                       "The key algorithm '%s' is not allowed to be used by"
                       " PUBLICKEY_ACCEPTED_TYPES configuration option",
                       sig_type_c);
+        return SSH_AUTH_DENIED;
+    }
+    allowed = ssh_key_size_allowed(session, pubkey);
+    if (!allowed) {
+        ssh_set_error(session, SSH_REQUEST_DENIED,
+                      "The '%s' key type of size %d is not allowed by "
+                      "RSA_MIN_SIZE", sig_type_c, ssh_key_size(pubkey));
         return SSH_AUTH_DENIED;
     }
 
@@ -609,6 +618,7 @@ int ssh_userauth_publickey(ssh_session session,
                            const ssh_key privkey)
 {
     ssh_string str = NULL;
+    bool allowed;
     int rc;
     const char *sig_type_c = NULL;
     enum ssh_keytypes_e key_type;
@@ -645,11 +655,19 @@ int ssh_userauth_publickey(ssh_session session,
                       "Invalid key type (unknown)");
         return SSH_AUTH_DENIED;
     }
-    if (!ssh_key_algorithm_allowed(session, sig_type_c)) {
+    rc = ssh_key_algorithm_allowed(session, sig_type_c);
+    if (!rc) {
         ssh_set_error(session, SSH_REQUEST_DENIED,
                       "The key algorithm '%s' is not allowed to be used by"
                       " PUBLICKEY_ACCEPTED_TYPES configuration option",
                       sig_type_c);
+        return SSH_AUTH_DENIED;
+    }
+    allowed = ssh_key_size_allowed(session, privkey);
+    if (!allowed) {
+        ssh_set_error(session, SSH_REQUEST_DENIED,
+                      "The '%s' key type of size %d is not allowed by "
+                      "RSA_MIN_SIZE", sig_type_c, ssh_key_size(privkey));
         return SSH_AUTH_DENIED;
     }
 
@@ -728,6 +746,7 @@ static int ssh_userauth_agent_publickey(ssh_session session,
     ssh_string pubkey_s = NULL;
     ssh_string sig_blob = NULL;
     const char *sig_type_c = NULL;
+    bool allowed;
     int rc;
 
     switch(session->pending_call_state) {
@@ -763,11 +782,20 @@ static int ssh_userauth_agent_publickey(ssh_session session,
         SSH_STRING_FREE(pubkey_s);
         return SSH_AUTH_DENIED;
     }
-    if (!ssh_key_algorithm_allowed(session, sig_type_c)) {
+    rc = ssh_key_algorithm_allowed(session, sig_type_c);
+    if (!rc) {
         ssh_set_error(session, SSH_REQUEST_DENIED,
                       "The key algorithm '%s' is not allowed to be used by"
                       " PUBLICKEY_ACCEPTED_TYPES configuration option",
                       sig_type_c);
+        SSH_STRING_FREE(pubkey_s);
+        return SSH_AUTH_DENIED;
+    }
+    allowed = ssh_key_size_allowed(session, pubkey);
+    if (!allowed) {
+        ssh_set_error(session, SSH_REQUEST_DENIED,
+                      "The '%s' key type of size %d is not allowed by "
+                      "RSA_MIN_SIZE", sig_type_c, ssh_key_size(pubkey));
         SSH_STRING_FREE(pubkey_s);
         return SSH_AUTH_DENIED;
     }
@@ -974,7 +1002,7 @@ struct ssh_auth_auto_state_struct {
 };
 
 /**
- * @brief Get the identity that is currenly being processed by
+ * @brief Get the identity that is currently being processed by
  * ssh_userauth_publickey_auto()
  *
  * This is meant to be used by a callback that happens as part of the
@@ -1873,7 +1901,7 @@ int ssh_userauth_kbdint_getnanswers(ssh_session session) {
 }
 
 /**
- * @brief Get the answer for a question from a message block.
+ * @brief Get the answer to a question from a message block.
  *
  * @param[in]  session  The ssh session to use.
  *

@@ -129,7 +129,7 @@ struct ssh_buffer_struct *ssh_buffer_new(void)
     /*
      * Always preallocate 64 bytes.
      *
-     * -1 for ralloc_buffer magic.
+     * -1 for realloc_buffer magic.
      */
     rc = ssh_buffer_allocate_size(buf, 64 - 1);
     if (rc != 0) {
@@ -715,7 +715,7 @@ uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, size
 /**
  * @internal
  *
- * @brief Get a 8 bits unsigned int out of the buffer and adjusts the read
+ * @brief Get a 8 bits unsigned int out of the buffer and adjust the read
  * pointer.
  *
  * @param[in]  buffer   The buffer to read.
@@ -833,7 +833,7 @@ char* ssh_buffer_get_char_string(struct ssh_buffer_struct* buffer, uint32_t* pho
 /**
  * @internal
  *
- * @brief Get a SSH String out of the buffer and adjusts the read pointer.
+ * @brief Get an SSH String out of the buffer and adjust the read pointer.
  *
  * @param[in]  buffer   The buffer to read.
  *
@@ -983,7 +983,7 @@ static int ssh_buffer_pack_allocate_va(struct ssh_buffer_struct *buffer,
             va_arg(ap, bignum);
             /*
              * Use a fixed size for a bignum
-             * (they should normaly be around 32)
+             * (they should normally be around 32)
              */
             needed_size += 64;
             break;
