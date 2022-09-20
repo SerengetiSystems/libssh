@@ -412,6 +412,7 @@ enum ssh_options_e {
   SSH_OPTIONS_REKEY_DATA,
   SSH_OPTIONS_REKEY_TIME,
   SSH_OPTIONS_RSA_MIN_SIZE,
+  SSH_OPTIONS_IDENTITY_AGENT,
 };
 
 enum {
@@ -485,15 +486,13 @@ LIBSSH_API int ssh_channel_request_x11(ssh_channel channel, int single_connectio
     const char *cookie, int screen_number);
 LIBSSH_API int ssh_channel_request_auth_agent(ssh_channel channel);
 LIBSSH_API int ssh_channel_send_eof(ssh_channel channel);
-LIBSSH_API int ssh_channel_select(ssh_channel *readchans, ssh_channel *writechans, ssh_channel *exceptchans, struct
-        timeval * timeout);
 LIBSSH_API void ssh_channel_set_blocking(ssh_channel channel, int blocking);
 LIBSSH_API void ssh_channel_set_counter(ssh_channel channel,
                                         ssh_counter counter);
-LIBSSH_API int ssh_channel_write(ssh_channel channel, const void *data, size_t len);
+LIBSSH_API int ssh_channel_write(ssh_channel channel, const void *data, uint32_t len);
 LIBSSH_API int ssh_channel_write_stderr(ssh_channel channel,
                                         const void *data,
-                                        size_t len);
+                                        uint32_t len);
 LIBSSH_API uint32_t ssh_channel_window_size(ssh_channel channel);
 LIBSSH_API uint32_t ssh_channel_local_packet_size(ssh_channel channel);
 LIBSSH_API uint32_t ssh_channel_remote_packet_size(ssh_channel channel);
@@ -519,7 +518,12 @@ LIBSSH_API char *ssh_dirname (const char *path);
 LIBSSH_API int ssh_finalize(void);
 
 /* REVERSE PORT FORWARDING */
-LIBSSH_API ssh_channel ssh_channel_accept_forward(ssh_session session,
+LIBSSH_API ssh_channel ssh_channel_open_forward_port(ssh_session session,
+                                                   int timeout_ms,
+                                                   int *destination_port,
+                                                   char **originator,
+                                                   int *originator_port);
+SSH_DEPRECATED LIBSSH_API ssh_channel ssh_channel_accept_forward(ssh_session session,
                                                   int timeout_ms,
                                                   int *destination_port);
 LIBSSH_API int ssh_channel_cancel_forward(ssh_session session,
@@ -562,6 +566,8 @@ SSH_DEPRECATED LIBSSH_API int ssh_write_knownhost(ssh_session session);
 SSH_DEPRECATED LIBSSH_API char *ssh_dump_knownhost(ssh_session session);
 SSH_DEPRECATED LIBSSH_API int ssh_is_server_known(ssh_session session);
 SSH_DEPRECATED LIBSSH_API void ssh_print_hexa(const char *descr, const unsigned char *what, size_t len);
+SSH_DEPRECATED LIBSSH_API int ssh_channel_select(ssh_channel *readchans, ssh_channel *writechans, ssh_channel *exceptchans, struct
+        timeval * timeout);
 
 SSH_DEPRECATED LIBSSH_API int ssh_scp_accept_request(ssh_scp scp);
 SSH_DEPRECATED LIBSSH_API int ssh_scp_close(ssh_scp scp);
@@ -693,6 +699,7 @@ LIBSSH_API int ssh_key_is_private(const ssh_key k);
 LIBSSH_API int ssh_key_cmp(const ssh_key k1,
                            const ssh_key k2,
                            enum ssh_keycmp_e what);
+LIBSSH_API ssh_key ssh_key_dup(const ssh_key key);
 
 LIBSSH_API int ssh_pki_generate(enum ssh_keytypes_e type, int parameter,
         ssh_key *pkey);
@@ -846,6 +853,7 @@ LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, size_t re
 LIBSSH_API uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, size_t len);
 LIBSSH_API void *ssh_buffer_get(ssh_buffer buffer);
 LIBSSH_API uint32_t ssh_buffer_get_len(ssh_buffer buffer);
+LIBSSH_API int ssh_session_set_disconnect_message(ssh_session session, const char *message);
 
 #ifndef LIBSSH_LEGACY_0_4
 #include "libssh/legacy.h"

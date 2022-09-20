@@ -39,10 +39,6 @@ if (CLIENT_TESTING)
     # create shared test library
     set(TORTURE_SHARED_LIBRARY torture_shared)
 
-    if (MINGW)
-        set(USE_ATTRIBUTE_WEAK "-DUSE_ATTRIBUTE_WEAK")
-    endif ()
-
     # Create a list of symbols that should be wrapped for override test
     set(WRAP_SYMBOLS "")
     list(APPEND WRAP_SYMBOLS
@@ -73,7 +69,7 @@ if (CLIENT_TESTING)
                          )
     target_compile_options(${TORTURE_SHARED_LIBRARY} PRIVATE
                            -DSSH_PING_EXECUTABLE="${CMAKE_CURRENT_BINARY_DIR}/ssh_ping"
-                           ${USE_ATTRIBUTE_WEAK}
+                           -DTORTURE_SHARED
     )
 endif ()
 
@@ -173,9 +169,9 @@ if (CLIENT_TESTING OR SERVER_TESTING)
     if (NOT SSHD_EXECUTABLE)
         message(SEND_ERROR "Could not find sshd which is required for client testing")
     endif()
-    find_program(NC_EXECUTABLE
+    find_program(NCAT_EXECUTABLE
                  NAME
-                    nc
+                    ncat
                  PATHS
                     /bin
                     /usr/bin
@@ -249,6 +245,8 @@ if (CLIENT_TESTING OR SERVER_TESTING)
     list(APPEND TORTURE_ENVIRONMENT NSS_WRAPPER_SHADOW=${CMAKE_CURRENT_BINARY_DIR}/etc/shadow)
     list(APPEND TORTURE_ENVIRONMENT NSS_WRAPPER_GROUP=${CMAKE_CURRENT_BINARY_DIR}/etc/group)
     list(APPEND TORTURE_ENVIRONMENT PAM_WRAPPER_SERVICE_DIR=${CMAKE_CURRENT_BINARY_DIR}/etc/pam.d)
+    list(APPEND TORTURE_ENVIRONMENT LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/suppressions/lsan.supp)
+    list(APPEND TORTURE_ENVIRONMENT OPENSSL_ENABLE_SHA1_SIGNATURES=1)
 
     # Give bob some keys
     file(COPY keys/id_rsa DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/home/bob/.ssh/ FILE_PERMISSIONS OWNER_READ OWNER_WRITE)

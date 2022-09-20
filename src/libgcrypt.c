@@ -69,38 +69,6 @@ static int alloc_key(struct ssh_cipher_struct *cipher) {
 void ssh_reseed(void){
 }
 
-int ssh_get_random(void *where, int len, int strong)
-{
-    /* variable not used in gcrypt */
-    (void) strong;
-
-    /* not using GCRY_VERY_STRONG_RANDOM which is a bit overkill */
-    gcry_randomize(where,len,GCRY_STRONG_RANDOM);
-
-    return 1;
-}
-
-SHACTX sha1_init(void) {
-  SHACTX ctx = NULL;
-  gcry_md_open(&ctx, GCRY_MD_SHA1, 0);
-
-  return ctx;
-}
-
-void sha1_update(SHACTX c, const void *data, unsigned long len) {
-  gcry_md_write(c, data, len);
-}
-
-void sha1_final(unsigned char *md, SHACTX c) {
-  gcry_md_final(c);
-  memcpy(md, gcry_md_read(c, 0), SHA_DIGEST_LEN);
-  gcry_md_close(c);
-}
-
-void sha1(const unsigned char *digest, int len, unsigned char *hash) {
-  gcry_md_hash_buffer(GCRY_MD_SHA1, hash, digest, len);
-}
-
 #ifdef HAVE_GCRYPT_ECC
 static int nid_to_md_algo(int nid)
 {
@@ -115,7 +83,7 @@ static int nid_to_md_algo(int nid)
     return GCRY_MD_NONE;
 }
 
-void evp(int nid, unsigned char *digest, int len,
+void evp(int nid, unsigned char *digest, size_t len,
          unsigned char *hash, unsigned int *hlen)
 {
     int algo = nid_to_md_algo(nid);
@@ -140,7 +108,7 @@ EVPCTX evp_init(int nid)
     return ctx;
 }
 
-void evp_update(EVPCTX ctx, const void *data, unsigned long len)
+void evp_update(EVPCTX ctx, const void *data, size_t len)
 {
     gcry_md_write(ctx, data, len);
 }
@@ -154,96 +122,16 @@ void evp_final(EVPCTX ctx, unsigned char *md, unsigned int *mdlen)
 }
 #endif
 
-SHA256CTX sha256_init(void) {
-  SHA256CTX ctx = NULL;
-  gcry_md_open(&ctx, GCRY_MD_SHA256, 0);
-
-  return ctx;
-}
-
-void sha256_update(SHACTX c, const void *data, unsigned long len) {
-  gcry_md_write(c, data, len);
-}
-
-void sha256_final(unsigned char *md, SHACTX c) {
-  gcry_md_final(c);
-  memcpy(md, gcry_md_read(c, 0), SHA256_DIGEST_LEN);
-  gcry_md_close(c);
-}
-
-void sha256(const unsigned char *digest, int len, unsigned char *hash){
-  gcry_md_hash_buffer(GCRY_MD_SHA256, hash, digest, len);
-}
-
-SHA384CTX sha384_init(void) {
-  SHA384CTX ctx = NULL;
-  gcry_md_open(&ctx, GCRY_MD_SHA384, 0);
-
-  return ctx;
-}
-
-void sha384_update(SHACTX c, const void *data, unsigned long len) {
-  gcry_md_write(c, data, len);
-}
-
-void sha384_final(unsigned char *md, SHACTX c) {
-  gcry_md_final(c);
-  memcpy(md, gcry_md_read(c, 0), SHA384_DIGEST_LEN);
-  gcry_md_close(c);
-}
-
-void sha384(const unsigned char *digest, int len, unsigned char *hash) {
-  gcry_md_hash_buffer(GCRY_MD_SHA384, hash, digest, len);
-}
-
-SHA512CTX sha512_init(void) {
-  SHA512CTX ctx = NULL;
-  gcry_md_open(&ctx, GCRY_MD_SHA512, 0);
-
-  return ctx;
-}
-
-void sha512_update(SHACTX c, const void *data, unsigned long len) {
-  gcry_md_write(c, data, len);
-}
-
-void sha512_final(unsigned char *md, SHACTX c) {
-  gcry_md_final(c);
-  memcpy(md, gcry_md_read(c, 0), SHA512_DIGEST_LEN);
-  gcry_md_close(c);
-}
-
-void sha512(const unsigned char *digest, int len, unsigned char *hash) {
-  gcry_md_hash_buffer(GCRY_MD_SHA512, hash, digest, len);
-}
-
-MD5CTX md5_init(void) {
-  MD5CTX c = NULL;
-  gcry_md_open(&c, GCRY_MD_MD5, 0);
-
-  return c;
-}
-
-void md5_update(MD5CTX c, const void *data, unsigned long len) {
-    gcry_md_write(c,data,len);
-}
-
-void md5_final(unsigned char *md, MD5CTX c) {
-  gcry_md_final(c);
-  memcpy(md, gcry_md_read(c, 0), MD5_DIGEST_LEN);
-  gcry_md_close(c);
-}
-
 int ssh_kdf(struct ssh_crypto_struct *crypto,
             unsigned char *key, size_t key_len,
-            int key_type, unsigned char *output,
+            uint8_t key_type, unsigned char *output,
             size_t requested_len)
 {
     return sshkdf_derive_key(crypto, key, key_len,
                              key_type, output, requested_len);
 }
 
-HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
+HMACCTX hmac_init(const void *key, size_t len, enum ssh_hmac_e type) {
   HMACCTX c = NULL;
 
   switch(type) {
@@ -268,14 +156,17 @@ HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type) {
   return c;
 }
 
-void hmac_update(HMACCTX c, const void *data, unsigned long len) {
+int hmac_update(HMACCTX c, const void *data, size_t len) {
   gcry_md_write(c, data, len);
+  return 1;
 }
 
-void hmac_final(HMACCTX c, unsigned char *hashmacbuf, unsigned int *len) {
-  *len = gcry_md_get_algo_dlen(gcry_md_get_algo(c));
+int hmac_final(HMACCTX c, unsigned char *hashmacbuf, size_t *len) {
+  unsigned int tmp = gcry_md_get_algo_dlen(gcry_md_get_algo(c));
+  *len = (size_t)tmp;
   memcpy(hashmacbuf, gcry_md_read(c, 0), *len);
   gcry_md_close(c);
+  return 1;
 }
 
 #ifdef WITH_BLOWFISH_CIPHER

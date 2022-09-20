@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.3.0)
 cmake_policy(SET CMP0048 NEW)
 
-# Specify search path for CMake modules to be loaded by include() 
+# Specify search path for CMake modules to be loaded by include()
 # and find_package()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 
@@ -10,7 +10,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 include(DefineCMakeDefaults)
 include(DefineCompilerFlags)
 
-project(libssh VERSION 0.8.90 LANGUAGES C)
+project(libssh VERSION 0.10.90 LANGUAGES C CXX)
 
 # global needed variable
 set(APPLICATION_NAME ${PROJECT_NAME})
@@ -22,7 +22,7 @@ set(APPLICATION_NAME ${PROJECT_NAME})
 #     Increment AGE. Set REVISION to 0
 #   If the source code was changed, but there were no interface changes:
 #     Increment REVISION.
-set(LIBRARY_VERSION "4.8.1")
+set(LIBRARY_VERSION "4.9.0")
 set(LIBRARY_SOVERSION "4")
 
 # where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
@@ -103,9 +103,9 @@ if (WITH_NACL)
     endif (NOT NACL_FOUND)
 endif (WITH_NACL)
 
-if (BSD OR SOLARIS OR OSX)
+if (BSD OR SOLARIS OR OSX OR CYGWIN)
     find_package(Argp)
-endif (BSD OR SOLARIS OR OSX)
+endif (BSD OR SOLARIS OR OSX OR CYGWIN)
 
 # Disable symbol versioning in non UNIX platforms
 if (UNIX)
@@ -216,6 +216,20 @@ if (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
     endif(UPDATE_ABI)
 endif (WITH_SYMBOL_VERSIONING AND ABIMAP_FOUND)
 
+# Coverage
+if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
+    include(CodeCoverage)
+    setup_target_for_coverage_lcov(
+        NAME "coverage"
+        EXECUTABLE make test
+        DEPENDENCIES ssh tests)
+    set(GCOVR_ADDITIONAL_ARGS --xml-pretty --exclude-unreachable-branches --print-summary)
+    setup_target_for_coverage_gcovr_xml(
+        NAME "coverage_xml"
+        EXECUTABLE make test
+        DEPENDENCIES ssh tests)
+endif (CMAKE_BUILD_TYPE STREQUAL "Coverage")
+
 add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET} VERBATIM)
 
 # Link compile database for clangd
@@ -226,6 +240,7 @@ execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
 message(STATUS "********************************************")
 message(STATUS "********** ${PROJECT_NAME} build options : **********")
 
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "zlib support: ${WITH_ZLIB}")
 message(STATUS "libgcrypt support: ${WITH_GCRYPT}")
 message(STATUS "libmbedTLS support: ${WITH_MBEDTLS}")

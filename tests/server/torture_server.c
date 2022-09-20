@@ -174,6 +174,7 @@ static void torture_server_auth_none(void **state)
     struct test_server_st *tss = *state;
     struct torture_state *s = NULL;
     ssh_session session = NULL;
+    char *banner = NULL;
     int rc;
 
     assert_non_null(tss);
@@ -192,6 +193,11 @@ static void torture_server_auth_none(void **state)
 
     rc = ssh_userauth_none(session, NULL);
     assert_int_equal(rc, SSH_AUTH_DENIED);
+
+    banner = ssh_get_issue_banner(session);
+    assert_string_equal(banner, SSHD_BANNER_MESSAGE);
+    free(banner);
+    banner = NULL;
 
     /* This request should return a SSH_REQUEST_DENIED error */
     if (rc == SSH_ERROR) {
@@ -364,6 +370,66 @@ static void torture_server_unknown_global_request(void **state)
     ssh_channel_close(channel);
 }
 
+static void torture_server_set_disconnect_message(void **state)
+{
+    struct test_server_st *tss = *state;
+    struct torture_state *s = NULL;
+    ssh_session session;
+    int rc;
+    const char *message = "Goodbye";
+
+    assert_non_null(tss);
+
+    s = tss->state;
+    assert_non_null(s);
+
+    session = s->ssh.session;
+    assert_non_null(session);
+
+    rc = ssh_session_set_disconnect_message(session,message);
+    assert_ssh_return_code(session, rc);
+    assert_string_equal(session->disconnect_message,message);
+}
+
+static void torture_null_server_set_disconnect_message(void **state)
+{
+    struct test_server_st *tss = *state;
+    struct torture_state *s = NULL;
+    ssh_session session;
+    int rc;
+
+    assert_non_null(tss);
+
+    s = tss->state;
+    assert_non_null(s);
+
+    session = s->ssh.session;
+    assert_non_null(session);
+
+    rc = ssh_session_set_disconnect_message(NULL,"Goodbye");
+    assert_int_equal(rc, SSH_ERROR);
+}
+
+static void torture_server_set_null_disconnect_message(void **state)
+{
+    struct test_server_st *tss = *state;
+    struct torture_state *s = NULL;
+    ssh_session session;
+    int rc;
+
+    assert_non_null(tss);
+
+    s = tss->state;
+    assert_non_null(s);
+
+    session = s->ssh.session;
+    assert_non_null(session);
+
+    rc = ssh_session_set_disconnect_message(session,NULL);
+    assert_int_equal(rc, SSH_OK);
+    assert_string_equal(session->disconnect_message,"Bye Bye");
+}
+
 int torture_run_tests(void) {
     int rc;
     struct CMUnitTest tests[] = {
@@ -380,6 +446,15 @@ int torture_run_tests(void) {
                                         session_setup,
                                         session_teardown),
         cmocka_unit_test_setup_teardown(torture_server_unknown_global_request,
+                                        session_setup,
+                                        session_teardown),
+        cmocka_unit_test_setup_teardown(torture_server_set_disconnect_message,
+                                        session_setup,
+                                        session_teardown),
+        cmocka_unit_test_setup_teardown(torture_null_server_set_disconnect_message,
+                                        session_setup,
+                                        session_teardown),
+        cmocka_unit_test_setup_teardown(torture_server_set_null_disconnect_message,
                                         session_setup,
                                         session_teardown),
     };

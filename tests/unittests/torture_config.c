@@ -4,6 +4,11 @@
 #define LIBSSH_STATIC
 #endif
 
+#ifndef _WIN32
+#define _POSIX_PTHREAD_SEMANTICS
+#include <pwd.h>
+#endif
+
 #include "torture.h"
 #include "libssh/options.h"
 #include "libssh/session.h"
@@ -1712,6 +1717,27 @@ static void torture_config_make_absolute_int(void **state, bool no_sshdir_fails)
 {
     ssh_session session = *state;
     char *result = NULL;
+#ifndef _WIN32
+    char h[256];
+    char *user;
+    char *home;
+
+    user = getenv("USER");
+    if (user == NULL) {
+        user = getenv("LOGNAME");
+    }
+
+    /* in certain CIs there no such variables */
+    if (!user) {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw){
+            user = pw->pw_name;
+        }
+    }
+
+    home = getenv("HOME");
+    assert_non_null(home);
+#endif
 
     /* Absolute path already -- should not change in any case */
     result = ssh_config_make_absolute(session, "/etc/ssh/ssh_config.d/*.conf", 1);
@@ -1744,6 +1770,30 @@ static void torture_config_make_absolute_int(void **state, bool no_sshdir_fails)
     result = ssh_config_make_absolute(session, "my_config", 0);
     assert_string_equal(result, "/tmp/ssh/my_config");
     free(result);
+
+#ifndef _WIN32
+    /* Tilde expansion works only in user config */
+    result = ssh_config_make_absolute(session, "~/.ssh/config.d/*.conf", 0);
+    snprintf(h, 256 - 1, "%s/.ssh/config.d/*.conf", home);
+    assert_string_equal(result, h);
+    free(result);
+
+    snprintf(h, 256 - 1, "~%s/.ssh/config.d/*.conf", user);
+    result = ssh_config_make_absolute(session, h, 0);
+    snprintf(h, 256 - 1, "%s/.ssh/config.d/*.conf", home);
+    assert_string_equal(result, h);
+    free(result);
+
+    /* in global config its just prefixed without expansion */
+    result = ssh_config_make_absolute(session, "~/.ssh/config.d/*.conf", 1);
+    assert_string_equal(result, "/etc/ssh/~/.ssh/config.d/*.conf");
+    free(result);
+    snprintf(h, 256 - 1, "~%s/.ssh/config.d/*.conf", user);
+    result = ssh_config_make_absolute(session, h, 1);
+    snprintf(h, 256 - 1, "/etc/ssh/~%s/.ssh/config.d/*.conf", user);
+    assert_string_equal(result, h);
+    free(result);
+#endif
 }
 
 static void torture_config_make_absolute(void **state)

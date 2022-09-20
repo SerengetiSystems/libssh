@@ -8,10 +8,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "pki.c"
 #include "torture.h"
 #include "torture_pki.h"
 #include "torture_key.h"
-#include "pki.c"
 
 #define LIBSSH_RSA_TESTKEY "libssh_testkey.id_rsa"
 #define LIBSSH_RSA_TESTKEY_PASSPHRASE "libssh_testkey_passphrase.id_rsa"
@@ -543,8 +543,12 @@ static void torture_pki_rsa_generate_key(void **state)
     int rc;
     ssh_key key = NULL, pubkey = NULL;
     ssh_signature sign = NULL;
-    ssh_session session=ssh_new();
+    ssh_session session = ssh_new();
+    int verbosity = torture_libssh_verbosity();
+
     (void) state;
+
+    ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     if (!ssh_fips_mode()) {
         rc = ssh_pki_generate(SSH_KEYTYPE_RSA, 1024, &key);

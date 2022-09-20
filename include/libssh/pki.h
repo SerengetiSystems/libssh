@@ -33,7 +33,7 @@
 #include <openssl/evp.h>
 #endif
 #include "libssh/crypto.h"
-#ifdef HAVE_OPENSSL_ED25519
+#if defined(HAVE_LIBCRYPTO) && defined(HAVE_OPENSSL_ED25519)
 /* If using OpenSSL implementation, define the signature lenght which would be
  * defined in libssh/ed25519.h otherwise */
 #define ED25519_SIG_LEN 64
@@ -65,16 +65,24 @@ struct ssh_key_struct {
     mbedtls_ecdsa_context *ecdsa;
     void *dsa;
 #elif defined(HAVE_LIBCRYPTO)
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     DSA *dsa;
     RSA *rsa;
-    EVP_PKEY *key; /* Saving the OpenSSL context here to save time while converting*/
+#endif /* OPENSSL_VERSION_NUMBER */
+/* TODO Change to new API when the OpenSSL will support export of uncompressed EC keys
+ * https://github.com/openssl/openssl/pull/16624
+ * Move into the #if above
+ */
 # if defined(HAVE_OPENSSL_ECC)
     EC_KEY *ecdsa;
 # else
     void *ecdsa;
 # endif /* HAVE_OPENSSL_EC_H */
+    /* This holds either ENGINE key for PKCS#11 support or just key in
+     * high-level format required by OpenSSL 3.0 */
+    EVP_PKEY *key;
 #endif /* HAVE_LIBGCRYPT */
-#ifdef HAVE_OPENSSL_ED25519
+#if defined(HAVE_LIBCRYPTO) && defined(HAVE_OPENSSL_ED25519)
     uint8_t *ed25519_pubkey;
     uint8_t *ed25519_privkey;
 #else
@@ -98,7 +106,7 @@ struct ssh_signature_struct {
     ssh_string rsa_sig;
     struct mbedtls_ecdsa_sig ecdsa_sig;
 #endif /* HAVE_LIBGCRYPT */
-#ifndef HAVE_OPENSSL_ED25519
+#if !defined(HAVE_LIBCRYPTO) || !defined(HAVE_OPENSSL_ED25519)
     ed25519_signature *ed25519_sig;
 #endif
     ssh_string raw_sig;
@@ -111,7 +119,6 @@ struct ssh_signature_struct {
 typedef struct ssh_signature_struct *ssh_signature;
 
 /* SSH Key Functions */
-ssh_key ssh_key_dup(const ssh_key key);
 void ssh_key_clean (ssh_key key);
 
 const char *

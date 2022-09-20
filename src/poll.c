@@ -319,21 +319,24 @@ int ssh_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout) {
 /**
  * @brief  Allocate a new poll object, which could be used within a poll context.
  *
- * @param  fd           Socket that will be polled.
- * @param  events       Poll events that will be monitored for the socket. i.e.
- *                      POLLIN, POLLPRI, POLLOUT
- * @param  cb           Function to be called if any of the events are set.
+ * @param[in]  fd           Socket that will be polled.
+ * @param[in]  events       Poll events that will be monitored for the socket.
+ *                          i.e. POLLIN, POLLPRI, POLLOUT
+ * @param[in]  cb           Function to be called if any of the events are set.
  *                      The prototype of cb is:
- *                      int (*ssh_poll_callback)(ssh_poll_handle p, socket_t fd,
- *                                                 int revents, void *userdata);
- * @param  userdata     Userdata to be passed to the callback function. NULL if
- *                      not needed.
+ *                          int (*ssh_poll_callback)(ssh_poll_handle p,
+ *                                                   socket_t fd,
+ *                                                   int revents,
+ *                                                   void *userdata);
+ * @param[in]  userdata     Userdata to be passed to the callback function.
+ *                          NULL if not needed.
  *
  * @return              A new poll object, NULL on error
  */
 
-ssh_poll_handle ssh_poll_new(socket_t fd, short events, ssh_poll_callback cb,
-    void *userdata) {
+ssh_poll_handle
+ssh_poll_new(socket_t fd, short events, ssh_poll_callback cb, void *userdata)
+{
     ssh_poll_handle p;
 
     p = calloc(1, sizeof(struct ssh_poll_handle_struct));
@@ -356,7 +359,8 @@ ssh_poll_handle ssh_poll_new(socket_t fd, short events, ssh_poll_callback cb,
  * @param  p            Pointer to an already allocated poll object.
  */
 
-void ssh_poll_free(ssh_poll_handle p) {
+void ssh_poll_free(ssh_poll_handle p)
+{
 	if(p->ctx != NULL){
 		ssh_poll_ctx_remove(p->ctx,p);
 		p->ctx=NULL;
@@ -372,7 +376,8 @@ void ssh_poll_free(ssh_poll_handle p) {
  *
  * @return              Poll context or NULL if the poll object isn't attached.
  */
-ssh_poll_ctx ssh_poll_get_ctx(ssh_poll_handle p) {
+ssh_poll_ctx ssh_poll_get_ctx(ssh_poll_handle p)
+{
   return p->ctx;
 }
 
@@ -383,7 +388,8 @@ ssh_poll_ctx ssh_poll_get_ctx(ssh_poll_handle p) {
  *
  * @return              Poll events.
  */
-short ssh_poll_get_events(ssh_poll_handle p) {
+short ssh_poll_get_events(ssh_poll_handle p)
+{
   return p->events;
 }
 
@@ -394,7 +400,8 @@ short ssh_poll_get_events(ssh_poll_handle p) {
  * @param  p            Pointer to an already allocated poll object.
  * @param  events       Poll events.
  */
-void ssh_poll_set_events(ssh_poll_handle p, short events) {
+void ssh_poll_set_events(ssh_poll_handle p, short events)
+{
   p->events = events;
   if (p->ctx != NULL && !p->lock) {
     p->ctx->pollfds[p->x.idx].events = events;
@@ -408,7 +415,8 @@ void ssh_poll_set_events(ssh_poll_handle p, short events) {
  * @param  p            Pointer to an already allocated poll object.
  * @param  fd       New file descriptor.
  */
-void ssh_poll_set_fd(ssh_poll_handle p, socket_t fd) {
+void ssh_poll_set_fd(ssh_poll_handle p, socket_t fd)
+{
   if (p->ctx != NULL) {
     p->ctx->pollfds[p->x.idx].fd = fd;
   } else {
@@ -423,7 +431,8 @@ void ssh_poll_set_fd(ssh_poll_handle p, socket_t fd) {
  * @param  p            Pointer to an already allocated poll object.
  * @param  events       Poll events.
  */
-void ssh_poll_add_events(ssh_poll_handle p, short events) {
+void ssh_poll_add_events(ssh_poll_handle p, short events)
+{
   ssh_poll_set_events(p, ssh_poll_get_events(p) | events);
 }
 
@@ -434,7 +443,8 @@ void ssh_poll_add_events(ssh_poll_handle p, short events) {
  * @param  p            Pointer to an already allocated poll object.
  * @param  events       Poll events.
  */
-void ssh_poll_remove_events(ssh_poll_handle p, short events) {
+void ssh_poll_remove_events(ssh_poll_handle p, short events)
+{
   ssh_poll_set_events(p, ssh_poll_get_events(p) & ~events);
 }
 
@@ -446,7 +456,8 @@ void ssh_poll_remove_events(ssh_poll_handle p, short events) {
  * @return              Raw socket.
  */
 
-socket_t ssh_poll_get_fd(ssh_poll_handle p) {
+socket_t ssh_poll_get_fd(ssh_poll_handle p)
+{
   if (p->ctx != NULL) {
     return p->ctx->pollfds[p->x.idx].fd;
   }
@@ -461,7 +472,8 @@ socket_t ssh_poll_get_fd(ssh_poll_handle p) {
  * @param  userdata     Userdata to be passed to the callback function. NULL if
  *                      not needed.
  */
-void ssh_poll_set_callback(ssh_poll_handle p, ssh_poll_callback cb, void *userdata) {
+void ssh_poll_set_callback(ssh_poll_handle p, ssh_poll_callback cb, void *userdata)
+{
   if (cb != NULL) {
     p->cb = cb;
     p->cb_data = userdata;
@@ -479,7 +491,8 @@ void ssh_poll_set_callback(ssh_poll_handle p, ssh_poll_callback cb, void *userda
  *                      for the next 5. Set it to 0 if you want to use the
  *                      library's default value.
  */
-ssh_poll_ctx ssh_poll_ctx_new(size_t chunk_size) {
+ssh_poll_ctx ssh_poll_ctx_new(size_t chunk_size)
+{
     ssh_poll_ctx ctx;
 
     ctx = calloc(1, sizeof(struct ssh_poll_ctx_struct));
@@ -501,7 +514,8 @@ ssh_poll_ctx ssh_poll_ctx_new(size_t chunk_size) {
  *
  * @param  ctx          Pointer to an already allocated poll context.
  */
-void ssh_poll_ctx_free(ssh_poll_ctx ctx) {
+void ssh_poll_ctx_free(ssh_poll_ctx ctx)
+{
   if (ctx->polls_allocated > 0) {
     while (ctx->polls_used > 0){
       ssh_poll_handle p = ctx->pollptrs[0];
@@ -519,7 +533,8 @@ void ssh_poll_ctx_free(ssh_poll_ctx ctx) {
   SAFE_FREE(ctx);
 }
 
-static int ssh_poll_ctx_resize(ssh_poll_ctx ctx, size_t new_size) {
+static int ssh_poll_ctx_resize(ssh_poll_ctx ctx, size_t new_size)
+{
   ssh_poll_handle *pollptrs;
   ssh_pollfd_t *pollfds;
 
@@ -553,7 +568,8 @@ static int ssh_poll_ctx_resize(ssh_poll_ctx ctx, size_t new_size) {
  *
  * @return              0 on success, < 0 on error
  */
-int ssh_poll_ctx_add(ssh_poll_ctx ctx, ssh_poll_handle p) {
+int ssh_poll_ctx_add(ssh_poll_ctx ctx, ssh_poll_handle p)
+{
   socket_t fd;
 
   if (p->ctx != NULL) {
@@ -620,7 +636,8 @@ int ssh_poll_ctx_add_socket (ssh_poll_ctx ctx, ssh_socket s)
  * @param  ctx          Pointer to an already allocated poll context.
  * @param  p            Pointer to an already allocated poll object.
  */
-void ssh_poll_ctx_remove(ssh_poll_ctx ctx, ssh_poll_handle p) {
+void ssh_poll_ctx_remove(ssh_poll_ctx ctx, ssh_poll_handle p)
+{
   size_t i;
 
   i = p->x.idx;
@@ -738,7 +755,8 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
  * @param session SSH session
  * @returns the default ssh_poll_ctx
  */
-ssh_poll_ctx ssh_poll_get_default_ctx(ssh_session session){
+ssh_poll_ctx ssh_poll_get_default_ctx(ssh_session session)
+{
 	if(session->default_poll_ctx != NULL)
 		return session->default_poll_ctx;
 	/* 2 is enough for the default one */
@@ -771,7 +789,8 @@ struct ssh_event_struct {
  *
  * @return  The ssh_event object on success, NULL on failure.
  */
-ssh_event ssh_event_new(void) {
+ssh_event ssh_event_new(void)
+{
     ssh_event event;
 
     event = malloc(sizeof(struct ssh_event_struct));
@@ -798,8 +817,10 @@ ssh_event ssh_event_new(void) {
     return event;
 }
 
-static int ssh_event_fd_wrapper_callback(ssh_poll_handle p, socket_t fd, int revents,
-                                                            void *userdata) {
+static int
+ssh_event_fd_wrapper_callback(ssh_poll_handle p, socket_t fd, int revents,
+                              void *userdata)
+{
     struct ssh_event_fd_wrapper *pw = (struct ssh_event_fd_wrapper *)userdata;
 
     (void)p;
@@ -826,8 +847,10 @@ static int ssh_event_fd_wrapper_callback(ssh_poll_handle p, socket_t fd, int rev
  * @returns SSH_OK      on success
  *          SSH_ERROR   on failure
  */
-int ssh_event_add_fd(ssh_event event, socket_t fd, short events,
-                                    ssh_event_callback cb, void *userdata) {
+int
+ssh_event_add_fd(ssh_event event, socket_t fd, short events,
+                 ssh_event_callback cb, void *userdata)
+{
     ssh_poll_handle p;
     struct ssh_event_fd_wrapper *pw;
 
@@ -895,7 +918,8 @@ void ssh_event_remove_poll(ssh_event event, ssh_poll_handle p)
  * @returns SSH_OK      on success
  *          SSH_ERROR   on failure
  */
-int ssh_event_add_session(ssh_event event, ssh_session session) {
+int ssh_event_add_session(ssh_event event, ssh_session session)
+{
     ssh_poll_handle p;
 #ifdef WITH_SERVER
     struct ssh_iterator *iterator;
@@ -947,16 +971,19 @@ int ssh_event_add_session(ssh_event event, ssh_session session) {
  *
  * @return SSH_ERROR in case of error
  */
-int ssh_event_add_connector(ssh_event event, ssh_connector connector){
+int ssh_event_add_connector(ssh_event event, ssh_connector connector)
+{
     return ssh_connector_set_event(connector, event);
 }
 
 /**
- * @brief Poll all the sockets and sessions associated through an event object.i
+ * @brief Poll all the sockets and sessions associated through an event object.
  *
  * If any of the events are set after the poll, the call back functions of the
  * sessions or sockets will be called.
  * This function should be called once within the programs main loop.
+ * In case of failure, the errno should be consulted to find more information
+ * about the failure set by underlying poll imlpementation.
  *
  * @param  event        The ssh_event object to poll.
  *
@@ -965,10 +992,12 @@ int ssh_event_add_connector(ssh_event event, ssh_connector connector){
  *                      means an infinite timeout. This parameter is passed to
  *                      the poll() function.
  * @returns SSH_OK      on success.
- *          SSH_ERROR   Error happened during the poll.
+ *          SSH_ERROR   Error happened during the poll. Check errno to get more
+ *                      details about why it failed.
  *          SSH_AGAIN   Timeout occured
  */
-int ssh_event_dopoll(ssh_event event, int timeout) {
+int ssh_event_dopoll(ssh_event event, int timeout)
+{
     int rc;
 
     if(event == NULL || event->ctx == NULL) {
@@ -987,7 +1016,8 @@ int ssh_event_dopoll(ssh_event event, int timeout) {
  * @returns SSH_OK      on success
  *          SSH_ERROR   on failure
  */
-int ssh_event_remove_fd(ssh_event event, socket_t fd) {
+int ssh_event_remove_fd(ssh_event event, socket_t fd)
+{
     register size_t i, used;
     int rc = SSH_ERROR;
 
@@ -1033,7 +1063,8 @@ int ssh_event_remove_fd(ssh_event event, socket_t fd) {
  * @returns SSH_OK      on success
  *          SSH_ERROR   on failure
  */
-int ssh_event_remove_session(ssh_event event, ssh_session session) {
+int ssh_event_remove_session(ssh_event event, ssh_session session)
+{
     ssh_poll_handle p;
     register size_t i, used;
     int rc = SSH_ERROR;
@@ -1087,7 +1118,8 @@ int ssh_event_remove_session(ssh_event event, ssh_session session) {
  * @return SSH_OK on success
  * @return SSH_ERROR on failure
  */
-int ssh_event_remove_connector(ssh_event event, ssh_connector connector){
+int ssh_event_remove_connector(ssh_event event, ssh_connector connector)
+{
     (void)event;
     return ssh_connector_remove_event(connector);
 }

@@ -46,9 +46,9 @@
  */
 struct ssh_buffer_struct {
     bool secure;
-    size_t used;
-    size_t allocated;
-    size_t pos;
+    uint32_t used;
+    uint32_t allocated;
+    uint32_t pos;
     uint8_t *data;
 };
 
@@ -83,21 +83,21 @@ static void buffer_verify(ssh_buffer buf)
 
     if (buf->used > buf->allocated) {
         fprintf(stderr,
-                "BUFFER ERROR: allocated %" PRIuS ", used %" PRIuS "\n",
+                "BUFFER ERROR: allocated %u, used %u\n",
                 buf->allocated,
                 buf->used);
         do_abort = true;
     }
     if (buf->pos > buf->used) {
         fprintf(stderr,
-                "BUFFER ERROR: position %" PRIuS ", used %" PRIuS "\n",
+                "BUFFER ERROR: position %u, used %u\n",
                 buf->pos,
                 buf->used);
         do_abort = true;
     }
     if (buf->pos > buf->allocated) {
         fprintf(stderr,
-                "BUFFER ERROR: position %" PRIuS ", allocated %" PRIuS "\n",
+                "BUFFER ERROR: position %u, allocated %u\n",
                 buf->pos,
                 buf->allocated);
         do_abort = true;
@@ -178,9 +178,9 @@ void ssh_buffer_set_secure(ssh_buffer buffer)
     buffer->secure = true;
 }
 
-static int realloc_buffer(struct ssh_buffer_struct *buffer, size_t needed)
+static int realloc_buffer(struct ssh_buffer_struct *buffer, uint32_t needed)
 {
-    size_t smallest = 1;
+    uint32_t smallest = 1;
     uint8_t *new = NULL;
 
     buffer_verify(buffer);
@@ -724,7 +724,7 @@ uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, size
  *
  * @returns             0 if there is not enough data in buffer, 1 otherwise.
  */
-int ssh_buffer_get_u8(struct ssh_buffer_struct *buffer, uint8_t *data){
+uint32_t ssh_buffer_get_u8(struct ssh_buffer_struct *buffer, uint8_t *data){
     return ssh_buffer_get_data(buffer,data,sizeof(uint8_t));
 }
 
@@ -739,7 +739,7 @@ int ssh_buffer_get_u8(struct ssh_buffer_struct *buffer, uint8_t *data){
  *
  * @returns             0 if there is not enough data in buffer, 4 otherwise.
  */
-int ssh_buffer_get_u32(struct ssh_buffer_struct *buffer, uint32_t *data){
+uint32_t ssh_buffer_get_u32(struct ssh_buffer_struct *buffer, uint32_t *data){
     return ssh_buffer_get_data(buffer,data,sizeof(uint32_t));
 }
 /**
@@ -754,7 +754,7 @@ int ssh_buffer_get_u32(struct ssh_buffer_struct *buffer, uint32_t *data){
  *
  * @returns             0 if there is not enough data in buffer, 8 otherwise.
  */
-int ssh_buffer_get_u64(struct ssh_buffer_struct *buffer, uint64_t *data){
+uint32_t ssh_buffer_get_u64(struct ssh_buffer_struct *buffer, uint64_t *data){
     return ssh_buffer_get_data(buffer,data,sizeof(uint64_t));
 }
 
@@ -1015,7 +1015,7 @@ static int ssh_buffer_pack_allocate_va(struct ssh_buffer_struct *buffer,
         }
     }
 
-    rc = ssh_buffer_allocate_size(buffer, needed_size);
+    rc = ssh_buffer_allocate_size(buffer, (uint32_t)needed_size);
     if (rc != 0) {
         return SSH_ERROR;
     }
@@ -1222,7 +1222,8 @@ int ssh_buffer_unpack_va(struct ssh_buffer_struct *buffer,
         bignum *bignum;
         void **data;
     } o;
-    size_t len, rlen, max_len;
+    size_t len;
+    uint32_t rlen, max_len;
     ssh_string tmp_string = NULL;
     va_list ap_copy;
     size_t count;

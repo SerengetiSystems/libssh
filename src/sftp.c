@@ -472,11 +472,11 @@ static uint32_t sftp_packet_id(ssh_buffer payload)
   return ntohl(network);
 }
 
-ssize_t sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
+int sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
 {
     uint8_t header[5] = {0};
     uint32_t payload_size;
-    ssize_t size;
+    int size;
     int rc;
 
     /* Add size of type */
@@ -505,7 +505,8 @@ ssize_t sftp_packet_write(sftp_session sftp, uint8_t type, ssh_buffer payload)
       sftp_message_type(type));
 
     if ((uint32_t)size != ssh_buffer_get_len(payload)) {
-        SSH_LOG_COMMON(sftp->session, SSH_LOG_INFO, "Had to write %" PRIu32 " bytes, wrote only %" PRIuS,
+        SSH_LOG_COMMON(sftp->session, SSH_LOG_INFO,
+                "Had to write %d bytes, wrote only %d",
                 ssh_buffer_get_len(payload),
                 size);
     }
@@ -2237,8 +2238,8 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
     sftp_set_error(sftp, SSH_FX_FAILURE);
     return -1;
   }
-  packetlen=ssh_buffer_get_len(buffer);
   len = sftp_packet_write(file->sftp, SSH_FXP_WRITE, buffer);
+  packetlen=ssh_buffer_get_len(buffer);
   SSH_BUFFER_FREE(buffer);
   if (len < 0) {
     return -1;

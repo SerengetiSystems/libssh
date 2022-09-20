@@ -66,7 +66,8 @@
  * @returns SSH_AGAIN on nonblocking mode, if calling that function
  * again is necessary
  */
-static int ssh_userauth_request_service(ssh_session session) {
+static int ssh_userauth_request_service(ssh_session session)
+{
     int rc;
 
     rc = ssh_service_request(session, "ssh-userauth");
@@ -78,7 +79,8 @@ static int ssh_userauth_request_service(ssh_session session) {
     return rc;
 }
 
-static int ssh_auth_response_termination(void *user) {
+static int ssh_auth_response_termination(void *user)
+{
     ssh_session session = (ssh_session)user;
     switch (session->auth.state) {
         case SSH_AUTH_STATE_NONE:
@@ -139,7 +141,8 @@ static const char *ssh_auth_get_current_method(ssh_session session)
  *          SSH_AUTH_AGAIN   In nonblocking mode, call has to be made again
  *          SSH_AUTH_ERROR   Error during the process.
  */
-static int ssh_userauth_get_response(ssh_session session) {
+static int ssh_userauth_get_response(ssh_session session)
+{
     int rc = SSH_AUTH_ERROR;
 
     rc = ssh_handle_packets_termination(session, SSH_TIMEOUT_USER,
@@ -399,10 +402,11 @@ int ssh_userauth_list(ssh_session session, const char *username)
  * authentication. The username should only be set with ssh_options_set() only
  * before you connect to the server.
  */
-int ssh_userauth_none(ssh_session session, const char *username) {
+int ssh_userauth_none(ssh_session session, const char *username)
+{
     int rc;
 
-    switch(session->pending_call_state) {
+    switch (session->pending_call_state) {
         case SSH_PENDING_CALL_NONE:
             break;
         case SSH_PENDING_CALL_AUTH_NONE:
@@ -511,7 +515,7 @@ int ssh_userauth_try_publickey(ssh_session session,
                           SSH_FATAL,
                           "Wrong state (%d) during pending SSH call",
                           session->pending_call_state);
-            return SSH_ERROR;
+            return SSH_AUTH_ERROR;
     }
 
     /* Check if the given public key algorithm is allowed */
@@ -738,7 +742,6 @@ fail:
     return SSH_AUTH_ERROR;
 }
 
-#ifndef _WIN32
 static int ssh_userauth_agent_publickey(ssh_session session,
                                         const char *username,
                                         ssh_key pubkey)
@@ -863,7 +866,8 @@ struct ssh_agent_state_struct {
 };
 
 /* Internal function */
-void ssh_agent_state_free(void *data) {
+void ssh_agent_state_free(void *data)
+{
     struct ssh_agent_state_struct *state = data;
 
     if (state) {
@@ -896,7 +900,8 @@ void ssh_agent_state_free(void *data) {
  * before you connect to the server.
  */
 int ssh_userauth_agent(ssh_session session,
-                       const char *username) {
+                       const char *username)
+{
     int rc = SSH_AUTH_ERROR;
     struct ssh_agent_state_struct *state;
 
@@ -985,7 +990,6 @@ int ssh_userauth_agent(ssh_session session,
     session->agent_state = NULL;
     return rc;
 }
-#endif
 
 enum ssh_auth_auto_state_e {
     SSH_AUTH_AUTO_STATE_NONE = 0,
@@ -1111,7 +1115,6 @@ int ssh_userauth_publickey_auto(ssh_session session,
     }
     state = session->auth.auto_state;
     if (state->state == SSH_AUTH_AUTO_STATE_NONE) {
-#ifndef _WIN32
         /* Try authentication with ssh-agent first */
         rc = ssh_userauth_agent(session, username);
         if (rc == SSH_AUTH_SUCCESS ||
@@ -1119,7 +1122,6 @@ int ssh_userauth_publickey_auto(ssh_session session,
             rc == SSH_AUTH_AGAIN ) {
             return rc;
         }
-#endif
         state->state = SSH_AUTH_AUTO_STATE_PUBKEY;
     }
     if (state->it == NULL) {
@@ -1326,10 +1328,11 @@ int ssh_userauth_publickey_auto(ssh_session session,
  */
 int ssh_userauth_password(ssh_session session,
                           const char *username,
-                          const char *password) {
+                          const char *password)
+{
     int rc;
 
-    switch(session->pending_call_state) {
+    switch (session->pending_call_state) {
         case SSH_PENDING_CALL_NONE:
             break;
         case SSH_PENDING_CALL_AUTH_PASSWORD:
@@ -1387,7 +1390,6 @@ fail:
     return SSH_AUTH_ERROR;
 }
 
-#ifndef _WIN32
 /* LEGACY */
 int ssh_userauth_agent_pubkey(ssh_session session,
                               const char *username,
@@ -1404,20 +1406,28 @@ int ssh_userauth_agent_pubkey(ssh_session session,
     key->type = publickey->type;
     key->type_c = ssh_key_type_to_char(key->type);
     key->flags = SSH_KEY_FLAG_PUBLIC;
+#if !defined(HAVE_LIBCRYPTO) || OPENSSL_VERSION_NUMBER < 0x30000000L
     key->dsa = publickey->dsa_pub;
     key->rsa = publickey->rsa_pub;
+#else
+    key->key = publickey->key_pub;
+#endif /* OPENSSL_VERSION_NUMBER */
 
     rc = ssh_userauth_agent_publickey(session, username, key);
 
+#if !defined(HAVE_LIBCRYPTO) || OPENSSL_VERSION_NUMBER < 0x30000000L
     key->dsa = NULL;
     key->rsa = NULL;
+#else
+    key->key = NULL;
+#endif /* OPENSSL_VERSION_NUMBER */
     ssh_key_free(key);
 
     return rc;
 }
-#endif /* _WIN32 */
 
-ssh_kbdint ssh_kbdint_new(void) {
+ssh_kbdint ssh_kbdint_new(void)
+{
     ssh_kbdint kbd;
 
     kbd = calloc(1, sizeof(struct ssh_kbdint_struct));
@@ -1429,7 +1439,8 @@ ssh_kbdint ssh_kbdint_new(void) {
 }
 
 
-void ssh_kbdint_free(ssh_kbdint kbd) {
+void ssh_kbdint_free(ssh_kbdint kbd)
+{
     size_t i, n;
 
     if (kbd == NULL) {
@@ -1465,7 +1476,8 @@ void ssh_kbdint_free(ssh_kbdint kbd) {
     SAFE_FREE(kbd);
 }
 
-void ssh_kbdint_clean(ssh_kbdint kbd) {
+void ssh_kbdint_clean(ssh_kbdint kbd)
+{
     size_t i, n;
 
     if (kbd == NULL) {
@@ -1743,7 +1755,8 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_request) {
  * @see ssh_userauth_kbdint_setanswer()
  */
 int ssh_userauth_kbdint(ssh_session session, const char *user,
-    const char *submethods) {
+                        const char *submethods)
+{
     int rc = SSH_AUTH_ERROR;
 
     if (session == NULL) {
@@ -1785,7 +1798,8 @@ int ssh_userauth_kbdint(ssh_session session, const char *user,
  *
  * @returns             The number of prompts.
  */
-int ssh_userauth_kbdint_getnprompts(ssh_session session) {
+int ssh_userauth_kbdint_getnprompts(ssh_session session)
+{
     if (session == NULL) {
         return SSH_ERROR;
     }
@@ -1807,7 +1821,8 @@ int ssh_userauth_kbdint_getnprompts(ssh_session session) {
  *
  * @returns             The name of the message block. Do not free it.
  */
-const char *ssh_userauth_kbdint_getname(ssh_session session) {
+const char *ssh_userauth_kbdint_getname(ssh_session session)
+{
     if (session == NULL) {
         return NULL;
     }
@@ -1830,7 +1845,8 @@ const char *ssh_userauth_kbdint_getname(ssh_session session) {
  * @returns             The instruction of the message block.
  */
 
-const char *ssh_userauth_kbdint_getinstruction(ssh_session session) {
+const char *ssh_userauth_kbdint_getinstruction(ssh_session session)
+{
     if (session == NULL)
         return NULL;
     if (session->kbdint == NULL) {
@@ -1865,8 +1881,9 @@ const char *ssh_userauth_kbdint_getinstruction(ssh_session session) {
  *   if (echo) ...
  * @endcode
  */
-const char *ssh_userauth_kbdint_getprompt(ssh_session session, unsigned int i,
-    char *echo) {
+const char *
+ssh_userauth_kbdint_getprompt(ssh_session session, unsigned int i, char *echo)
+{
     if (session == NULL)
         return NULL;
     if (session->kbdint == NULL) {
@@ -1893,7 +1910,8 @@ const char *ssh_userauth_kbdint_getprompt(ssh_session session, unsigned int i,
  *
  * @returns             The number of answers.
  */
-int ssh_userauth_kbdint_getnanswers(ssh_session session) {
+int ssh_userauth_kbdint_getnanswers(ssh_session session)
+{
     if (session == NULL || session->kbdint == NULL) {
         return SSH_ERROR;
     }
@@ -1909,7 +1927,8 @@ int ssh_userauth_kbdint_getnanswers(ssh_session session) {
  *
  * @return              0 on success, < 0 on error.
  */
-const char *ssh_userauth_kbdint_getanswer(ssh_session session, unsigned int i) {
+const char *ssh_userauth_kbdint_getanswer(ssh_session session, unsigned int i)
+{
     if (session == NULL || session->kbdint == NULL
             || session->kbdint->answers == NULL) {
         return NULL;
@@ -1940,8 +1959,10 @@ const char *ssh_userauth_kbdint_getanswer(ssh_session session, unsigned int i) {
  *
  * @return              0 on success, < 0 on error.
  */
-int ssh_userauth_kbdint_setanswer(ssh_session session, unsigned int i,
-    const char *answer) {
+int
+ssh_userauth_kbdint_setanswer(ssh_session session, unsigned int i,
+                              const char *answer)
+{
     if (session == NULL) {
         return -1;
     }
@@ -1987,7 +2008,8 @@ int ssh_userauth_kbdint_setanswer(ssh_session session, unsigned int i,
  *          SSH_AUTH_AGAIN:   In nonblocking mode, you've got to call this again
  *                            later.
  */
-int ssh_userauth_gssapi(ssh_session session) {
+int ssh_userauth_gssapi(ssh_session session)
+{
     int rc = SSH_AUTH_DENIED;
 #ifdef WITH_GSSAPI
     switch(session->pending_call_state) {

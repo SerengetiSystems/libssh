@@ -6,10 +6,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "pki.c"
 #include "torture.h"
 #include "torture_pki.h"
 #include "torture_key.h"
-#include "pki.c"
 
 #define LIBSSH_ECDSA_TESTKEY "libssh_testkey.id_"
 #define LIBSSH_ECDSA_TESTKEY_PEM "libssh_testkey_pem.id_"
@@ -93,6 +93,7 @@ static int setup_directory_structure(void **state)
 
     rc = torture_change_dir(temp_dir);
     assert_int_equal(rc, 0);
+    SAFE_FREE(temp_dir);
 
     test_state->temp_dir = torture_get_current_working_dir();
     assert_non_null(test_state->temp_dir);
@@ -188,6 +189,7 @@ static void torture_pki_ecdsa_publickey_from_privatekey_uri(void **state, const 
     assert_return_code(rc, errno);
     assert_true(rc == SSH_OK);
     assert_non_null(pblob);
+    ssh_string_free(pblob);
 
     rc = ssh_pki_export_privkey_to_pubkey(privkey, &pubkey);
     assert_return_code(rc, errno);
@@ -227,6 +229,21 @@ static void torture_pki_ecdsa_publickey_from_privatekey_uri(void **state, const 
     SSH_KEY_FREE(pubkey);
 }
 
+static void torture_pki_ecdsa_publickey_from_privatekey_uri_256(void **state)
+{
+    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_256, "ecdsa256");
+}
+
+static void torture_pki_ecdsa_publickey_from_privatekey_uri_384(void **state)
+{
+    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_384, "ecdsa384");
+}
+
+static void torture_pki_ecdsa_publickey_from_privatekey_uri_521(void **state)
+{
+    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_521, "ecdsa521");
+}
+
 static void import_pubkey_without_loading_public_uri(void **state, const char *uri, const char *type)
 {
     int rc;
@@ -246,6 +263,7 @@ static void import_pubkey_without_loading_public_uri(void **state, const char *u
     rc = ssh_pki_export_pubkey_blob(privkey, &pblob);
     assert_int_not_equal(rc, 0);
     assert_null(pblob);
+    ssh_string_free(pblob);
 
     rc = ssh_pki_export_privkey_to_pubkey(privkey, &pubkey);
     assert_int_not_equal(rc, 0);
@@ -253,21 +271,6 @@ static void import_pubkey_without_loading_public_uri(void **state, const char *u
 
     SSH_KEY_FREE(privkey);
     SSH_KEY_FREE(pubkey);
-}
-
-static void torture_pki_ecdsa_publickey_from_privatekey_uri_256(void **state)
-{
-    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_256, "ecdsa256");
-}
-
-static void torture_pki_ecdsa_publickey_from_privatekey_uri_384(void **state)
-{
-    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_384, "ecdsa384");
-}
-
-static void torture_pki_ecdsa_publickey_from_privatekey_uri_521(void **state)
-{
-    torture_pki_ecdsa_publickey_from_privatekey_uri(state, PRIV_URI_FMT_521, "ecdsa521");
 }
 
 static void torture_pki_ecdsa_import_pubkey_without_loading_public_uri_256(void **state)
@@ -320,7 +323,7 @@ static void torture_ecdsa_sign_verify_uri(void **state, const char *uri, enum ss
     type_char = ssh_key_type_to_char(type);
     etype_char = ssh_pki_key_ecdsa_name(privkey);
 
-    switch(dig_type) {
+    switch (dig_type) {
     case SSH_DIGEST_SHA256:
         assert_true(type == SSH_KEYTYPE_ECDSA_P256);
         assert_string_equal(type_char, "ecdsa-sha2-nistp256");
@@ -340,6 +343,7 @@ static void torture_ecdsa_sign_verify_uri(void **state, const char *uri, enum ss
         printf("Invalid hash type: %d\n", dig_type);
     }
 
+    ssh_free(session);
     ssh_signature_free(sign);
     SSH_KEY_FREE(privkey);
     SSH_KEY_FREE(pubkey);
@@ -540,15 +544,16 @@ int torture_run_tests(void) {
         cmocka_unit_test(torture_pki_ecdsa_import_pubkey_without_loading_public_uri_384),
         cmocka_unit_test(torture_pki_ecdsa_import_pubkey_without_loading_public_uri_521),
     };
-
     ssh_session session = ssh_new();
     int verbosity = SSH_LOG_FUNCTIONS;
-    ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
+
     ssh_init();
+    ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
     torture_filter_tests(tests);
     rc = cmocka_run_group_tests(tests, setup_directory_structure, teardown_directory_structure);
 
+    ssh_free(session);
     ssh_finalize();
 
     return rc;

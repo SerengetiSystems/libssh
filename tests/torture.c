@@ -1034,11 +1034,13 @@ void torture_setup_libssh_server(void **state, const char *server_path)
     }
 
     /* Write the environment setting */
+    /* OPENSSL variable is needed to enable SHA1 */
     printed = snprintf(env, sizeof(env),
                        "SOCKET_WRAPPER_DIR=%s "
                        "SOCKET_WRAPPER_DEFAULT_IFACE=10 "
                        "LD_PRELOAD=%s "
-                       "%s",
+                       "%s "
+                       "OPENSSL_ENABLE_SHA1_SIGNATURES=1",
                        s->socket_dir, ld_preload, force_fips);
     if (printed < 0) {
         fail_msg("Failed to print env!");
@@ -1628,12 +1630,14 @@ void torture_reset_config(ssh_session session)
     memset(session->opts.options_seen, 0, sizeof(session->opts.options_seen));
 }
 
-#if ((defined _WIN32) || (defined _WIN64)) && (defined USE_ATTRIBUTE_WEAK)
+#if defined(HAVE_WEAK_ATTRIBUTE) && defined(TORTURE_SHARED)
 __attribute__((weak)) int torture_run_tests(void)
 {
-    fail();
+    fail_msg("torture_run_tests from shared library called");
+
+    return -1;
 }
-#endif
+#endif /* defined(HAVE_WEAK_ATTRIBUTE) && defined(TORTURE_SHARED) */
 
 int main(int argc, char **argv) {
     struct argument_s arguments;

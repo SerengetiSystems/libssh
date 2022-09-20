@@ -58,8 +58,9 @@ static int hash_hostname(const char *name,
                          unsigned char *salt,
                          unsigned int salt_size,
                          unsigned char **hash,
-                         unsigned int *hash_size)
+                         size_t *hash_size)
 {
+    int rc;
     HMACCTX mac_ctx;
 
     mac_ctx = hmac_init(salt, salt_size, SSH_HMAC_SHA1);
@@ -67,8 +68,13 @@ static int hash_hostname(const char *name,
         return SSH_ERROR;
     }
 
-    hmac_update(mac_ctx, name, strlen(name));
-    hmac_final(mac_ctx, *hash, hash_size);
+    rc = hmac_update(mac_ctx, name, strlen(name));
+    if (rc != 1)
+        return SSH_ERROR;
+
+    rc = hmac_final(mac_ctx, *hash, hash_size);
+    if (rc != 1)
+        return SSH_ERROR;
 
     return SSH_OK;
 }
@@ -81,7 +87,7 @@ static int match_hashed_hostname(const char *host, const char *hashed_host)
     ssh_buffer hash = NULL;
     unsigned char hashed_buf[256] = {0};
     unsigned char *hashed_buf_ptr = hashed_buf;
-    unsigned int hashed_buf_size = sizeof(hashed_buf);
+    size_t hashed_buf_size = sizeof(hashed_buf);
     int cmp;
     int rc;
     int match = 0;
@@ -228,8 +234,9 @@ static int ssh_known_hosts_read_entries(const char *match,
 
     fp = fopen(filename, "r");
     if (fp == NULL) {
+        char err_msg[SSH_ERRNO_MSG_MAX] = {0};
         SSH_LOG(SSH_LOG_WARN, "Failed to open the known_hosts file '%s': %s",
-                filename, strerror(errno));
+                filename, ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
         /* The missing file is not an error here */
         return SSH_OK;
     }
@@ -476,6 +483,9 @@ static const char *ssh_known_host_sigs_from_hostkey_type(enum ssh_keytypes_e typ
 #ifdef HAVE_DSA
     case SSH_KEYTYPE_DSS:
         return "ssh-dss";
+#else
+        SSH_LOG(SSH_LOG_WARN, "DSS keys are not supported by this build");
+        break;
 #endif
 #ifdef HAVE_ECDH
     case SSH_KEYTYPE_ECDSA_P256:
@@ -484,13 +494,22 @@ static const char *ssh_known_host_sigs_from_hostkey_type(enum ssh_keytypes_e typ
         return "ecdsa-sha2-nistp384";
     case SSH_KEYTYPE_ECDSA_P521:
         return "ecdsa-sha2-nistp521";
+#else
+    case SSH_KEYTYPE_ECDSA_P256:
+    case SSH_KEYTYPE_ECDSA_P384:
+    case SSH_KEYTYPE_ECDSA_P521:
+        SSH_LOG(SSH_LOG_WARN, "ECDSA keys are not supported by this build");
+        break;
 #endif
     case SSH_KEYTYPE_UNKNOWN:
     default:
-        SSH_LOG(SSH_LOG_WARN, "The given type %d is not a base private key type "
-                "or is unsupported", type);
-        return NULL;
+        SSH_LOG(SSH_LOG_WARN,
+                "The given type %d is not a base private key type "
+                "or is unsupported",
+                type);
     }
+
+    return NULL;
 }
 
 /**
@@ -572,6 +591,8 @@ char *ssh_known_hosts_get_algorithms_names(ssh_session session)
         entry = ssh_iterator_value(struct ssh_knownhosts_entry *, it);
         algo = ssh_known_host_sigs_from_hostkey_type(entry->publickey->type);
         if (algo == NULL) {
+            ssh_knownhosts_entry_free(entry);
+            ssh_list_remove(entry_list, it);
             continue;
         }
 
@@ -980,6 +1001,7 @@ int ssh_session_update_known_hosts(ssh_session session)
     size_t nwritten;
     size_t len;
     int rc;
+    char err_msg[SSH_ERRNO_MSG_MAX] = {0};
 
     if (session->opts.knownhosts == NULL) {
         rc = ssh_options_apply(session);
@@ -995,7 +1017,8 @@ int ssh_session_update_known_hosts(ssh_session session)
         if (errno == ENOENT) {
             dir = ssh_dirname(session->opts.knownhosts);
             if (dir == NULL) {
-                ssh_set_error(session, SSH_FATAL, "%s", strerror(errno));
+                ssh_set_error(session, SSH_FATAL, "%s",
+                              ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
                 return SSH_ERROR;
             }
 
@@ -1003,7 +1026,8 @@ int ssh_session_update_known_hosts(ssh_session session)
             if (rc < 0) {
                 ssh_set_error(session, SSH_FATAL,
                               "Cannot create %s directory: %s",
-                              dir, strerror(errno));
+                              dir,
+                              ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
                 SAFE_FREE(dir);
                 return SSH_ERROR;
             }
@@ -1015,7 +1039,8 @@ int ssh_session_update_known_hosts(ssh_session session)
                 ssh_set_error(session, SSH_FATAL,
                               "Couldn't open known_hosts file %s"
                               " for appending: %s",
-                              session->opts.knownhosts, strerror(errno));
+                              session->opts.knownhosts,
+                              ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
                 return SSH_ERROR;
             }
         } else {
@@ -1038,7 +1063,8 @@ int ssh_session_update_known_hosts(ssh_session session)
     if (nwritten != len || ferror(fp)) {
         ssh_set_error(session, SSH_FATAL,
                       "Couldn't append to known_hosts file %s: %s",
-                      session->opts.knownhosts, strerror(errno));
+                      session->opts.knownhosts,
+                      ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
         fclose(fp);
         return SSH_ERROR;
     }

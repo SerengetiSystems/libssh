@@ -26,13 +26,14 @@
 #include <string.h>
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
-#endif
+#endif /* HAVE_SYS_TIME_H */
 
 #include "libssh/priv.h"
 #include "libssh/session.h"
 #include "libssh/crypto.h"
 #include "libssh/wrapper.h"
 #include "libssh/libcrypto.h"
+#include "libssh/pki.h"
 #if defined(HAVE_OPENSSL_EVP_CHACHA20) && defined(HAVE_OPENSSL_EVP_POLY1305)
 #include "libssh/bytearray.h"
 #include "libssh/chacha20-poly1305-common.h"
@@ -40,12 +41,17 @@
 
 #ifdef HAVE_LIBCRYPTO
 
+#include <openssl/opensslv.h>
 #include <openssl/sha.h>
 #include <openssl/md5.h>
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 #include <openssl/dsa.h>
 #include <openssl/rsa.h>
 #include <openssl/hmac.h>
-#include <openssl/opensslv.h>
+#else
+#include <openssl/param_build.h>
+#include <openssl/core_names.h>
+#endif /* OPENSSL_VERSION_NUMBER */
 #include <openssl/rand.h>
 #include <openssl/engine.h>
 
@@ -54,11 +60,11 @@
 #ifdef HAVE_OPENSSL_AES_H
 #define HAS_AES
 #include <openssl/aes.h>
-#endif
+#endif /* HAVE_OPENSSL_AES_H */
 #ifdef HAVE_OPENSSL_DES_H
 #define HAS_DES
 #include <openssl/des.h>
-#endif
+#endif /* HAVE_OPENSSL_DES_H */
 
 #if defined(HAVE_OPENSSL_MODES_H) || defined(HAVE_OPENSSL_CRYPTO_CTR128_ENCRYPT)
 #include <openssl/modes.h>
@@ -75,13 +81,19 @@
 
 #include "libssh/crypto.h"
 
-#ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
+#ifdef HAVE_OPENSSL_EVP_KDF_CTX
 #include <openssl/kdf.h>
-#endif
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/param_build.h>
+#include <openssl/core_names.h>
+#endif /* OPENSSL_VERSION_NUMBER */
+#endif /* HAVE_OPENSSL_EVP_KDF_CTX */
 
 #include "libssh/crypto.h"
 
 static int libcrypto_initialized = 0;
+
+static ENGINE *engine = NULL;
 
 void ssh_reseed(void){
 #ifndef _WIN32
@@ -91,69 +103,34 @@ void ssh_reseed(void){
 #endif
 }
 
-/**
- * @brief Get random bytes
- *
- * Make sure to always check the return code of this function!
- *
- * @param[in]  where    The buffer to fill with random bytes
- *
- * @param[in]  len      The size of the buffer to fill.
- *
- * @param[in]  strong   Use a strong or private RNG source.
- *
- * @return 1 on success, 0 on error.
- */
-int ssh_get_random(void *where, int len, int strong)
+ENGINE *pki_get_engine(void)
 {
-#ifdef HAVE_OPENSSL_RAND_PRIV_BYTES
-    if (strong) {
-        /* Returns -1 when not supported, 0 on error, 1 on success */
-        return !!RAND_priv_bytes(where, len);
+    int ok;
+
+    if (engine == NULL) {
+        ENGINE_load_builtin_engines();
+
+        engine = ENGINE_by_id("pkcs11");
+        if (engine == NULL) {
+            SSH_LOG(SSH_LOG_WARN,
+                    "Could not load the engine: %s",
+                    ERR_error_string(ERR_get_error(), NULL));
+            return NULL;
+        }
+        SSH_LOG(SSH_LOG_INFO, "Engine loaded successfully");
+
+        ok = ENGINE_init(engine);
+        if (!ok) {
+            SSH_LOG(SSH_LOG_WARN,
+                    "Could not initialize the engine: %s",
+                    ERR_error_string(ERR_get_error(), NULL));
+            ENGINE_free(engine);
+            return NULL;
+        }
+
+        SSH_LOG(SSH_LOG_INFO, "Engine init success");
     }
-#else
-    (void)strong;
-#endif /* HAVE_RAND_PRIV_BYTES */
-
-    /* Returns -1 when not supported, 0 on error, 1 on success */
-    return !!RAND_bytes(where, len);
-}
-
-SHACTX sha1_init(void)
-{
-    int rc;
-    SHACTX c = EVP_MD_CTX_new();
-    if (c == NULL) {
-        return NULL;
-    }
-    rc = EVP_DigestInit_ex(c, EVP_sha1(), NULL);
-    if (rc == 0) {
-        EVP_MD_CTX_free(c);
-        c = NULL;
-    }
-    return c;
-}
-
-void sha1_update(SHACTX c, const void *data, unsigned long len)
-{
-    EVP_DigestUpdate(c, data, len);
-}
-
-void sha1_final(unsigned char *md, SHACTX c)
-{
-    unsigned int mdlen = 0;
-
-    EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_free(c);
-}
-
-void sha1(const unsigned char *digest, int len, unsigned char *hash)
-{
-    SHACTX c = sha1_init();
-    if (c != NULL) {
-        sha1_update(c, digest, len);
-        sha1_final(hash, c);
-    }
+    return engine;
 }
 
 #ifdef HAVE_OPENSSL_ECC
@@ -173,7 +150,7 @@ static const EVP_MD *nid_to_evpmd(int nid)
     return NULL;
 }
 
-void evp(int nid, unsigned char *digest, int len, unsigned char *hash, unsigned int *hlen)
+void evp(int nid, unsigned char *digest, size_t len, unsigned char *hash, unsigned int *hlen)
 {
     const EVP_MD *evp_md = nid_to_evpmd(nid);
     EVP_MD_CTX *md = EVP_MD_CTX_new();
@@ -198,7 +175,7 @@ EVPCTX evp_init(int nid)
     return ctx;
 }
 
-void evp_update(EVPCTX ctx, const void *data, unsigned long len)
+void evp_update(EVPCTX ctx, const void *data, size_t len)
 {
     EVP_DigestUpdate(ctx, data, len);
 }
@@ -208,148 +185,10 @@ void evp_final(EVPCTX ctx, unsigned char *md, unsigned int *mdlen)
     EVP_DigestFinal(ctx, md, mdlen);
     EVP_MD_CTX_free(ctx);
 }
-#endif
+#endif /* HAVE_OPENSSL_ECC */
 
-SHA256CTX sha256_init(void)
-{
-    int rc;
-    SHA256CTX c = EVP_MD_CTX_new();
-    if (c == NULL) {
-        return NULL;
-    }
-    rc = EVP_DigestInit_ex(c, EVP_sha256(), NULL);
-    if (rc == 0) {
-        EVP_MD_CTX_free(c);
-        c = NULL;
-    }
-    return c;
-}
-
-void sha256_update(SHA256CTX c, const void *data, unsigned long len)
-{
-    EVP_DigestUpdate(c, data, len);
-}
-
-void sha256_final(unsigned char *md, SHA256CTX c)
-{
-    unsigned int mdlen = 0;
-
-    EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_free(c);
-}
-
-void sha256(const unsigned char *digest, int len, unsigned char *hash)
-{
-    SHA256CTX c = sha256_init();
-    if (c != NULL) {
-        sha256_update(c, digest, len);
-        sha256_final(hash, c);
-    }
-}
-
-SHA384CTX sha384_init(void)
-{
-    int rc;
-    SHA384CTX c = EVP_MD_CTX_new();
-    if (c == NULL) {
-        return NULL;
-    }
-    rc = EVP_DigestInit_ex(c, EVP_sha384(), NULL);
-    if (rc == 0) {
-        EVP_MD_CTX_free(c);
-        c = NULL;
-    }
-    return c;
-}
-
-void sha384_update(SHA384CTX c, const void *data, unsigned long len)
-{
-    EVP_DigestUpdate(c, data, len);
-}
-
-void sha384_final(unsigned char *md, SHA384CTX c)
-{
-    unsigned int mdlen = 0;
-
-    EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_free(c);
-}
-
-void sha384(const unsigned char *digest, int len, unsigned char *hash)
-{
-    SHA384CTX c = sha384_init();
-    if (c != NULL) {
-        sha384_update(c, digest, len);
-        sha384_final(hash, c);
-    }
-}
-
-SHA512CTX sha512_init(void)
-{
-    int rc = 0;
-    SHA512CTX c = EVP_MD_CTX_new();
-    if (c == NULL) {
-        return NULL;
-    }
-    rc = EVP_DigestInit_ex(c, EVP_sha512(), NULL);
-    if (rc == 0) {
-        EVP_MD_CTX_free(c);
-        c = NULL;
-    }
-    return c;
-}
-
-void sha512_update(SHA512CTX c, const void *data, unsigned long len)
-{
-    EVP_DigestUpdate(c, data, len);
-}
-
-void sha512_final(unsigned char *md, SHA512CTX c)
-{
-    unsigned int mdlen = 0;
-
-    EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_free(c);
-}
-
-void sha512(const unsigned char *digest, int len, unsigned char *hash)
-{
-    SHA512CTX c = sha512_init();
-    if (c != NULL) {
-        sha512_update(c, digest, len);
-        sha512_final(hash, c);
-    }
-}
-
-MD5CTX md5_init(void)
-{
-    int rc;
-    MD5CTX c = EVP_MD_CTX_new();
-    if (c == NULL) {
-        return NULL;
-    }
-    rc = EVP_DigestInit_ex(c, EVP_md5(), NULL);
-    if(rc == 0) {
-        EVP_MD_CTX_free(c);
-        c = NULL;
-    }
-    return c;
-}
-
-void md5_update(MD5CTX c, const void *data, unsigned long len)
-{
-    EVP_DigestUpdate(c, data, len);
-}
-
-void md5_final(unsigned char *md, MD5CTX c)
-{
-    unsigned int mdlen = 0;
-
-    EVP_DigestFinal(c, md, &mdlen);
-    EVP_MD_CTX_free(c);
-}
-
-#ifdef HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID
+#ifdef HAVE_OPENSSL_EVP_KDF_CTX
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 static const EVP_MD *sshkdf_digest_to_md(enum ssh_kdf_digest digest_type)
 {
     switch (digest_type) {
@@ -364,19 +203,50 @@ static const EVP_MD *sshkdf_digest_to_md(enum ssh_kdf_digest digest_type)
     }
     return NULL;
 }
+#else
+static const char *sshkdf_digest_to_md(enum ssh_kdf_digest digest_type)
+{
+    switch (digest_type) {
+    case SSH_KDF_SHA1:
+        return SN_sha1;
+    case SSH_KDF_SHA256:
+        return SN_sha256;
+    case SSH_KDF_SHA384:
+        return SN_sha384;
+    case SSH_KDF_SHA512:
+        return SN_sha512;
+    }
+    return NULL;
+}
+#endif /* OPENSSL_VERSION_NUMBER */
 
 int ssh_kdf(struct ssh_crypto_struct *crypto,
             unsigned char *key, size_t key_len,
-            int key_type, unsigned char *output,
+            uint8_t key_type, unsigned char *output,
             size_t requested_len)
 {
+    int rc = -1;
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     EVP_KDF_CTX *ctx = EVP_KDF_CTX_new_id(EVP_KDF_SSHKDF);
-    int rc;
+#else
+    EVP_KDF *kdf = EVP_KDF_fetch(NULL, "SSHKDF", NULL);
+    EVP_KDF_CTX *ctx = EVP_KDF_CTX_new(kdf);
+    OSSL_PARAM_BLD *param_bld = OSSL_PARAM_BLD_new();
+    OSSL_PARAM *params = NULL;
+    const char *md = sshkdf_digest_to_md(crypto->digest_type);
 
-    if (ctx == NULL) {
+    EVP_KDF_free(kdf);
+    if (param_bld == NULL) {
+        EVP_KDF_CTX_free(ctx);
         return -1;
     }
+#endif /* OPENSSL_VERSION_NUMBER */
 
+    if (ctx == NULL) {
+        goto out;
+    }
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     rc = EVP_KDF_ctrl(ctx, EVP_KDF_CTRL_SET_MD,
                       sshkdf_digest_to_md(crypto->digest_type));
     if (rc != 1) {
@@ -404,8 +274,60 @@ int ssh_kdf(struct ssh_crypto_struct *crypto,
     if (rc != 1) {
         goto out;
     }
+#else
+    rc = OSSL_PARAM_BLD_push_utf8_string(param_bld, OSSL_KDF_PARAM_DIGEST,
+                                         md, strlen(md));
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+    rc = OSSL_PARAM_BLD_push_octet_string(param_bld, OSSL_KDF_PARAM_KEY,
+                                          key, key_len);
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+    rc = OSSL_PARAM_BLD_push_octet_string(param_bld,
+                                          OSSL_KDF_PARAM_SSHKDF_XCGHASH,
+                                          crypto->secret_hash,
+                                          crypto->digest_len);
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+    rc = OSSL_PARAM_BLD_push_octet_string(param_bld,
+                                          OSSL_KDF_PARAM_SSHKDF_SESSION_ID,
+                                          crypto->session_id,
+                                          crypto->session_id_len);
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+    rc = OSSL_PARAM_BLD_push_utf8_string(param_bld, OSSL_KDF_PARAM_SSHKDF_TYPE,
+                                         (const char*)&key_type, 1);
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+
+    params = OSSL_PARAM_BLD_to_param(param_bld);
+    if (params == NULL) {
+        rc = -1;
+        goto out;
+    }
+
+    rc = EVP_KDF_derive(ctx, output, requested_len, params);
+    if (rc != 1) {
+        rc = -1;
+        goto out;
+    }
+#endif /* OPENSSL_VERSION_NUMBER */
 
 out:
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    OSSL_PARAM_BLD_free(param_bld);
+    OSSL_PARAM_free(params);
+#endif
     EVP_KDF_CTX_free(ctx);
     if (rc < 0) {
         return rc;
@@ -416,15 +338,15 @@ out:
 #else
 int ssh_kdf(struct ssh_crypto_struct *crypto,
             unsigned char *key, size_t key_len,
-            int key_type, unsigned char *output,
+            uint8_t key_type, unsigned char *output,
             size_t requested_len)
 {
     return sshkdf_derive_key(crypto, key, key_len,
                              key_type, output, requested_len);
 }
-#endif
+#endif /* HAVE_OPENSSL_EVP_KDF_CTX */
 
-HMACCTX hmac_init(const void *key, int len, enum ssh_hmac_e type)
+HMACCTX hmac_init(const void *key, size_t len, enum ssh_hmac_e type)
 {
     HMACCTX ctx = NULL;
     EVP_PKEY *pkey = NULL;
@@ -469,17 +391,22 @@ error:
     return NULL;
 }
 
-void hmac_update(HMACCTX ctx, const void *data, unsigned long len)
+int hmac_update(HMACCTX ctx, const void *data, size_t len)
 {
-    EVP_DigestSignUpdate(ctx, data, len);
+    return EVP_DigestSignUpdate(ctx, data, len);
 }
 
-void hmac_final(HMACCTX ctx, unsigned char *hashmacbuf, unsigned int *len)
+int hmac_final(HMACCTX ctx, unsigned char *hashmacbuf, size_t *len)
 {
-    size_t res = 0;
-    EVP_DigestSignFinal(ctx, hashmacbuf, &res);
+    size_t res = *len;
+    int rc;
+    rc = EVP_DigestSignFinal(ctx, hashmacbuf, &res);
     EVP_MD_CTX_free(ctx);
-    *len = res;
+    if (rc == 1) {
+        *len = res;
+    }
+
+    return rc;
 }
 
 static void evp_cipher_init(struct ssh_cipher_struct *cipher)
@@ -523,7 +450,7 @@ static void evp_cipher_init(struct ssh_cipher_struct *cipher)
         cipher->cipher = EVP_bf_cbc();
         break;
         /* ciphers not using EVP */
-#endif
+#endif /* WITH_BLOWFISH_CIPHER */
     case SSH_AEAD_CHACHA20_POLY1305:
         SSH_LOG(SSH_LOG_WARNING, "The ChaCha cipher cannot be handled here");
         break;
@@ -830,12 +757,17 @@ struct chacha20_poly1305_keysched {
     EVP_CIPHER_CTX *main_evp;
     /* cipher handle used for encrypting the length field */
     EVP_CIPHER_CTX *header_evp;
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     /* mac handle used for authenticating the packets */
     EVP_PKEY_CTX *pctx;
     /* Poly1305 key */
     EVP_PKEY *key;
     /* MD context for digesting data in poly1305 */
     EVP_MD_CTX *mctx;
+#else
+    /* MAC context used to do poly1305 */
+    EVP_MAC_CTX *mctx;
+#endif /* OPENSSL_VERSION_NUMBER */
 };
 
 static void
@@ -853,11 +785,16 @@ chacha20_poly1305_cleanup(struct ssh_cipher_struct *cipher)
     ctx->main_evp  = NULL;
     EVP_CIPHER_CTX_free(ctx->header_evp);
     ctx->header_evp = NULL;
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     /* ctx->pctx is freed as part of MD context */
     EVP_PKEY_free(ctx->key);
     ctx->key = NULL;
     EVP_MD_CTX_free(ctx->mctx);
     ctx->mctx = NULL;
+#else
+    EVP_MAC_CTX_free(ctx->mctx);
+    ctx->mctx = NULL;
+#endif /* OPENSSL_VERSION_NUMBER */
 
     SAFE_FREE(cipher->chacha20_schedule);
 }
@@ -870,6 +807,9 @@ chacha20_poly1305_set_key(struct ssh_cipher_struct *cipher,
     struct chacha20_poly1305_keysched *ctx = NULL;
     uint8_t *u8key = key;
     int ret = SSH_ERROR, rv;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_MAC *mac = NULL;
+#endif
 
     if (cipher->chacha20_schedule == NULL) {
         ctx = calloc(1, sizeof(*ctx));
@@ -909,14 +849,30 @@ chacha20_poly1305_set_key(struct ssh_cipher_struct *cipher,
     /* The Poly1305 key initialization is delayed to the time we know
      * the actual key for packet so we do not need to create a bogus keys
      */
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     ctx->mctx = EVP_MD_CTX_new();
     if (ctx->mctx == NULL) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_MD_CTX_new failed");
         return SSH_ERROR;
     }
+#else
+    mac = EVP_MAC_fetch(NULL, "poly1305", NULL);
+    if (mac == NULL) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_fetch failed");
+        goto out;
+    }
+    ctx->mctx = EVP_MAC_CTX_new(mac);
+    if (ctx->mctx == NULL) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_CTX_new failed");
+        goto out;
+    }
+#endif /* OPENSSL_VERSION_NUMBER */
 
     ret = SSH_OK;
 out:
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_MAC_free(mac);
+#endif
     if (ret != SSH_OK) {
         chacha20_poly1305_cleanup(cipher);
     }
@@ -988,6 +944,7 @@ chacha20_poly1305_packet_setup(struct ssh_cipher_struct *cipher,
 #endif /* DEBUG_CRYPTO */
 
     /* Set the Poly1305 key */
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     if (ctx->key == NULL) {
         /* Poly1305 Initialization needs to know the actual key */
         ctx->key = EVP_PKEY_new_mac_key(EVP_PKEY_POLY1305, NULL,
@@ -1011,6 +968,13 @@ chacha20_poly1305_packet_setup(struct ssh_cipher_struct *cipher,
             goto out;
         }
     }
+#else
+    rv = EVP_MAC_init(ctx->mctx, poly_key, POLY1305_KEYLEN, NULL);
+    if (rv != 1) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_init failed");
+        goto out;
+    }
+#endif /* OPENSSL_VERSION_NUMBER */
 
     ret = SSH_OK;
 out:
@@ -1088,6 +1052,7 @@ chacha20_poly1305_aead_decrypt(struct ssh_cipher_struct *cipher,
 #endif /* DEBUG_CRYPTO */
 
     /* Calculate MAC of received data */
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     rv = EVP_DigestSignUpdate(ctx->mctx, complete_packet,
                               encrypted_size + sizeof(uint32_t));
     if (rv != 1) {
@@ -1100,6 +1065,20 @@ chacha20_poly1305_aead_decrypt(struct ssh_cipher_struct *cipher,
         SSH_LOG(SSH_LOG_WARNING, "poly1305 verify error");
         goto out;
     }
+#else
+    rv = EVP_MAC_update(ctx->mctx, complete_packet,
+                        encrypted_size + sizeof(uint32_t));
+    if (rv != 1) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_update failed");
+        goto out;
+    }
+
+    rv = EVP_MAC_final(ctx->mctx, tag, &taglen, POLY1305_TAGLEN);
+    if (rv != 1) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_final failed");
+        goto out;
+    }
+#endif /* OPENSSL_VERSION_NUMBER */
 
 #ifdef DEBUG_CRYPTO
     ssh_log_hexdump("calculated mac", tag, POLY1305_TAGLEN);
@@ -1190,6 +1169,7 @@ chacha20_poly1305_aead_encrypt(struct ssh_cipher_struct *cipher,
     }
 
     /* step 4, compute the MAC */
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
     ret = EVP_DigestSignUpdate(ctx->mctx, out_packet, len);
     if (ret <= 0) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_DigestSignUpdate failed");
@@ -1200,6 +1180,19 @@ chacha20_poly1305_aead_encrypt(struct ssh_cipher_struct *cipher,
         SSH_LOG(SSH_LOG_WARNING, "EVP_DigestSignFinal failed");
         return;
     }
+#else
+    ret = EVP_MAC_update(ctx->mctx, (void*)out_packet, len);
+    if (ret != 1) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_update failed");
+        return;
+    }
+
+    ret = EVP_MAC_final(ctx->mctx, tag, &taglen, POLY1305_TAGLEN);
+    if (ret != 1) {
+        SSH_LOG(SSH_LOG_WARNING, "EVP_MAC_final failed");
+        return;
+    }
+#endif /* OPENSSL_VERSION_NUMBER */
 }
 #endif /* defined(HAVE_OPENSSL_EVP_CHACHA20) && defined(HAVE_OPENSSL_EVP_POLY1305) */
 
@@ -1230,7 +1223,7 @@ static struct ssh_cipher_struct ssh_ciphertab[] = {
     .decrypt = evp_cipher_decrypt,
     .cleanup = evp_cipher_cleanup
   },
-#endif
+#endif /* WITH_BLOWFISH_CIPHER */
 #ifdef HAS_AES
   {
     .name = "aes128-ctr",
@@ -1384,7 +1377,9 @@ struct ssh_cipher_struct *ssh_get_ciphertab(void)
  */
 int ssh_crypto_init(void)
 {
-    UNUSED_VAR(size_t i);
+#if !defined(HAVE_OPENSSL_EVP_CHACHA20) || !defined(HAVE_OPENSSL_EVP_POLY1305)
+    size_t i;
+#endif
 
     if (libcrypto_initialized) {
         return SSH_OK;
@@ -1406,10 +1401,10 @@ int ssh_crypto_init(void)
         /* Bit #57 denotes AES-NI instruction set extension */
         OPENSSL_ia32cap &= ~(1LL << 57);
     }
-#endif
+#endif /* CAN_DISABLE_AESNI */
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     OpenSSL_add_all_algorithms();
-#endif
+#endif /* OPENSSL_VERSION_NUMBER */
 
 #if !defined(HAVE_OPENSSL_EVP_CHACHA20) || !defined(HAVE_OPENSSL_EVP_POLY1305)
     for (i = 0; ssh_ciphertab[i].name != NULL; i++) {
@@ -1440,13 +1435,166 @@ void ssh_crypto_finalize(void)
         return;
     }
 
-    ENGINE_cleanup();
+/* TODO this should finalize engine if it was started, but during atexit calls,
+ * we are crashing. AFAIK this is related to the dlopened pkcs11 modules calling
+ * the crypto cleanups earlier. */
+#if 0
+    if (engine != NULL) {
+        ENGINE_finish(engine);
+        ENGINE_free(engine);
+        engine = NULL;
+    }
+#endif
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    ENGINE_cleanup();
     EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
-#endif
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 
     libcrypto_initialized = 0;
 }
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+/**
+ * @internal
+ * @brief Create EVP_PKEY from parameters
+ *
+ * @param[in] name Algorithm to use. For more info see manpage of EVP_PKEY_CTX_new_from_name
+ *
+ * @param[in] param_bld Constructed param builder for the pkey
+ *
+ * @param[out] pkey Created EVP_PKEY variable
+ *
+ * @param[in] selection Reference selections at man EVP_PKEY_FROMDATA
+ *
+ * @return 0 on success, -1 on error
+ */
+int evp_build_pkey(const char* name, OSSL_PARAM_BLD *param_bld,
+                   EVP_PKEY **pkey, int selection)
+{
+    int rc;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, name, NULL);
+    OSSL_PARAM *params = NULL;
+
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    params = OSSL_PARAM_BLD_to_param(param_bld);
+    if (params == NULL) {
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    rc = EVP_PKEY_fromdata_init(ctx);
+    if (rc != 1) {
+        OSSL_PARAM_free(params);
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    rc = EVP_PKEY_fromdata(ctx, pkey, selection, params);
+    if (rc != 1) {
+        OSSL_PARAM_free(params);
+        EVP_PKEY_CTX_free(ctx);
+        return -1;
+    }
+
+    OSSL_PARAM_free(params);
+    EVP_PKEY_CTX_free(ctx);
+
+    return SSH_OK;
+}
+
+/**
+ * @brief creates a copy of EVP_PKEY
+ *
+ * @param[in] name Algorithm to use. For more info see manpage of
+ *                 EVP_PKEY_CTX_new_from_name
+ *
+ * @param[in] key Key being duplicated from
+ *
+ * @param[in] demote Same as at pki_key_dup, only the public
+ *                   part of the key gets duplicated if true
+ *
+ * @param[out] new_key The key where the duplicate is saved
+ *
+ * @return 0 on success, -1 on error
+ */
+static int evp_dup_pkey(const char* name, const ssh_key key, int demote,
+                        ssh_key new_key)
+{
+    int rc;
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, name, NULL);
+    OSSL_PARAM *params = NULL;
+
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    if (!demote && (key->flags & SSH_KEY_FLAG_PRIVATE)) {
+        rc = EVP_PKEY_todata(key->key, EVP_PKEY_KEYPAIR, &params);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            return -1;
+        }
+
+        rc = EVP_PKEY_fromdata_init(ctx);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            OSSL_PARAM_free(params);
+            return -1;
+        }
+
+        rc = EVP_PKEY_fromdata(ctx, &(new_key->key), EVP_PKEY_KEYPAIR, params);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            OSSL_PARAM_free(params);
+            return -1;
+        }
+    } else {
+        rc = EVP_PKEY_todata(key->key, EVP_PKEY_PUBLIC_KEY, &params);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            return -1;
+        }
+
+        rc = EVP_PKEY_fromdata_init(ctx);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            OSSL_PARAM_free(params);
+            return -1;
+        }
+
+        rc = EVP_PKEY_fromdata(ctx, &(new_key->key), EVP_PKEY_PUBLIC_KEY, params);
+        if (rc != 1) {
+            EVP_PKEY_CTX_free(ctx);
+            OSSL_PARAM_free(params);
+            return -1;
+        }
+    }
+
+    OSSL_PARAM_free(params);
+    EVP_PKEY_CTX_free(ctx);
+
+    return SSH_OK;
+}
+
+int evp_dup_dsa_pkey(const ssh_key key, ssh_key new, int demote)
+{
+    return evp_dup_pkey("DSA", key, demote, new);
+}
+
+int evp_dup_rsa_pkey(const ssh_key key, ssh_key new, int demote)
+{
+    return evp_dup_pkey("RSA", key, demote, new);
+}
+
+int evp_dup_ecdsa_pkey(const ssh_key key, ssh_key new, int demote)
+{
+    return evp_dup_pkey("EC", key, demote, new);
+}
+#endif /* OPENSSL_VERSION_NUMBER */
 
 #endif /* LIBCRYPTO */

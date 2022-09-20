@@ -60,7 +60,8 @@
  * @param code one of SSH_SOCKET_CONNECTED_OK or SSH_SOCKET_CONNECTED_ERROR
  * @param user is a pointer to session
  */
-static void socket_callback_connected(int code, int errno_code, void *user){
+static void socket_callback_connected(int code, int errno_code, void *user)
+{
 	ssh_session session=(ssh_session)user;
 
 	if (session->session_state != SSH_SESSION_STATE_CONNECTING &&
@@ -76,8 +77,10 @@ static void socket_callback_connected(int code, int errno_code, void *user){
 	if(code == SSH_SOCKET_CONNECTED_OK)
 		session->session_state=SSH_SESSION_STATE_SOCKET_CONNECTED;
 	else {
+        char err_msg[SSH_ERRNO_MSG_MAX] = {0};
 		session->session_state=SSH_SESSION_STATE_ERROR;
-		ssh_set_error(session,SSH_FATAL,"%s",strerror(errno_code));
+		ssh_set_error(session,SSH_FATAL,"%s",
+                      ssh_strerror(errno_code, err_msg, SSH_ERRNO_MSG_MAX));
 	}
 	session->ssh_connection_callback(session);
 }
@@ -93,10 +96,10 @@ static void socket_callback_connected(int code, int errno_code, void *user){
  * @param  user is a pointer to session
  * @returns Number of bytes processed, or zero if the banner is not complete.
  */
-static int callback_receive_banner(const void *data, size_t len, void *user)
+static size_t callback_receive_banner(const void *data, size_t len, void *user)
 {
     char *buffer = (char *)data;
-    ssh_session session=(ssh_session) user;
+    ssh_session session = (ssh_session) user;
     char *str = NULL;
     uint32_t i;
     int ret=0;
@@ -106,7 +109,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user)
                       "Wrong state in callback_receive_banner : %d",
                       session->session_state);
 
-        return SSH_ERROR;
+        return 0;
     }
     for (i = 0; i < len; ++i) {
 #ifdef WITH_PCAP
@@ -245,8 +248,8 @@ end:
  * @warning this function returning is no proof that DH handshake is
  * completed
  */
-static int dh_handshake(ssh_session session) {
-
+static int dh_handshake(ssh_session session)
+{
   int rc = SSH_AGAIN;
 
   switch (session->dh_handshake_state) {
@@ -301,13 +304,15 @@ static int dh_handshake(ssh_session session) {
   return rc;
 }
 
-static int ssh_service_request_termination(void *s){
-  ssh_session session = (ssh_session)s;
-  if(session->session_state == SSH_SESSION_STATE_ERROR ||
-      session->auth.service_state != SSH_AUTH_SERVICE_SENT)
-    return 1;
-  else
-    return 0;
+static int ssh_service_request_termination(void *s)
+{
+    ssh_session session = (ssh_session)s;
+
+    if (session->session_state == SSH_SESSION_STATE_ERROR ||
+        session->auth.service_state != SSH_AUTH_SERVICE_SENT)
+        return 1;
+    else
+        return 0;
 }
 
 /**
@@ -325,8 +330,9 @@ static int ssh_service_request_termination(void *s){
  * @return SSH_AGAIN No response received yet
  * @bug actually only works with ssh-userauth
  */
-int ssh_service_request(ssh_session session, const char *service) {
-  int rc=SSH_ERROR;
+int ssh_service_request(ssh_session session, const char *service)
+{
+  int rc = SSH_ERROR;
 
   if(session->auth.service_state != SSH_AUTH_SERVICE_NONE)
     goto pending;
@@ -483,16 +489,18 @@ error:
 /** @internal
  * @brief describe under which conditions the ssh_connect function may stop
  */
-static int ssh_connect_termination(void *user){
-  ssh_session session = (ssh_session)user;
-  switch(session->session_state){
+static int ssh_connect_termination(void *user)
+{
+    ssh_session session = (ssh_session)user;
+
+    switch (session->session_state) {
     case SSH_SESSION_STATE_ERROR:
     case SSH_SESSION_STATE_AUTHENTICATING:
     case SSH_SESSION_STATE_DISCONNECTED:
-      return 1;
+        return 1;
     default:
-      return 0;
-  }
+        return 0;
+    }
 }
 
 /**
@@ -652,12 +660,13 @@ pending:
  *
  * @return A newly allocated string with the banner, NULL on error.
  */
-char *ssh_get_issue_banner(ssh_session session) {
-  if (session == NULL || session->banner == NULL) {
-    return NULL;
-  }
+char *ssh_get_issue_banner(ssh_session session)
+{
+    if (session == NULL || session->banner == NULL) {
+        return NULL;
+    }
 
-  return ssh_string_to_char(session->banner);
+    return ssh_string_to_char(session->banner);
 }
 
 /**
@@ -678,17 +687,56 @@ char *ssh_get_issue_banner(ssh_session session) {
  * }
  * @endcode
  */
-int ssh_get_openssh_version(ssh_session session) {
-  if (session == NULL) {
-    return 0;
-  }
+int ssh_get_openssh_version(ssh_session session)
+{
+    if (session == NULL) {
+        return 0;
+    }
 
-  return session->openssh;
+    return session->openssh;
 }
+/**
+ * @brief Add disconnect message when ssh_session is disconnected
+ * To add a disconnect message to give peer a better hint.
+ * @param  session      The SSH session to use.
+ * @param  message      The message to send after the session is disconnected.
+ *                      If no message is passed then a default message i.e
+ *                      "Bye Bye" will be sent.
+ */
+int
+ssh_session_set_disconnect_message(ssh_session session, const char *message)
+{
+    if (session == NULL) {
+        return SSH_ERROR;
+    }
+
+    if (message == NULL || strlen(message) == 0) {
+        SAFE_FREE(session->disconnect_message);  //To free any message set earlier.
+        session->disconnect_message = strdup("Bye Bye") ;
+        if (session->disconnect_message == NULL) {
+            ssh_set_error_oom(session);
+            return SSH_ERROR;
+        }
+        return SSH_OK;
+    }
+    SAFE_FREE(session->disconnect_message);  //To free any message set earlier.
+    session->disconnect_message = strdup(message);
+    if (session->disconnect_message == NULL) {
+        ssh_set_error_oom(session);
+        return SSH_ERROR;
+    }
+    return SSH_OK;
+}
+
 
 /**
  * @brief Disconnect from a session (client or server).
+ *
  * The session can then be reused to open a new session.
+ *
+ * @note Note that this function wont close the socket if it was set with
+ * @ssh_options_set and SSH_OPTIONS_FD. You're responsible for closing the
+ * socket. This is new behavior in libssh 0.10.
  *
  * @param[in]  session  The SSH session to use.
  */
@@ -702,12 +750,20 @@ ssh_disconnect(ssh_session session)
         return;
     }
 
+    if (session->disconnect_message == NULL) {
+        session->disconnect_message = strdup("Bye Bye") ;
+        if (session->disconnect_message == NULL) {
+            ssh_set_error_oom(session);
+            goto error;
+        }
+    }
+
     if (session->socket != NULL && ssh_socket_is_open(session->socket)) {
         rc = ssh_buffer_pack(session->out_buffer,
                              "bdss",
                              SSH2_MSG_DISCONNECT,
                              SSH2_DISCONNECT_BY_APPLICATION,
-                             "Bye Bye",
+                             session->disconnect_message,
                              ""); /* language tag */
         if (rc != SSH_OK) {
             ssh_set_error_oom(session);
@@ -715,7 +771,10 @@ ssh_disconnect(ssh_session session)
         }
 
         ssh_packet_send(session);
-        ssh_socket_close(session->socket);
+        /* Do not close the socket, if the fd was set via options. */
+        if (session->opts.fd == SSH_INVALID_SOCKET) {
+            ssh_socket_close(session->socket);
+        }
     }
 
 error:
@@ -759,6 +818,7 @@ error:
     session->auth.supported_methods = 0;
     SAFE_FREE(session->serverbanner);
     SAFE_FREE(session->clientbanner);
+    SAFE_FREE(session->disconnect_message);
 
     if (session->ssh_message_list) {
         ssh_message msg = NULL;
@@ -777,7 +837,8 @@ error:
     }
 }
 
-const char *ssh_copyright(void) {
+const char *ssh_copyright(void)
+{
     return SSH_STRINGIFY(LIBSSH_VERSION) " (c) 2003-2022 "
            "Aris Adamantiadis, Andreas Schneider "
            "and libssh contributors. "

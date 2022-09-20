@@ -57,11 +57,12 @@
  * @param src           The session to use to copy the options.
  *
  * @param dest          A pointer to store the allocated session with duplicated
- *                      options. You have to free the memory.
+ *                      options. You have to free the memory using ssh_free()
  *
  * @returns             0 on success, -1 on error with errno set.
  *
  * @see ssh_session_connect()
+ * @see ssh_free()
  */
 int ssh_options_copy(ssh_session src, ssh_session *dest)
 {
@@ -264,9 +265,10 @@ int ssh_options_set_algo(ssh_session session,
  *                The file descriptor to use (socket_t).\n
  *                \n
  *                If you wish to open the socket yourself for a reason
- *                or another, set the file descriptor. Don't forget to
- *                set the hostname as the hostname is used as a key in
- *                the known_host mechanism.
+ *                or another, set the file descriptor and take care of closing
+ *                it (this is new behavior in libssh 0.10).
+ *                Don't forget to set the hostname as the hostname is used
+ *                as a key in the known_host mechanism.
  *
  *              - SSH_OPTIONS_BINDADDR:
  *                The address to bind the client to (const char *).
@@ -473,7 +475,12 @@ int ssh_options_set_algo(ssh_session session,
  *                configuration option as they are considered completely broken.
  *                Setting 0 will revert the value to defaults.
  *                Default is 1024 bits or 2048 bits in FIPS mode.
- *                (unsigned int *)
+ *                (int *)
+
+ *              - SSH_OPTIONS_IDENTITY_AGENT
+ *                Set the path to the SSH agent socket. If unset, the
+ *                SSH_AUTH_SOCK environment is consulted.
+ *                (const char *)
  *
  * @param  value The value to set. This is a generic pointer and the
  *               datatype which is used should be set according to the
@@ -482,7 +489,8 @@ int ssh_options_set_algo(ssh_session session,
  * @return       0 on success, < 0 on error.
  */
 int ssh_options_set(ssh_session session, enum ssh_options_e type,
-    const void *value) {
+                    const void *value)
+{
     const char *v;
     char *p, *q;
     long int i;
@@ -505,7 +513,7 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                     ssh_set_error_oom(session);
                     return -1;
                 }
-                p = strchr(q, '@');
+                p = strrchr(q, '@');
 
                 SAFE_FREE(session->opts.host);
 
@@ -1043,7 +1051,7 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 ssh_set_error_invalid(session);
                 return -1;
             } else {
-                unsigned int *x = (unsigned int *)value;
+                int *x = (int *)value;
                 if (*x > 0 && *x < 768) {
                     ssh_set_error(session, SSH_REQUEST_DENIED,
                                   "The provided value (%u) for minimal RSA key "
@@ -1051,6 +1059,22 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                     return -1;
                 }
                 session->opts.rsa_min_size = *x;
+            }
+            break;
+        case SSH_OPTIONS_IDENTITY_AGENT:
+            v = value;
+            SAFE_FREE(session->opts.agent_socket);
+            if (v == NULL) {
+                /* The default value will be set by the ssh_options_apply() */
+            } else if (v[0] == '\0') {
+                ssh_set_error_invalid(session);
+                return -1;
+            } else {
+                session->opts.agent_socket = ssh_path_expand_tilde(v);
+                if (session->opts.agent_socket == NULL) {
+                    ssh_set_error_oom(session);
+                    return -1;
+                }
             }
             break;
         default:
@@ -1405,7 +1429,8 @@ int ssh_options_getopt(ssh_session session, int *argcptr, char **argv)
  *
  * @see ssh_options_set()
  */
-int ssh_options_parse_config(ssh_session session, const char *filename) {
+int ssh_options_parse_config(ssh_session session, const char *filename)
+{
   char *expanded_filename;
   int r;
 
@@ -1450,7 +1475,8 @@ out:
   return r;
 }
 
-int ssh_options_apply(ssh_session session) {
+int ssh_options_apply(ssh_session session)
+{
     struct ssh_iterator *it;
     char *tmp;
     int rc;
@@ -1492,7 +1518,23 @@ int ssh_options_apply(ssh_session session) {
     session->opts.global_knownhosts = tmp;
 
     if (session->opts.ProxyCommand != NULL) {
-        tmp = ssh_path_expand_escape(session, session->opts.ProxyCommand);
+        char *p = NULL;
+        size_t plen = strlen(session->opts.ProxyCommand) +
+                      5 /* strlen("exec ") */;
+
+        p = malloc(plen + 1 /* \0 */);
+        if (p == NULL) {
+            return -1;
+        }
+
+        rc = snprintf(p, plen + 1, "exec %s", session->opts.ProxyCommand);
+        if ((size_t)rc != plen) {
+            free(p);
+            return -1;
+        }
+
+        tmp = ssh_path_expand_escape(session, p);
+        free(p);
         if (tmp == NULL) {
             return -1;
         }
@@ -1543,8 +1585,9 @@ static bool ssh_bind_key_size_allowed(ssh_bind sshbind, ssh_key key)
  * @addtogroup libssh_server
  * @{
  */
-static int ssh_bind_set_key(ssh_bind sshbind, char **key_loc,
-                            const void *value) {
+static int
+ssh_bind_set_key(ssh_bind sshbind, char **key_loc, const void *value)
+{
     if (value == NULL) {
         ssh_set_error_invalid(sshbind);
         return -1;
@@ -1706,7 +1749,7 @@ static int ssh_bind_set_algo(ssh_bind sshbind,
  *                        considered completely broken. Setting 0 will revert
  *                        the value to defaults.
  *                        Default is 1024 bits or 2048 bits in FIPS mode.
- *                        (unsigned int)
+ *                        (int)
  *
  *
  * @param  value        The value to set. This is a generic pointer and the
@@ -2092,7 +2135,7 @@ int ssh_bind_options_set(ssh_bind sshbind, enum ssh_bind_options_e type,
             ssh_set_error_invalid(sshbind);
             return -1;
         } else {
-            unsigned int *x = (unsigned int *)value;
+            int *x = (int *)value;
             if (*x > 0 && *x < 768) {
                 ssh_set_error(sshbind, SSH_REQUEST_DENIED,
                               "The provided value (%u) for minimal RSA key "

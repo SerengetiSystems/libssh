@@ -389,7 +389,6 @@ static void ssh_server_connection_callback(ssh_session session){
             }
 
             /* from now, the packet layer is handling incoming packets */
-            session->socket_callbacks.data=ssh_packet_socket_callback;
             ssh_packet_register_socket_callback(session, session->socket);
 
             ssh_packet_set_default_callbacks(session);
@@ -499,12 +498,12 @@ error:
  * @param  user is a pointer to session
  * @returns Number of bytes processed, or zero if the banner is not complete.
  */
-static int callback_receive_banner(const void *data, size_t len, void *user) {
+static size_t callback_receive_banner(const void *data, size_t len, void *user) {
     char *buffer = (char *) data;
     ssh_session session = (ssh_session) user;
     char *str = NULL;
     uint32_t i;
-    int ret=0;
+    size_t processed = 0;
 
     for (i = 0; i < len; i++) {
 #ifdef WITH_PCAP
@@ -525,13 +524,13 @@ static int callback_receive_banner(const void *data, size_t len, void *user) {
 
             str = strdup(buffer);
             /* number of bytes read */
-            ret = i + 1;
+            processed = i + 1;
             session->clientbanner = str;
             session->session_state = SSH_SESSION_STATE_BANNER_RECEIVED;
             SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received banner: %s", str);
             session->ssh_connection_callback(session);
 
-            return ret;
+            return processed;
         }
 
         if(i > 127) {
@@ -543,7 +542,7 @@ static int callback_receive_banner(const void *data, size_t len, void *user) {
         }
     }
 
-    return ret;
+    return processed;
 }
 
 /* returns 0 until the key exchange is not finished */
@@ -562,6 +561,30 @@ void ssh_set_auth_methods(ssh_session session, int auth_methods)
 {
     /* accept only methods in range */
     session->auth.supported_methods = (uint32_t)auth_methods & 0x3fU;
+}
+
+int ssh_send_issue_banner(ssh_session session, const ssh_string banner)
+{
+    int rc = SSH_ERROR;
+
+    if (session == NULL) {
+        return SSH_ERROR;
+    }
+
+    SSH_LOG(SSH_LOG_PACKET,
+            "Sending a server issue banner");
+
+    rc = ssh_buffer_pack(session->out_buffer,
+                         "bS",
+                         SSH2_MSG_USERAUTH_BANNER,
+                         banner);
+    if (rc != SSH_OK) {
+        ssh_set_error_oom(session);
+        return SSH_ERROR;
+    }
+
+    rc = ssh_packet_send(session);
+    return rc;
 }
 
 /* Do the banner and key exchange */

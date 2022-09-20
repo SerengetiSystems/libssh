@@ -104,7 +104,7 @@ static struct ssh_config_keyword_table_s ssh_config_keyword_table[] = {
   { "hostbasedacceptedalgorithms", SOC_UNSUPPORTED},
   { "hostkeyalias", SOC_UNSUPPORTED},
   { "identitiesonly", SOC_UNSUPPORTED},
-  { "identityagent", SOC_UNSUPPORTED},
+  { "identityagent", SOC_IDENTITYAGENT},
   { "ipqos", SOC_UNSUPPORTED},
   { "kbdinteractivedevices", SOC_UNSUPPORTED},
   { "nohostauthenticationforlocalhost", SOC_UNSUPPORTED},
@@ -319,6 +319,7 @@ ssh_exec_shell(char *cmd)
     char *shell = NULL;
     pid_t pid;
     int status, devnull, rc;
+    char err_msg[SSH_ERRNO_MSG_MAX] = {0};
 
     shell = getenv("SHELL");
     if (shell == NULL || shell[0] == '\0') {
@@ -334,7 +335,8 @@ ssh_exec_shell(char *cmd)
     /* Need this to redirect subprocess stdin/out */
     devnull = open("/dev/null", O_RDWR);
     if (devnull == -1) {
-        SSH_LOG(SSH_LOG_WARN, "Failed to open(/dev/null): %s", strerror(errno));
+        SSH_LOG(SSH_LOG_WARN, "Failed to open(/dev/null): %s",
+                ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
         return -1;
     }
 
@@ -346,12 +348,14 @@ ssh_exec_shell(char *cmd)
         /* Redirect child stdin and stdout. Leave stderr */
         rc = dup2(devnull, STDIN_FILENO);
         if (rc == -1) {
-            SSH_LOG(SSH_LOG_WARN, "dup2: %s", strerror(errno));
+            SSH_LOG(SSH_LOG_WARN, "dup2: %s",
+                    ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
             exit(1);
         }
         rc = dup2(devnull, STDOUT_FILENO);
         if (rc == -1) {
-            SSH_LOG(SSH_LOG_WARN, "dup2: %s", strerror(errno));
+            SSH_LOG(SSH_LOG_WARN, "dup2: %s",
+                    ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
 	    exit(1);
         }
         if (devnull > STDERR_FILENO) {
@@ -366,7 +370,7 @@ ssh_exec_shell(char *cmd)
         rc = execv(argv[0], argv);
         if (rc == -1) {
             SSH_LOG(SSH_LOG_WARN, "Failed to execute command '%s': %s", cmd,
-                    strerror(errno));
+                    ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
             /* Die with signal to make this error apparent to parent. */
             signal(SIGTERM, SIG_DFL);
             kill(getpid(), SIGTERM);
@@ -377,14 +381,16 @@ ssh_exec_shell(char *cmd)
     /* Parent */
     close(devnull);
     if (pid == -1) { /* Error */
-        SSH_LOG(SSH_LOG_WARN, "Failed to fork child: %s", strerror(errno));
+        SSH_LOG(SSH_LOG_WARN, "Failed to fork child: %s",
+                ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
         return -1;
 
     }
 
     while (waitpid(pid, &status, 0) == -1) {
         if (errno != EINTR) {
-            SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s", strerror(errno));
+            SSH_LOG(SSH_LOG_WARN, "waitpid failed: %s",
+                    ssh_strerror(errno, err_msg, SSH_ERRNO_MSG_MAX));
             return -1;
         }
     }
@@ -542,6 +548,11 @@ ssh_config_make_absolute(ssh_session session,
         return out;
     }
 
+    /* paths starting with tilde are already absolute */
+    if (path[0] == '~') {
+        return ssh_path_expand_tilde(path);
+    }
+
     /* Parsing user config relative to home directory (generally ~/.ssh) */
     if (session->opts.sshdir == NULL) {
         ssh_set_error_invalid(session);
@@ -612,7 +623,8 @@ ssh_config_parse_line(ssh_session session,
       opcode != SOC_MATCH &&
       opcode != SOC_INCLUDE &&
       opcode != SOC_IDENTITY &&
-      opcode > SOC_UNSUPPORTED) { /* Ignore all unknown types here */
+      opcode > SOC_UNSUPPORTED &&
+      opcode < SOC_MAX) { /* Ignore all unknown types here */
       /* Skip all the options that were already applied */
       if (seen[opcode] != 0) {
           SAFE_FREE(x);
@@ -1160,6 +1172,12 @@ ssh_config_parse_line(ssh_session session,
     case SOC_UNKNOWN:
       SSH_LOG(SSH_LOG_INFO, "Unknown option: %s, line: %d",
               keyword, count);
+      break;
+    case SOC_IDENTITYAGENT:
+      p = ssh_config_get_str_tok(&s, NULL);
+      if (p && *parsing) {
+          ssh_options_set(session, SSH_OPTIONS_IDENTITY_AGENT, p);
+      }
       break;
     default:
       ssh_set_error(session, SSH_FATAL, "ERROR - unimplemented opcode: %d",

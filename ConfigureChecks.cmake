@@ -109,6 +109,10 @@ if (OPENSSL_FOUND)
 
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
     set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
+    check_function_exists(EVP_KDF_CTX_new HAVE_OPENSSL_EVP_KDF_CTX_NEW)
+
+    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
+    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
     check_function_exists(FIPS_mode HAVE_OPENSSL_FIPS_MODE)
 
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
@@ -162,6 +166,11 @@ if (NOT WITH_GCRYPT AND NOT WITH_MBEDTLS)
     if (HAVE_OPENSSL_ECC)
         set(HAVE_ECC 1)
     endif (HAVE_OPENSSL_ECC)
+
+    if (HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID OR HAVE_OPENSSL_EVP_KDF_CTX_NEW)
+        set(HAVE_OPENSSL_EVP_KDF_CTX 1)
+    endif (HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID OR HAVE_OPENSSL_EVP_KDF_CTX_NEW)
+
 endif ()
 
 if (WITH_DSA)
@@ -373,6 +382,23 @@ int main(void) {
     return 0;
 }" HAVE_FALLTHROUGH_ATTRIBUTE)
 
+check_c_source_compiles("
+#define WEAK __attribute__((weak))
+
+WEAK int sum(int a, int b)
+{
+    return a + b;
+}
+
+int main(void)
+{
+    int i = sum(2, 2);
+
+    (void)i;
+
+    return 0;
+}" HAVE_WEAK_ATTRIBUTE)
+
 if (NOT WIN32)
     check_c_source_compiles("
     #define __unused __attribute__((unused))
@@ -473,6 +499,10 @@ if (WITH_PKCS11_URI)
     endif()
     if (WITH_MBEDTLS)
         message(FATAL_ERROR "PKCS #11 is not supported for mbedcrypto")
+        set(WITH_PKCS11_URI 0)
+    endif()
+    if (HAVE_OPENSSL AND NOT OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.1")
+        message(FATAL_ERROR "PKCS #11 requires at least OpenSSL 1.1.1")
         set(WITH_PKCS11_URI 0)
     endif()
 endif()

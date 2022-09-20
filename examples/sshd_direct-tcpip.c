@@ -92,7 +92,7 @@ cleanup_push(struct cleanup_node_struct** head_ref,
     // Allocate memory for node
     struct cleanup_node_struct *new_node = malloc(sizeof *new_node);
 
-    if (head_ref != NULL) {
+    if (*head_ref != NULL) {
         new_node->next = *head_ref;
     } else {
         new_node->next = NULL;
@@ -422,7 +422,7 @@ my_fd_data_function(UNUSED_PARAM(socket_t fd),
                     break;
                 }
                 wr += i;
-                _ssh_log(SSH_LOG_FUNCTIONS, "=== my_fd_data_function", "channel_write (%d from %d)", wr, len);
+                _ssh_log(SSH_LOG_FUNCTIONS, "=== my_fd_data_function", "ssh_channel_write (%d from %d)", wr, len);
             } while (i > 0 && wr < len);
         }
         else {

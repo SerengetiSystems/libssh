@@ -9,13 +9,6 @@ set(LIBSSH_LINK_LIBRARIES
   ${LIBSSH_REQUIRED_LIBRARIES}
 )
 
-if (WIN32)
-  set(LIBSSH_LINK_LIBRARIES
-    ${LIBSSH_LINK_LIBRARIES}
-    ws2_32
-  )
-endif (WIN32)
-
 if (OPENSSL_CRYPTO_LIBRARIES)
   set(LIBSSH_PRIVATE_INCLUDE_DIRS
     ${LIBSSH_PRIVATE_INCLUDE_DIRS}
@@ -92,6 +85,15 @@ if (MINGW AND Threads_FOUND)
     Threads::Threads
   )
 endif()
+
+# This needs to be last for mingw to build
+# https://gitlab.com/libssh/libssh-mirror/-/issues/84
+if (WIN32)
+  set(LIBSSH_LINK_LIBRARIES
+    ${LIBSSH_LINK_LIBRARIES}
+    ws2_32
+  )
+endif (WIN32)
 
 if (BUILD_STATIC_LIB)
   set(LIBSSH_STATIC_LIBRARY
@@ -182,6 +184,8 @@ if (WITH_GCRYPT)
         gcrypt_missing.c
         pki_gcrypt.c
         ecdh_gcrypt.c
+        getrandom_gcrypt.c
+        md_gcrypt.c
         dh_key.c
         pki_ed25519.c
         external/ed25519.c
@@ -205,6 +209,8 @@ elseif (WITH_MBEDTLS)
         mbedcrypto_missing.c
         pki_mbedcrypto.c
         ecdh_mbedcrypto.c
+        getrandom_mbedcrypto.c
+        md_mbedcrypto.c
         dh_key.c
         pki_ed25519.c
         external/ed25519.c
@@ -227,6 +233,8 @@ else (WITH_GCRYPT)
         threads/libcrypto.c
         pki_crypto.c
         ecdh_crypto.c
+        getrandom_crypto.c
+        md_crypto.c
         libcrypto.c
         dh_crypto.c
        )
@@ -298,12 +306,12 @@ if (WITH_GSSAPI AND GSSAPI_FOUND)
 endif (WITH_GSSAPI AND GSSAPI_FOUND)
 
 if (NOT WITH_NACL)
-    if (NOT HAVE_OPENSSL_ED25519)
+    if (NOT HAVE_LIBCRYPTO OR NOT HAVE_OPENSSL_ED25519)
         set(libssh_SRCS
             ${libssh_SRCS}
             external/curve25519_ref.c
            )
-    endif (NOT HAVE_OPENSSL_ED25519)
+    endif()
 endif (NOT WITH_NACL)
 
 # Set the path to the default map file
@@ -340,10 +348,6 @@ endif (WITH_SYMBOL_VERSIONING AND HAVE_LD_VERSION_SCRIPT AND ABIMAP_FOUND)
 # This gets built as a static library, if -DBUILD_SHARED_LIBS=OFF is passed to
 # cmake.
 add_library(ssh ${libssh_SRCS})
-target_compile_options(ssh
-                       PRIVATE
-                           ${DEFAULT_C_COMPILE_FLAGS}
-                           -D_GNU_SOURCE)
 target_include_directories(ssh
                            PUBLIC
                                $<BUILD_INTERFACE:${libssh_SOURCE_DIR}/include>
@@ -400,10 +404,6 @@ install(EXPORT libssh-config
 
 if (BUILD_STATIC_LIB)
   add_library(ssh-static STATIC ${libssh_SRCS})
-  target_compile_options(ssh-static
-                         PRIVATE
-                            ${DEFAULT_C_COMPILE_FLAGS}
-                            -D_GNU_SOURCE)
 
   target_include_directories(ssh-static
                              PUBLIC
