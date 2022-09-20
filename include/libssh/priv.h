@@ -91,6 +91,19 @@ char *strndup(const char *s, size_t n);
 #  define PRIx32 "x"
 # endif /* PRIx32 */
 
+# ifndef PRIxS
+#  define PRIxS "zx"
+# endif /* PRIxS */
+
+# ifndef PRIuS
+#  define PRIuS "zu"
+# endif
+
+# ifndef PRIdS
+#  define PRIdS "zd"
+# endif
+
+
 # ifdef _MSC_VER
 #  include <stdio.h>
 #  include <stdarg.h> /* va_copy define check */
@@ -161,8 +174,17 @@ int ssh_gettimeofday(struct timeval *__p, void *__t);
 #else /* _WIN32 */
 
 #include <unistd.h>
+# ifndef PRIxS
+#  define PRIxS "zx"
+# endif /* PRIx32 */
+# ifndef PRIuS
+#  define PRIuS "zu"
+# endif
+# ifndef PRIdS
+#  define PRIdS "zd"
+# endif
 
-#define _XCLOSESOCKET close
+# define _XCLOSESOCKET close
 
 #endif /* _WIN32 */
 
@@ -240,11 +262,11 @@ int ssh_get_key_params(ssh_session session,
                        enum ssh_digest_e *digest);
 
 /* LOGGING */
-void ssh_log_function(int verbosity,
-                      const char *function,
-                      const char *buffer);
 #define SSH_LOG(priority, ...) \
     _ssh_log(priority, __func__, __VA_ARGS__)
+
+#define SSH_LOG_COMMON(bos, priority, ...) \
+    ssh_log_common(&bos->common, priority, __func__, __VA_ARGS__)
 
 /* LEGACY */
 void ssh_log_common(struct ssh_common_struct *common,

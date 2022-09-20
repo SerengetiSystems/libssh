@@ -30,6 +30,7 @@
 #include "nacl/crypto_scalarmult_curve25519.h"
 #endif
 
+#include "libssh/priv.h"
 #include "libssh/ssh2.h"
 #include "libssh/buffer.h"
 #include "libssh/priv.h"
@@ -67,7 +68,7 @@ static int ssh_curve25519_init(ssh_session session)
 
     pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, NULL);
     if (pctx == NULL) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to initialize X25519 context: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         return SSH_ERROR;
@@ -75,7 +76,7 @@ static int ssh_curve25519_init(ssh_session session)
 
     rc = EVP_PKEY_keygen_init(pctx);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to initialize X25519 keygen: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         EVP_PKEY_CTX_free(pctx);
@@ -85,7 +86,7 @@ static int ssh_curve25519_init(ssh_session session)
     rc = EVP_PKEY_keygen(pctx, &pkey);
     EVP_PKEY_CTX_free(pctx);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to generate X25519 keys: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         return SSH_ERROR;
@@ -102,7 +103,7 @@ static int ssh_curve25519_init(ssh_session session)
     }
 
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to get X25519 raw public key: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         EVP_PKEY_free(pkey);
@@ -113,7 +114,7 @@ static int ssh_curve25519_init(ssh_session session)
                                       session->next_crypto->curve25519_privkey,
                                       &pkey_len);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to get X25519 raw private key: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         EVP_PKEY_free(pkey);
@@ -186,7 +187,7 @@ static int ssh_curve25519_build_k(ssh_session session)
                                         session->next_crypto->curve25519_privkey,
                                         CURVE25519_PRIVKEY_SIZE);
     if (pkey == NULL) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to create X25519 EVP_PKEY: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         return SSH_ERROR;
@@ -194,7 +195,7 @@ static int ssh_curve25519_build_k(ssh_session session)
 
     pctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (pctx == NULL) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to initialize X25519 context: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -202,7 +203,7 @@ static int ssh_curve25519_build_k(ssh_session session)
 
     rc = EVP_PKEY_derive_init(pctx);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to initialize X25519 key derivation: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -218,7 +219,7 @@ static int ssh_curve25519_build_k(ssh_session session)
                                              CURVE25519_PUBKEY_SIZE);
     }
     if (pubkey == NULL) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to create X25519 public key EVP_PKEY: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -226,7 +227,7 @@ static int ssh_curve25519_build_k(ssh_session session)
 
     rc = EVP_PKEY_derive_set_peer(pctx, pubkey);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to set peer X25519 public key: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -234,7 +235,7 @@ static int ssh_curve25519_build_k(ssh_session session)
 
     rc = EVP_PKEY_derive(pctx, k, &shared_key_len);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "Failed to derive X25519 shared secret: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -339,7 +340,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_curve25519_reply){
     goto error;
   }
 
-  SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
   session->dh_handshake_state = DH_STATE_NEWKEYS_SENT;
 
   return SSH_PACKET_USED;
@@ -400,7 +401,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_curve25519_init){
     if (ssh_string_len(q_c_string) != CURVE25519_PUBKEY_SIZE){
         ssh_set_error(session,
                       SSH_FATAL,
-                      "Incorrect size for server Curve25519 public key: %zu",
+					  "Incorrect size for server Curve25519 public key:  %" PRIu32,
                       ssh_string_len(q_c_string));
         goto error;
     }
@@ -491,7 +492,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_curve25519_init){
         goto error;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_ECDH_REPLY sent");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_ECDH_REPLY sent");
     rc = ssh_packet_send(session);
     if (rc == SSH_ERROR) {
         return SSH_ERROR;
@@ -508,7 +509,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_curve25519_init){
     if (rc == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
 
     return SSH_PACKET_USED;
 error:

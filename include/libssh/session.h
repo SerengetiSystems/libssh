@@ -32,6 +32,7 @@
 #include "libssh/poll.h"
 #include "libssh/config.h"
 #include "libssh/misc.h"
+#include "libssh/callbacks.h"
 
 /* These are the different states a SSH session can be into its life */
 enum ssh_session_state_e {
@@ -105,6 +106,35 @@ struct ssh_common_struct {
     struct error_struct error;
     ssh_callbacks callbacks; /* Callbacks to user functions */
     int log_verbosity; /* verbosity of the log functions */
+};
+
+enum ssh_socket_states_e {
+	SSH_SOCKET_NONE,
+	SSH_SOCKET_CONNECTING,
+	SSH_SOCKET_CONNECTED,
+	SSH_SOCKET_EOF,
+	SSH_SOCKET_ERROR,
+	SSH_SOCKET_CLOSED
+};
+
+struct ssh_socket_struct {
+	socket_t fd;
+	int fd_is_socket;
+	int last_errno;
+	int read_wontblock; /* reading now on socket will
+						not block */
+	int write_wontblock;
+	int data_except;
+	enum ssh_socket_states_e state;
+	ssh_buffer out_buffer;
+	ssh_buffer in_buffer;
+	ssh_session session;
+	ssh_socket_callbacks callbacks;
+	ssh_socket_io_callbacks io_callbacks;
+	ssh_poll_handle poll_handle;
+#ifndef _WIN32
+        pid_t proxy_pid;
+#endif
 };
 
 struct ssh_session_struct {
@@ -202,6 +232,7 @@ struct ssh_session_struct {
     struct ssh_packet_callbacks_struct default_packet_callbacks;
     struct ssh_list *packet_callbacks;
     struct ssh_socket_callbacks_struct socket_callbacks;
+    struct ssh_socket_io_callbacks_struct socket_io_callbacks;
     ssh_poll_ctx default_poll_ctx;
     /* options */
 #ifdef WITH_PCAP

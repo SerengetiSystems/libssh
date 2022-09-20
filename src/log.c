@@ -55,9 +55,9 @@ static LIBSSH_THREAD void *ssh_log_userdata;
  * @{
  */
 
-static int current_timestring(int hires, char *buf, size_t len)
+static int current_timestring(char *buf, size_t len)
 {
-    char tbuf[64];
+    size_t tlen;
     struct timeval tv;
     struct tm *tm;
     time_t t;
@@ -70,13 +70,11 @@ static int current_timestring(int hires, char *buf, size_t len)
         return -1;
     }
 
-    if (hires) {
-        strftime(tbuf, sizeof(tbuf) - 1, "%Y/%m/%d %H:%M:%S", tm);
-        snprintf(buf, len, "%s.%06ld", tbuf, (long)tv.tv_usec);
-    } else {
-        strftime(tbuf, sizeof(tbuf) - 1, "%Y/%m/%d %H:%M:%S", tm);
-        snprintf(buf, len, "%s", tbuf);
-    }
+    tlen = strftime(buf, len, "%Y/%m/%d %H:%M:%S", tm);
+    buf += tlen;
+    len -= tlen;
+    snprintf(buf, len, ".%06ld", (long)tv.tv_usec);
+    buf[len - 1] = 0;
 
     return 0;
 }
@@ -88,7 +86,7 @@ static void ssh_log_stderr(int verbosity,
     char date[128] = {0};
     int rc;
 
-    rc = current_timestring(1, date, sizeof(date));
+    rc = current_timestring(date, sizeof(date));
     if (rc == 0) {
         fprintf(stderr, "[%s, %d] %s:", date, verbosity, function);
     } else {
@@ -109,7 +107,7 @@ static void ssh_log_custom(ssh_logging_callback log_fn,
     log_fn(verbosity, function, buf, ssh_get_log_userdata());
 }
 
-void ssh_log_function(int verbosity,
+static void ssh_log_function(int verbosity,
                       const char *function,
                       const char *buffer)
 {
@@ -131,7 +129,29 @@ void ssh_vlog(int verbosity,
     char buffer[LOG_SIZE];
 
     vsnprintf(buffer, sizeof(buffer), format, *va);
+    buffer[sizeof(buffer) - 1] = 0;
     ssh_log_function(verbosity, function, buffer);
+}
+
+static void ssh_vlog_common(
+    struct ssh_common_struct *common,
+    int verbosity,
+    const char* function,
+    const char* format,
+    va_list* va)
+{
+    if (common->callbacks && common->callbacks->log_function)
+    {
+        char buffer[LOG_SIZE];
+        int len = sprintf(buffer, "%s:", function);
+        vsnprintf(buffer + len, sizeof(buffer) - len, format, *va);
+        buffer[sizeof(buffer) - 1] = 0;
+        common->callbacks->log_function(common, verbosity, buffer, common->callbacks->userdata);
+    }
+    else
+    {
+        ssh_vlog(verbosity, function, format, va);
+    }
 }
 
 void _ssh_log(int verbosity,
@@ -153,13 +173,13 @@ void ssh_log(ssh_session session,
              int verbosity,
              const char *format, ...)
 {
-  va_list va;
-
-  if (verbosity <= session->common.log_verbosity) {
-    va_start(va, format);
-    ssh_vlog(verbosity, "", format, &va);
-    va_end(va);
-  }
+    if (verbosity <= session->common.log_verbosity)
+    {
+        va_list va;
+        va_start(va, format);
+        ssh_vlog_common(&session->common, verbosity, "legacy", format, &va);
+        va_end(va);
+    }
 }
 
 /** @internal
@@ -173,11 +193,11 @@ void ssh_log_common(struct ssh_common_struct *common,
                     const char *function,
                     const char *format, ...)
 {
-    va_list va;
-
-    if (verbosity <= common->log_verbosity) {
+    if (verbosity <= common->log_verbosity)
+    {
+        va_list va;
         va_start(va, format);
-        ssh_vlog(verbosity, function, format, &va);
+        ssh_vlog_common(common, verbosity, function, format, &va);
         va_end(va);
     }
 }

@@ -400,7 +400,7 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dh_reply){
     goto error;
   }
 
-  SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
+  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
   session->dh_handshake_state = DH_STATE_NEWKEYS_SENT;
   return SSH_PACKET_USED;
 error:
@@ -542,7 +542,7 @@ int ssh_server_dh_process_init(ssh_session session, ssh_buffer packet)
     if (rc == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG(SSH_LOG_DEBUG, "Sent KEX_DH_[GEX]_REPLY");
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Sent KEX_DH_[GEX]_REPLY");
 
     if (ssh_buffer_add_u8(session->out_buffer, SSH2_MSG_NEWKEYS) < 0) {
         ssh_buffer_reinit(session->out_buffer);
@@ -552,7 +552,7 @@ int ssh_server_dh_process_init(ssh_session session, ssh_buffer packet)
     if (ssh_packet_send(session) == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG(SSH_LOG_PACKET, "SSH_MSG_NEWKEYS sent");
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "SSH_MSG_NEWKEYS sent");
 
     return SSH_OK;
 error:
@@ -574,7 +574,7 @@ error:
 static SSH_PACKET_CALLBACK(ssh_packet_server_dh_init){
     (void)type;
     (void)user;
-    SSH_LOG(SSH_LOG_DEBUG, "Received SSH_MSG_KEXDH_INIT");
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH_MSG_KEXDH_INIT");
     ssh_packet_remove_callbacks(session, &ssh_dh_server_callbacks);
     ssh_server_dh_process_init(session, packet);
     return SSH_PACKET_USED;
@@ -821,7 +821,7 @@ void ssh_print_hash(enum ssh_publickey_hash_type type,
         return;
     }
 
-    fprintf(stderr, "%s\n", fingerprint);
+	SSH_LOG(SSH_LOG_CRYPTO, "%s", fingerprint);
 
     SAFE_FREE(fingerprint);
 }

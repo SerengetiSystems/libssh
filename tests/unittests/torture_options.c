@@ -1,6 +1,8 @@
 #include "config.h"
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
 
 #ifndef _WIN32
 #define _POSIX_PTHREAD_SEMANTICS

@@ -30,18 +30,15 @@ set(LIBSSH_THREAD_UNIT_TESTS
     torture_threads_crypto
 )
 
-if (UNIX AND NOT WIN32)
+find_program(SSHKEYGEN_EXECUTABLE NAMES ssh-keygen)
+if(SSHKEYGEN_EXECUTABLE)
     set(LIBSSH_UNIT_TESTS
         ${LIBSSH_UNIT_TESTS}
-        # this uses a socketpair
-        torture_packet
         # requires ssh-keygen
         torture_keyfiles
         torture_pki
         torture_pki_rsa
         torture_pki_ed25519
-        # requires /dev/null
-        torture_channel
     )
 
     if (WITH_SERVER)
@@ -84,9 +81,20 @@ if (UNIX AND NOT WIN32)
         # requires pthread
         torture_threads_pki_rsa
     )
+endif(SSHKEYGEN_EXECUTABLE)
+
+if (UNIX AND NOT WIN32)
+    set(LIBSSH_UNIT_TESTS
+        ${LIBSSH_UNIT_TESTS}
+        # this uses a socketpair
+        torture_packet
+        # requires /dev/null
+        torture_channel
+    )
+
     if (WITH_SERVER)
-        # Not working correctly
-        # add_cmocka_test(torture_server_x11 torture_server_x11.c ${TEST_TARGET_LIBRARIES})
+    # Not working correctly
+    #    add_cmocka_test(torture_server_x11 torture_server_x11.c ${TEST_TARGET_LIBRARIES})
         # the signals are not testable under cmocka
         # set(LIBSSH_THREAD_UNIT_TESTS
         #     ${LIBSSH_THREAD_UNIT_TESTS}

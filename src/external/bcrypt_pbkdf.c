@@ -102,7 +102,7 @@ bcrypt_hash(ssh_blf_ctx *state, uint8_t *sha2pass, uint8_t *sha2salt, uint8_t *o
 }
 
 int
-bcrypt_pbkdf(const char *pass, size_t passlen, const uint8_t *salt, size_t saltlen,
+bcrypt_pbkdf(const char *pass, size_t passlen, const uint8_t *salt, uint32_t saltlen,
     uint8_t *key, size_t keylen, unsigned int rounds)
 {
 	uint8_t sha2pass[SHA512_DIGEST_LENGTH];
@@ -137,7 +137,7 @@ bcrypt_pbkdf(const char *pass, size_t passlen, const uint8_t *salt, size_t saltl
 
 	/* collapse password */
 	ctx = sha512_init();
-	sha512_update(ctx, pass, passlen);
+	sha512_update(ctx, pass, (unsigned long)passlen);
 	sha512_final(sha2pass, ctx);
 
 	/* generate key, sizeof(out) at a time */

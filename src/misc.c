@@ -410,12 +410,17 @@ char *ssh_hostport(const char *host, int port)
  *
  * @see ssh_string_free_char()
  */
+#ifdef _DEBUG
+#define MAX_SHOW 128
+#else
+#define MAX_SHOW 48
+#endif
 char *ssh_get_hexa(const unsigned char *what, size_t len)
 {
     const char h[] = "0123456789abcdef";
     char *hexa;
     size_t i;
-    size_t hlen = len * 3;
+	size_t hlen = len > MAX_SHOW ? MAX_SHOW * 3 + 3 : len * 3;
 
     if (len > (UINT_MAX - 1) / 3) {
         return NULL;
@@ -426,12 +431,33 @@ char *ssh_get_hexa(const unsigned char *what, size_t len)
         return NULL;
     }
 
+	if (len > MAX_SHOW)
+	{
+		int j;
+		for (i = 0; i < MAX_SHOW / 2; i++) {
+			hexa[i * 3] = h[(what[i] >> 4) & 0xF];
+			hexa[i * 3 + 1] = h[what[i] & 0xF];
+			hexa[i * 3 + 2] = ':';
+		}
+		hexa[i * 3] = '.';
+		hexa[i * 3 + 1] = '.';
+		hexa[i * 3 + 2] = '.';
+		for (j = MAX_SHOW / 2 + 1, i = len - MAX_SHOW / 2; i < len; i++, j++) {
+			hexa[j * 3] = ':';
+			hexa[j * 3 + 1] = h[(what[i] >> 4) & 0xF];
+			hexa[j * 3 + 2] = h[what[i] & 0xF];
+		}
+		hexa[hlen] = '\0';
+	}
+	else
+	{
     for (i = 0; i < len; i++) {
         hexa[i * 3] = h[(what[i] >> 4) & 0xF];
         hexa[i * 3 + 1] = h[what[i] & 0xF];
         hexa[i * 3 + 2] = ':';
     }
     hexa[hlen - 1] = '\0';
+	}
 
     return hexa;
 }
@@ -446,7 +472,7 @@ void ssh_print_hexa(const char *descr, const unsigned char *what, size_t len)
     if (hexa == NULL) {
       return;
     }
-    fprintf(stderr, "%s: %s\n", descr, hexa);
+	_ssh_log(SSH_LOG_CRYPTO, descr, "%s", hexa);
 
     free(hexa);
 }
@@ -527,8 +553,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
         SSH_LOG(SSH_LOG_DEBUG, "%s", buffer);
         return;
     } else {
-        printed = snprintf(buffer + count, sizeof(buffer) - count,
-                           "(%zu bytes):", len);
+        printed = snprintf(buffer + count, sizeof(buffer) - count, "(%" PRIuS " bytes):", len);
         if (printed < 0) {
             goto error;
         }
@@ -577,7 +602,7 @@ void ssh_log_hexdump(const char *descr, const unsigned char *what, size_t len)
 
             /* Start a new line with the offset */
             printed = snprintf(buffer, sizeof(buffer),
-                               "  %08zx ", i);
+				"  %08" PRIxS " ", i);
             if (printed < 0) {
                 goto error;
             }
@@ -1330,7 +1355,7 @@ int ssh_analyze_banner(ssh_session session, int server)
           return -1;
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "Analyzing banner: %s", banner);
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Analyzing banner: %s", banner);
 
     switch (banner[4]) {
         case '2':
@@ -1384,7 +1409,7 @@ int ssh_analyze_banner(ssh_session session, int server)
 
             session->openssh = SSH_VERSION_INT(((int) major), ((int) minor), 0);
 
-            SSH_LOG(SSH_LOG_PROTOCOL,
+            SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
                     "We are talking to an OpenSSH %s version: %lu.%lu (%x)",
                     server ? "client" : "server",
                     major, minor, session->openssh);

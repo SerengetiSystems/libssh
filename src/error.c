@@ -61,13 +61,9 @@ void _ssh_set_error(void *error,
     va_start(va, descr);
     vsnprintf(err->error.error_buffer, ERROR_BUFFERLEN, descr, va);
     va_end(va);
-
+   
     err->error.error_code = code;
-    if (ssh_get_log_level() >= SSH_LOG_WARN) {
-        ssh_log_function(SSH_LOG_WARN,
-                         function,
-                         err->error.error_buffer);
-    }
+    ssh_log_common(err, SSH_LOG_WARN, function, "%s", err->error.error_buffer);
 }
 
 /**

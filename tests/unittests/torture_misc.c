@@ -10,7 +10,10 @@
 #include <pwd.h>
 #endif
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
+
 #include <libssh/priv.h>
 
 #include "misc.c"

@@ -144,7 +144,7 @@ static int pki_private_key_decrypt(ssh_string blob,
     }
     if (ssh_string_len(blob) % cipher.blocksize != 0) {
         SSH_LOG(SSH_LOG_WARN,
-                "Encrypted string not multiple of blocksize: %zu",
+                "Encrypted string not multiple of blocksize: %" PRIu32,
                 ssh_string_len(blob));
         return SSH_ERROR;
     }
@@ -172,7 +172,7 @@ static int pki_private_key_decrypt(ssh_string blob,
     }
 
     SSH_LOG(SSH_LOG_DEBUG,
-            "Decryption: %d key, %d IV, %d rounds, %zu bytes salt",
+            "Decryption: %d key, %d IV, %d rounds, %" PRIu32 " bytes salt",
             cipher.keysize/8,
             cipher.blocksize,
             rounds,
@@ -478,7 +478,7 @@ static int pki_private_key_encrypt(ssh_buffer privkey_buffer,
         return SSH_ERROR;
     }
 
-    SSH_LOG(SSH_LOG_WARN, "Encryption: %d key, %d IV, %d rounds, %zu bytes salt",
+    SSH_LOG(SSH_LOG_WARN, "Encryption: %d key, %d IV, %d rounds, %" PRIu32 " bytes salt",
                 cipher.keysize/8,
                 cipher.blocksize, rounds, ssh_string_len(salt));
 

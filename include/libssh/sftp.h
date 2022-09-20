@@ -548,6 +548,42 @@ LIBSSH_API int sftp_async_read_begin(sftp_file file, uint32_t len);
 LIBSSH_API int sftp_async_read(sftp_file file, void *data, uint32_t len, uint32_t id);
 
 /**
+ * @brief start an asynchronous write and save the message id.
+ *
+ * @param file          The opened sftp file handle to be read from.
+ *
+ * @param data          Pointer to buffer contianing data to send.
+ *
+ * @param len           Size of the data in bytes.
+ *
+ * @return              Id of write request, SSH_ERROR if an error
+ *                      occured, SSH_AGAIN if the file is opened in nonblocking
+ *                      mode and the request hasn't been executed yet.
+ *
+ * @see sftp_open()
+ * @see sftp_async_write_end()
+ */
+LIBSSH_API int sftp_async_write_begin(sftp_file file, const void* buf, size_t count);
+
+/**
+ * @brief check completion status of a write id returned from sftp_async_write_begin.
+ *
+ * @param file          The opened sftp file handle to be read from.
+ *
+ * @param id            message id returned by sftp_async_write_begin
+ *
+ * @return              SSH_OK on success, SSH_ERROR if an error
+ *                      occured, SSH_AGAIN if the socket is opened in nonblocking
+ *                      mode and the response hasn't been read yet.
+ *
+ * @warning             A call to this function with an invalid identifier
+ *                      will never return.
+ *
+ * @see sftp_async_write_begin()
+ */
+LIBSSH_API int sftp_async_write_end(sftp_file file, int id);
+
+/**
  * @brief Write to a file using an opened sftp file handle.
  *
  * @param file          Open sftp file handle to write to.
@@ -693,6 +729,9 @@ LIBSSH_API int sftp_rename(sftp_session sftp, const char *original, const  char 
  * @see sftp_get_error()
  */
 LIBSSH_API int sftp_setstat(sftp_session sftp, const char *file, sftp_attributes attr);
+
+
+LIBSSH_API int sftp_fsetstat(sftp_file file, sftp_attributes attr);
 
 /**
  * @brief Change the file owner and group
@@ -984,6 +1023,26 @@ LIBSSH_API void sftp_handle_remove(sftp_session sftp, void *handle);
 #define SSH_FX_WRITE_PROTECT 12
 /** No media in remote drive */
 #define SSH_FX_NO_MEDIA 13
+#define SSH_FX_NO_SPACE_ON_FILESYSTEM   14
+#define SSH_FX_QUOTA_EXCEEDED           15
+#define SSH_FX_UNKNOWN_PRINCIPLE        16 /* Initial mis-spelling */
+#define SSH_FX_UNKNOWN_PRINCIPAL        16
+#define SSH_FX_LOCK_CONFlICT            17 /* Initial mis-spelling */
+#define SSH_FX_LOCK_CONFLICT            17
+#define SSH_FX_DIR_NOT_EMPTY            18
+#define SSH_FX_NOT_A_DIRECTORY          19
+#define SSH_FX_INVALID_FILENAME         20
+#define SSH_FX_LINK_LOOP                21
+#define SSH_FX_CANNOT_DELETE 22
+#define SSH_FX_INVALID_PARAMETER 23
+#define SSH_FX_IS_DIRECTORY 24
+#define SSH_FX_RANGE_LOCK_CONFLICT 25
+#define SSH_FX_RANGE_LOCK_REFUSED 26
+#define SSH_FX_DELETE_PENDING 27
+#define SSH_FX_FILE_CORRUPT 28
+#define SSH_FX_OWNER_INVALID 29
+#define SSH_FX_GROUP_INVALID 30
+#define SSH_FX_LOCK_OUT_OF_RANGE 31
 
 /** @} */
 

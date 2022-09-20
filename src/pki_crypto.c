@@ -80,7 +80,7 @@ static int pem_get_password(char *buf, int size, int rwflag, void *userdata) {
                      buf, size, 0, 0,
                      pgp->data);
         if (rc == 0) {
-            return strlen(buf);
+            return (int)strlen(buf);
         }
     }
 
@@ -2202,7 +2202,7 @@ static ssh_string pki_dsa_signature_to_blob(const ssh_signature sig)
     size_t s_len, s_offset_in, s_offset_out;
 
     const unsigned char *raw_sig_data = NULL;
-    size_t raw_sig_len;
+    uint32_t raw_sig_len;
     int rc;
 
     DSA_SIG *dsa_sig;
@@ -2286,7 +2286,7 @@ static ssh_string pki_ecdsa_signature_to_blob(const ssh_signature sig)
     const BIGNUM *pr = NULL, *ps = NULL;
 
     const unsigned char *raw_sig_data = NULL;
-    size_t raw_sig_len;
+    uint32_t raw_sig_len;
 
     ECDSA_SIG *ecdsa_sig;
 
@@ -2402,8 +2402,8 @@ static int pki_signature_from_rsa_blob(const ssh_key pubkey,
     char *blob_padded_data = NULL;
     ssh_string sig_blob_padded = NULL;
 
-    size_t rsalen = 0;
-    size_t len = ssh_string_len(sig_blob);
+    uint32_t rsalen = 0;
+    uint32_t len = ssh_string_len(sig_blob);
 
 #if OPENSSL_VERSION_NUMBER < 0x30000000L
     if (pubkey->rsa == NULL) {
@@ -2429,7 +2429,7 @@ static int pki_signature_from_rsa_blob(const ssh_key pubkey,
     }
 
 #ifdef DEBUG_CRYPTO
-    SSH_LOG(SSH_LOG_DEBUG, "RSA signature len: %lu", (unsigned long)len);
+    SSH_LOG(SSH_LOG_DEBUG, "RSA signature len: %" PRIu32, len);
     ssh_log_hexdump("RSA signature", ssh_string_data(sig_blob), len);
 #endif /* DEBUG_CRYPTO */
 
@@ -3018,7 +3018,7 @@ ssh_signature pki_sign_data(const ssh_key privkey,
     int rc;
 
     if (privkey == NULL || !ssh_key_is_private(privkey) || input == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG(SSH_LOG_WARN, "Bad parameter provided to "
                                "pki_sign_data()");
         return NULL;
     }
@@ -3055,21 +3055,21 @@ ssh_signature pki_sign_data(const ssh_key privkey,
     raw_sig_len = (size_t)EVP_PKEY_size(pkey);
     raw_sig_data = (unsigned char *)malloc(raw_sig_len);
     if (raw_sig_data == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Out of memory");
+        SSH_LOG(SSH_LOG_WARN, "Out of memory");
         goto out;
     }
 
     /* Create the context */
     ctx = EVP_MD_CTX_new();
     if (ctx == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Out of memory");
+        SSH_LOG(SSH_LOG_WARN, "Out of memory");
         goto out;
     }
 
     /* Sign the data */
     rc = EVP_DigestSignInit(ctx, NULL, md, NULL, pkey);
     if (rc != 1){
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignInit() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3078,7 +3078,7 @@ ssh_signature pki_sign_data(const ssh_key privkey,
 #ifdef HAVE_OPENSSL_EVP_DIGESTSIGN
     rc = EVP_DigestSign(ctx, raw_sig_data, &raw_sig_len, input, input_len);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSign() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3086,7 +3086,7 @@ ssh_signature pki_sign_data(const ssh_key privkey,
 #else
     rc = EVP_DigestSignUpdate(ctx, input, input_len);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignUpdate() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3094,7 +3094,7 @@ ssh_signature pki_sign_data(const ssh_key privkey,
 
     rc = EVP_DigestSignFinal(ctx, raw_sig_data, &raw_sig_len);
     if (rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestSignFinal() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3176,7 +3176,7 @@ int pki_verify_data_signature(ssh_signature signature,
 #endif
         ))
     {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG(SSH_LOG_WARN, "Bad parameter provided to "
                                "pki_verify_data_signature()");
         return SSH_ERROR;
     }
@@ -3221,7 +3221,7 @@ int pki_verify_data_signature(ssh_signature signature,
     /* Create the context */
     ctx = EVP_MD_CTX_new();
     if (ctx == NULL) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "Failed to create EVP_MD_CTX: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3230,7 +3230,7 @@ int pki_verify_data_signature(ssh_signature signature,
     /* Verify the signature */
     evp_rc = EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey);
     if (evp_rc != 1){
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "EVP_DigestVerifyInit() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3241,7 +3241,7 @@ int pki_verify_data_signature(ssh_signature signature,
 #else
     evp_rc = EVP_DigestVerifyUpdate(ctx, input, input_len);
     if (evp_rc != 1) {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE,
                 "EVP_DigestVerifyUpdate() failed: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         goto out;
@@ -3253,7 +3253,7 @@ int pki_verify_data_signature(ssh_signature signature,
         SSH_LOG(SSH_LOG_TRACE, "Signature valid");
         rc = SSH_OK;
     } else {
-        SSH_LOG(SSH_LOG_TRACE,
+        SSH_LOG(SSH_LOG_WARN,
                 "Signature invalid: %s",
                 ERR_error_string(ERR_get_error(), NULL));
         rc = SSH_ERROR;

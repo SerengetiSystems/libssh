@@ -43,9 +43,7 @@ ssh_string ssh_make_bignum_string(bignum num) {
   }
 
 #ifdef DEBUG_CRYPTO
-  SSH_LOG(SSH_LOG_TRACE,
-          "%zu bits, %zu bytes, %zu padding\n",
-          bits, len, pad);
+  SSH_LOG(SSH_LOG_CRYPTO, "%" PRIuS " bits, %" PRIuS " bytes, %" PRIuS " padding", bits, len, pad);
 #endif /* DEBUG_CRYPTO */
 
   ptr = ssh_string_new(len + pad);
@@ -66,12 +64,11 @@ ssh_string ssh_make_bignum_string(bignum num) {
 bignum ssh_make_string_bn(ssh_string string)
 {
     bignum bn = NULL;
-    size_t len = ssh_string_len(string);
+    uint32_t len = ssh_string_len(string);
 
 #ifdef DEBUG_CRYPTO
-    SSH_LOG(SSH_LOG_TRACE,
-            "Importing a %zu bits, %zu bytes object ...\n",
-            len * 8, len);
+  SSH_LOG(SSH_LOG_CRYPTO, "Importing a %" PRIu32 " bits, %" PRIu32 " bytes object ...",
+      len * 8, len);
 #endif /* DEBUG_CRYPTO */
 
     bignum_bin2bn(string->data, len, &bn);
@@ -86,7 +83,7 @@ void ssh_print_bignum(const char *name, const_bignum num)
     if (num != NULL) {
         bignum_bn2hex(num, &hex);
     }
-    SSH_LOG(SSH_LOG_DEBUG, "%s value: %s\n", name, (hex == NULL) ? "(null)" : (char *) hex);
+    SSH_LOG(SSH_LOG_DEBUG, "%s value: %s", name, (hex == NULL) ? "(null)" : (char *)hex);
 #ifdef HAVE_LIBGCRYPT
     SAFE_FREE(hex);
 #elif defined HAVE_LIBCRYPTO

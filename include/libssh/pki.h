@@ -149,10 +149,11 @@ void ssh_signature_free(ssh_signature sign);
 
 int ssh_pki_export_signature_blob(const ssh_signature sign,
                                   ssh_string *sign_blob);
-int ssh_pki_import_signature_blob(const ssh_string sig_blob,
+int ssh_pki_import_signature_blob(ssh_session session, 
+                                  const ssh_string sig_blob,
                                   const ssh_key pubkey,
                                   ssh_signature *psig);
-int ssh_pki_signature_verify(ssh_session session,
+int ssh_pki_signature_verify(ssh_session, 
                              ssh_signature sig,
                              const ssh_key key,
                              const unsigned char *digest,
@@ -171,11 +172,9 @@ int ssh_pki_import_cert_blob(const ssh_string cert_blob,
 /* SSH Signing Functions */
 ssh_string ssh_pki_do_sign(ssh_session session, ssh_buffer sigbuf,
     const ssh_key privatekey, enum ssh_digest_e hash_type);
-ssh_string ssh_pki_do_sign_agent(ssh_session session,
-                                 struct ssh_buffer_struct *buf,
+ssh_string ssh_pki_do_sign_agent(ssh_session session, struct ssh_buffer_struct *buf,
                                  const ssh_key pubkey);
-ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
-                                         const ssh_key privkey,
+ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session, const ssh_key privkey,
                                          const enum ssh_digest_e digest);
 
 /* Temporary functions, to be removed after migration to ssh_key */

@@ -54,8 +54,7 @@ struct ssh_bind_struct {
   int rsa_min_size;
 };
 
-struct ssh_poll_handle_struct *ssh_bind_get_poll(struct ssh_bind_struct
-    *sshbind);
+ssh_poll_handle ssh_bind_get_poll(struct ssh_bind_struct *sshbind);
 
 
 #endif /* BIND_H_ */

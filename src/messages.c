@@ -83,7 +83,7 @@ static ssh_message ssh_message_new(ssh_session session)
  * SSH_MSG_UNIMPLEMENTED
  */
 static int ssh_message_reply_default(ssh_message msg) {
-  SSH_LOG(SSH_LOG_FUNCTIONS, "Reporting unknown packet");
+  SSH_LOG_COMMON(msg->session, SSH_LOG_FUNCTIONS, "Reporting unknown packet");
 
   if (ssh_buffer_add_u8(msg->session->out_buffer, SSH2_MSG_UNIMPLEMENTED) < 0)
     goto error;
@@ -115,6 +115,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                     ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                 } else {
                     ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                 }
 
                 return SSH_OK;
@@ -129,6 +131,8 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                    ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                  } else {
                    ssh_message_reply_default(msg);
+                   if (rc == SSH_AUTH_ERROR)
+                     ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                  }
                } else {
                  if (rc == SSH_AUTH_SUCCESS) {
@@ -147,10 +151,60 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                     ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
                 } else {
                     ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
                 }
 
                 return SSH_OK;
             }
+            else if (msg->auth_request.method == SSH_AUTH_METHOD_INTERACTIVE &&
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_start_function) &&
+              ssh_callbacks_exists(session->server_callbacks, auth_kbdint_reply_function) ){
+              if (ssh_message_auth_kbdint_is_response(msg))
+              {
+                rc = session->server_callbacks->auth_kbdint_reply_function(session, session->kbdint->nanswers, session->kbdint->answers, session->server_callbacks->userdata);
+                if (rc == SSH_AUTH_SUCCESS || rc == SSH_AUTH_PARTIAL) {
+                  ssh_message_auth_reply_success(msg, rc == SSH_AUTH_PARTIAL);
+                }
+                else if (rc == SSH_AUTH_INFO)
+                {
+                  //wants to ask more questions
+                  goto label;
+                }
+                else {
+                  ssh_message_reply_default(msg);
+                  if (rc == SSH_AUTH_ERROR)
+                    ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
+                }
+              }
+              else
+              {
+              label:
+                {
+                  uint32_t nquestions = 10;
+                  const char * questions[10];
+                  char echo[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                  const char * name, * instruction;
+                  rc = session->server_callbacks->auth_kbdint_start_function(session, msg->auth_request.username, &name, &instruction, &nquestions, questions, echo, session->server_callbacks->userdata);
+                  if (rc == SSH_AUTH_INFO)
+                  {
+                    ssh_message_auth_interactive_request(msg, name, instruction, nquestions, questions, echo);
+                  }
+                  else
+                  {
+                    ssh_message_reply_default(msg);
+                    if (rc == SSH_AUTH_ERROR)
+                      ssh_set_error(session, SSH_FATAL, "Authentication failed with error result");
+                  }
+                }
+              }
+              return SSH_OK;
+            }
+	    else if (msg->auth_request.method == SSH_AUTH_METHOD_UNKNOWN)
+	    {   // auth messages must always b replied to with auth succeess or auth failure
+		    ssh_message_reply_default(msg);
+		    return SSH_OK;
+	    }
             break;
         case SSH_REQUEST_CHANNEL_OPEN:
             if (msg->channel_request_open.type == SSH_CHANNEL_SESSION &&
@@ -160,7 +214,7 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                 if (channel != NULL) {
                     rc = ssh_message_channel_request_open_reply_accept_channel(msg, channel);
                     if (rc != SSH_OK) {
-                        SSH_LOG(SSH_LOG_WARNING,
+                        SSH_LOG_COMMON(session, SSH_LOG_WARNING,
                                 "Failed to send reply for accepting a channel "
                                 "open");
                     }
@@ -237,7 +291,7 @@ static int ssh_execute_server_request(ssh_session session, ssh_message msg)
                                                     msg->channel_request.pxwidth,
                                                     msg->channel_request.pxheight);
                     if (rc != SSH_OK) {
-                        SSH_LOG(SSH_LOG_WARNING,
+                        SSH_LOG_COMMON(session, SSH_LOG_WARNING,
                                 "Failed to iterate callbacks for window change");
                     }
                     return SSH_OK;
@@ -664,7 +718,7 @@ SSH_PACKET_CALLBACK(ssh_packet_service_request)
         goto error;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "Received a SERVICE_REQUEST for service %s",
             service_c);
 
@@ -768,14 +822,14 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
       goto error;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Auth request for service %s, method %s for user '%s'",
       service, method,
       msg->auth_request.username);
 
   cmp = strcmp(service, "ssh-connection");
   if (cmp != 0) {
-      SSH_LOG(SSH_LOG_WARNING,
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING,
               "Invalid service request: %s",
               service);
       goto end;
@@ -786,7 +840,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     goto end;
   }
 
-  if (strcmp(method, "password") == 0) {
+  else if (strcmp(method, "password") == 0) {
     uint8_t tmp;
 
     msg->auth_request.method = SSH_AUTH_METHOD_PASSWORD;
@@ -797,23 +851,21 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     goto end;
   }
 
-  if (strcmp(method, "keyboard-interactive") == 0) {
-    ssh_string lang = NULL;
-    ssh_string submethods = NULL;
-
+  else if (strcmp(method, "keyboard-interactive") == 0) {
     msg->auth_request.method = SSH_AUTH_METHOD_INTERACTIVE;
-    lang = ssh_buffer_get_ssh_string(packet);
-    if (lang == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "language string invalid");
       goto error;
     }
     /* from the RFC 4256
      * 3.1.  Initial Exchange
      * "The language tag is deprecated and SHOULD be the empty string."
      */
-    SSH_STRING_FREE(lang);
 
-    submethods = ssh_buffer_get_ssh_string(packet);
-    if (submethods == NULL) {
+    if (ssh_buffer_pass_string(packet) < 0)
+    {
+      SSH_LOG_COMMON(session, SSH_LOG_WARNING, "submethods string invalid");
       goto error;
     }
     /* from the RFC 4256
@@ -822,12 +874,10 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
      *  server is that, unless the user may use multiple different
      *  submethods, the server ignores this field."
      */
-    SSH_STRING_FREE(submethods);
-
     goto end;
   }
 
-  if (strcmp(method, "publickey") == 0) {
+  else if (strcmp(method, "publickey") == 0) {
     ssh_string algo = NULL;
     ssh_string pubkey_blob = NULL;
     uint8_t has_sign;
@@ -847,12 +897,8 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     rc = ssh_pki_import_pubkey_blob(pubkey_blob, &msg->auth_request.pubkey);
     SSH_STRING_FREE(pubkey_blob);
     pubkey_blob = NULL;
-    if (rc < 0) {
-        SSH_STRING_FREE(algo);
-        algo = NULL;
-        goto error;
-    }
-    msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
+	if (rc >= 0) {
+		msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_NONE;
     msg->auth_request.sigtype = strdup(ssh_string_get_char(algo));
     if (msg->auth_request.sigtype == NULL) {
         msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
@@ -861,77 +907,63 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
         goto error;
     }
 
-    // has a valid signature ?
-    if(has_sign) {
-        ssh_string sig_blob = NULL;
-        ssh_buffer digest = NULL;
+		// has a valid signature ?
+		if (has_sign) {
+			ssh_string sig_blob = NULL;
+			ssh_buffer digest = NULL;
 
-        sig_blob = ssh_buffer_get_ssh_string(packet);
-        if(sig_blob == NULL) {
-            SSH_LOG(SSH_LOG_PACKET, "Invalid signature packet from peer");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
+			sig_blob = ssh_buffer_get_ssh_string(packet);
+			if (sig_blob == NULL) {
+				SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Invalid signature packet from peer");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_ERROR;
             SSH_STRING_FREE(algo);
-            algo = NULL;
-            goto error;
-        }
+				algo = NULL;
+				goto error;
+			}
 
-        digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
+			digest = ssh_msg_userauth_build_digest(session, msg, service, algo);
         SSH_STRING_FREE(algo);
-        algo = NULL;
-        if (digest == NULL) {
+			algo = NULL;
+			if (digest == NULL) {
             SSH_STRING_FREE(sig_blob);
-            SSH_LOG(SSH_LOG_PACKET, "Failed to get digest");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-            goto error;
-        }
+				SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Failed to get digest");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+				goto error;
+			}
 
-        rc = ssh_pki_import_signature_blob(sig_blob,
-                                           msg->auth_request.pubkey,
-                                           &sig);
-        if (rc == SSH_OK) {
-            /* Check if the signature from client matches server preferences */
-            if (session->opts.pubkey_accepted_types) {
-                if (!ssh_match_group(session->opts.pubkey_accepted_types,
-                            sig->type_c))
-                {
-                    ssh_set_error(session,
-                            SSH_FATAL,
-                            "Public key from client (%s) doesn't match server "
-                            "preference (%s)",
-                            sig->type_c,
-                            session->opts.pubkey_accepted_types);
-                    rc = SSH_ERROR;
-                }
-            }
-
-            if (rc == SSH_OK) {
-                rc = ssh_pki_signature_verify(session,
-                                              sig,
-                                              msg->auth_request.pubkey,
-                                              ssh_buffer_get(digest),
-                                              ssh_buffer_get_len(digest));
-            }
-        }
+			rc = ssh_pki_import_signature_blob(session, sig_blob,
+				msg->auth_request.pubkey,
+				&sig);
+			if (rc == SSH_OK) {
+				rc = ssh_pki_signature_verify(session,
+                                        sig,
+					msg->auth_request.pubkey,
+					ssh_buffer_get(digest),
+					ssh_buffer_get_len(digest));
+			}
         SSH_STRING_FREE(sig_blob);
         SSH_BUFFER_FREE(digest);
-        ssh_signature_free(sig);
-        if (rc < 0) {
-            SSH_LOG(
-                    SSH_LOG_PACKET,
-                    "Received an invalid signature from peer");
-            msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
-            goto error;
-        }
+			ssh_signature_free(sig);
+			if (rc < 0) {
+				SSH_LOG_COMMON(session, 
+					SSH_LOG_PACKET,
+					"Received an invalid signature from peer");
+				msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_WRONG;
+				goto error;
+			}
 
-        SSH_LOG(SSH_LOG_PACKET, "Valid signature received");
+			SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Valid signature received");
 
-        msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
-    }
+			msg->auth_request.signature_state = SSH_PUBLICKEY_STATE_VALID;
+		}
     SSH_STRING_FREE(algo);
-    goto end;
+		goto end;
+	}
+	else
+	    SSH_STRING_FREE(algo);
   }
 #ifdef WITH_GSSAPI
-  if (strcmp(method, "gssapi-with-mic") == 0) {
+  else if (strcmp(method, "gssapi-with-mic") == 0) {
      uint32_t n_oid;
      ssh_string *oids;
      ssh_string oid;
@@ -943,7 +975,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     	 ssh_set_error(session, SSH_FATAL, "USERAUTH_REQUEST: gssapi-with-mic OID count too big (%d)",n_oid);
     	 goto error;
      }
-     SSH_LOG(SSH_LOG_PACKET, "gssapi: %d OIDs", n_oid);
+     SSH_LOG_COMMON(session, SSH_LOG_PACKET, "gssapi: %d OIDs", n_oid);
      oids = calloc(n_oid, sizeof(ssh_string));
      if (oids == NULL){
     	 ssh_set_error_oom(session);
@@ -962,7 +994,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
     	 oids[i] = oid;
     	 if(session->common.log_verbosity >= SSH_LOG_PACKET){
     		 hexa = ssh_get_hexa(ssh_string_data(oid), ssh_string_len(oid));
-    		 SSH_LOG(SSH_LOG_PACKET,"gssapi: OID %d: %s",i, hexa);
+    		 SSH_LOG_COMMON(session, SSH_LOG_PACKET,"gssapi: OID %d: %s",i, hexa);
     		 SAFE_FREE(hexa);
     	 }
      }
@@ -982,7 +1014,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_request){
 #endif
 
   msg->auth_request.method = SSH_AUTH_METHOD_UNKNOWN;
-  SAFE_FREE(method);
   goto end;
 error:
   SAFE_FREE(service);
@@ -1019,7 +1050,6 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
 SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   uint32_t nanswers;
   uint32_t i;
-  ssh_string tmp;
   int rc;
 
   ssh_message msg = NULL;
@@ -1055,7 +1085,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   }
 
   if (session->kbdint == NULL) {
-    SSH_LOG(SSH_LOG_PROTOCOL, "Warning: Got a keyboard-interactive "
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Warning: Got a keyboard-interactive "
                         "response but it seems we didn't send the request.");
 
     session->kbdint = ssh_kbdint_new();
@@ -1067,16 +1097,18 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   } else if (session->kbdint->answers != NULL) {
       uint32_t n;
 
-      for (n = 0; n < session->kbdint->nanswers; n++) {
-            explicit_bzero(session->kbdint->answers[n],
-                           strlen(session->kbdint->answers[n]));
-            SAFE_FREE(session->kbdint->answers[n]);
+      ssh_kbdint kbdint = session->kbdint;
+
+      for (n = 0; n < kbdint->nanswers; n++) {
+        char* answer = kbdint->answers[n];
+        explicit_bzero(answer, strlen(answer));
+        free(answer);
       }
-      SAFE_FREE(session->kbdint->answers);
-      session->kbdint->nanswers = 0;
+      SAFE_FREE(kbdint->answers);
+      kbdint->nanswers = 0;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,"kbdint: %d answers",nanswers);
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,"kbdint: %d answers",nanswers);
   if (nanswers > KBDINT_MAX_PROMPT) {
     ssh_set_error(session, SSH_FATAL,
         "Too much answers received from client: %u (0x%.4x)",
@@ -1089,7 +1121,7 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
 
   if(nanswers != session->kbdint->nprompts) {
     /* warn but let the application handle this case */
-    SSH_LOG(SSH_LOG_PROTOCOL, "Warning: Number of prompts and answers"
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Warning: Number of prompts and answers"
                 " mismatch: p=%u a=%u", session->kbdint->nprompts, nanswers);
   }
   session->kbdint->nanswers = nanswers;
@@ -1105,7 +1137,8 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
   }
 
   for (i = 0; i < nanswers; i++) {
-    tmp = ssh_buffer_get_ssh_string(packet);
+    uint32_t len;
+    char *tmp = ssh_buffer_get_char_string(packet, &len);
     if (tmp == NULL) {
       ssh_set_error(session, SSH_FATAL, "Short INFO_RESPONSE packet");
       session->kbdint->nanswers = i;
@@ -1114,17 +1147,8 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_response){
 
       goto error;
     }
-    session->kbdint->answers[i] = ssh_string_to_char(tmp);
-    SSH_STRING_FREE(tmp);
-    if (session->kbdint->answers[i] == NULL) {
-      ssh_set_error_oom(session);
-      session->kbdint->nanswers = i;
-      ssh_kbdint_free(session->kbdint);
-      session->kbdint = NULL;
-
-      goto error;
+    session->kbdint->answers[i] = tmp;
     }
-  }
 
   ssh_message_queue(session,msg);
 
@@ -1157,7 +1181,7 @@ SSH_PACKET_CALLBACK(ssh_packet_channel_open){
       goto error;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Clients wants to open a %s channel", type_c);
 
   ssh_buffer_unpack(packet,"ddd",
@@ -1261,8 +1285,8 @@ int ssh_message_channel_request_open_reply_accept_channel(ssh_message msg, ssh_c
     session = msg->session;
 
     chan->local_channel = ssh_channel_new_id(session);
-    chan->local_maxpacket = 35000;
-    chan->local_window = 32000;
+    chan->local_maxpacket = CHANNEL_MAX_PACKET;
+	chan->local_window = CHANNEL_INITIAL_WINDOW;
     chan->remote_channel = msg->channel_request_open.sender;
     chan->remote_maxpacket = msg->channel_request_open.packet_size;
     chan->remote_window = msg->channel_request_open.window;
@@ -1281,7 +1305,7 @@ int ssh_message_channel_request_open_reply_accept_channel(ssh_message msg, ssh_c
         return SSH_ERROR;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "Accepting a channel request_open for chan %d",
             chan->remote_channel);
 
@@ -1352,7 +1376,7 @@ int ssh_message_handle_channel_request(ssh_session session, ssh_channel channel,
     goto error;
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(session, SSH_LOG_PACKET,
       "Received a %s channel_request for channel (%d:%d) (want_reply=%hhd)",
       request, channel->local_channel, channel->remote_channel, want_reply);
 
@@ -1464,7 +1488,7 @@ int ssh_message_channel_request_reply_success(ssh_message msg) {
   if (msg->channel_request.want_reply) {
     channel = msg->channel_request.channel->remote_channel;
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(msg->session, SSH_LOG_PACKET,
         "Sending a channel_request success to channel %d", channel);
 
     rc = ssh_buffer_pack(msg->session->out_buffer,
@@ -1479,7 +1503,7 @@ int ssh_message_channel_request_reply_success(ssh_message msg) {
     return ssh_packet_send(msg->session);
   }
 
-  SSH_LOG(SSH_LOG_PACKET,
+  SSH_LOG_COMMON(msg->session, SSH_LOG_PACKET,
       "The client doesn't want to know the request succeeded");
 
   return SSH_OK;
@@ -1496,7 +1520,7 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
     (void)type;
     (void)packet;
 
-    SSH_LOG(SSH_LOG_PROTOCOL,"Received SSH_MSG_GLOBAL_REQUEST packet");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Received SSH_MSG_GLOBAL_REQUEST packet");
     r = ssh_buffer_unpack(packet, "sb",
             &request,
             &want_reply);
@@ -1528,12 +1552,12 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
         msg->global_request.type = SSH_GLOBAL_REQUEST_TCPIP_FORWARD;
         msg->global_request.want_reply = want_reply;
 
-        SSH_LOG(SSH_LOG_PROTOCOL, "Received SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request, want_reply,
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request, want_reply,
                 msg->global_request.bind_address,
                 msg->global_request.bind_port);
 
         if(ssh_callbacks_exists(session->common.callbacks, global_request_function)) {
-            SSH_LOG(SSH_LOG_PROTOCOL, "Calling callback for SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request,
+            SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Calling callback for SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request,
                     want_reply, msg->global_request.bind_address,
                     msg->global_request.bind_port);
             session->common.callbacks->global_request_function(session, msg, session->common.callbacks->userdata);
@@ -1558,7 +1582,7 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
         msg->global_request.type = SSH_GLOBAL_REQUEST_CANCEL_TCPIP_FORWARD;
         msg->global_request.want_reply = want_reply;
 
-        SSH_LOG(SSH_LOG_PROTOCOL, "Received SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request, want_reply,
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received SSH_MSG_GLOBAL_REQUEST %s %d %s:%d", request, want_reply,
                 msg->global_request.bind_address,
                 msg->global_request.bind_port);
 
@@ -1572,14 +1596,14 @@ SSH_PACKET_CALLBACK(ssh_packet_global_request){
     } else if(strcmp(request, "keepalive@openssh.com") == 0) {
         msg->global_request.type = SSH_GLOBAL_REQUEST_KEEPALIVE;
         msg->global_request.want_reply = want_reply;
-        SSH_LOG(SSH_LOG_PROTOCOL, "Received keepalive@openssh.com %d", want_reply);
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received keepalive@openssh.com %d", want_reply);
         if(ssh_callbacks_exists(session->common.callbacks, global_request_function)) {
             session->common.callbacks->global_request_function(session, msg, session->common.callbacks->userdata);
         } else {
             ssh_message_global_request_reply_success(msg, 0);
         }
     } else {
-        SSH_LOG(SSH_LOG_PROTOCOL, "UNKNOWN SSH_MSG_GLOBAL_REQUEST %s, "
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "UNKNOWN SSH_MSG_GLOBAL_REQUEST %s, "
                 "want_reply = %d", request, want_reply);
         goto reply_with_failure;
     }
@@ -1603,7 +1627,7 @@ reply_with_failure:
             goto error;
         }
     } else {
-        SSH_LOG(SSH_LOG_PACKET,
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET,
                 "The requester doesn't want to know the request failed!");
     }
 
@@ -1612,7 +1636,7 @@ reply_with_failure:
 error:
     SAFE_FREE(msg);
     SAFE_FREE(request);
-    SSH_LOG(SSH_LOG_WARNING, "Invalid SSH_MSG_GLOBAL_REQUEST packet");
+    SSH_LOG_COMMON(session, SSH_LOG_WARNING, "Invalid SSH_MSG_GLOBAL_REQUEST packet");
     return rc;
 }
 

@@ -66,12 +66,12 @@ typedef int (*ssh_channel_callback_data) (ssh_channel channel, int code, void *d
 
 /**
  * @brief SSH log callback. All logging messages will go through this callback
- * @param session Current session handler
+ * @param common Current comman pointer, common is the first part of both bind and session
  * @param priority Priority of the log, the smaller being the more important
  * @param message the actual message
  * @param userdata Userdata to be passed to the callback function.
  */
-typedef void (*ssh_log_callback) (ssh_session session, int priority,
+typedef void (*ssh_log_callback) (void *common, int priority,
     const char *message, void *userdata);
 
 /**
@@ -231,6 +231,37 @@ typedef int (*ssh_auth_gssapi_mic_callback) (ssh_session session, const char *us
 typedef int (*ssh_auth_pubkey_callback) (ssh_session session, const char *user, struct ssh_key_struct *pubkey,
 		char signature_state, void *userdata);
 
+/**
+ * @brief SSH authentication callback. Tries to authenticates user with the "none" method
+ * which is anonymous or passwordless.
+ * @param session Current session handler
+ * @param username username for which kbdint authentication is requested
+ * @param name name of keyboard interactive authentication module
+ * @param instruction instructions to use it
+ * @param nquestions in number of question slots available in questions, out number questions provided
+ * @param questions storage for const char *questions. These strings must remain valid after callback is complete
+ * @param array of char booleans that indicate whether the client should echo answers to the terminal
+ * @param userdata Userdata to be passed to the callback function.
+ * @returns SSH_AUTH_SUCCESS Authentication is accepted.
+ * @returns SSH_AUTH_PARTIAL Partial authentication, more authentication means are needed.
+ * @returns SSH_AUTH_DENIED Authentication failed.
+ onst char* name,
+  const char* instruction, unsigned int num_prompts,
+  const char** prompts, char* echo*/
+typedef int (*ssh_auth_kbdint_start_callback) (ssh_session session, const char *username, const char **name, const char **instruction, uint32_t *nquestions, const char** questions, char *echo, void* userdata);
+
+/**
+ * @brief SSH authentication callback. Tries to authenticates user with the "none" method
+ * which is anonymous or passwordless.
+ * @param session Current session handler
+ * @param nanswers number of answers provided
+ * @param answers array of answers
+ * @param userdata Userdata to be passed to the callback function.
+ * @returns SSH_AUTH_SUCCESS Authentication is accepted.
+ * @returns SSH_AUTH_PARTIAL Partial authentication, more authentication means are needed.
+ * @returns SSH_AUTH_DENIED Authentication failed.
+ */
+typedef int (*ssh_auth_kbdint_reply_callback) (ssh_session session, uint32_t nanswers, char** answers, void* userdata);
 
 /**
  * @brief Handles an SSH service request
@@ -345,6 +376,13 @@ struct ssh_server_callbacks_struct {
   /* This function will be called when a MIC needs to be verified.
    */
   ssh_gssapi_verify_mic_callback gssapi_verify_mic_function;
+  /* This function gets called when a client tries to intiate 
+   * keyboard-interactive method.
+   */
+  ssh_auth_kbdint_start_callback auth_kbdint_start_function;
+  /* This function gets called when a client replies to a kbdint auth info request.
+   */
+  ssh_auth_kbdint_reply_callback auth_kbdint_reply_function;
 };
 typedef struct ssh_server_callbacks_struct *ssh_server_callbacks;
 
@@ -402,6 +440,71 @@ struct ssh_socket_callbacks_struct {
   ssh_callback_int_int connected;
 };
 typedef struct ssh_socket_callbacks_struct *ssh_socket_callbacks;
+
+/** 
+* @brief callback to read data from the socket
+* If this function returns less than zero
+* it must update WSASetLastError or errno
+* @param socket_t to read from
+* @param userdata for callback
+* @param buffer for read data
+* @param size of read buffer
+* @return < 0 on error and >= 0 indicated how much data read into buffer
+*/
+typedef int(*ssh_callback_recv) (socket_t socket, void *userdata, char *buffer, int size);
+
+/**
+* @brief callback to write data to the socket
+* If this function returns less than zero
+* it must update WSASetLastError or errno
+* @param socket_t to write to
+* @param userdata for callback
+* @param buffer to write from
+* @param size how much data to write
+* @return < 0 on error and >= 0 indicated how much data consumed from buffer
+*/
+typedef int(*ssh_callback_send) (socket_t socket, void *userdata, const char *buffer, int size);
+
+/**
++* @brief callback to close a user managed socket
++*/
+typedef void(*ssh_callback_close) (socket_t socket, void *userdata);
+
+/**
++* @brief callback to poll a user managed socket
++*/
+typedef int(*ctx_poll_fn)(ssh_pollfd, unsigned long, int, void* userdata);
+
+/**
+* These are the callbacks exported by the socket structure
+* They are called by unbuffered read and write when socket data is sent or received
+*/
+struct ssh_socket_io_callbacks_struct {
+	/**
+	* User-provided data. User is free to set anything he wants here
+	*/
+	void *userdata;
+	/**
+	* This function will be called to write data to the socket. 
+	* The data not consumed will appear on the next send event.
+	*/
+	ssh_callback_send send;
+	/**
+	* This function will be called to read data from the socket.
+	*/
+	ssh_callback_recv recv;
+	/**
+	* This function will be called to close the socket
+	* (not called close because there is a #define for close in the source)
+	*/
+	ssh_callback_close closecb;
+        /**
+        * This function will be called to poll the socket state.
+        */
+        ctx_poll_fn poll;
+};
+
+typedef struct ssh_socket_io_callbacks_struct *ssh_socket_io_callbacks;
 
 #define SSH_SOCKET_FLOW_WRITEWILLBLOCK 1
 #define SSH_SOCKET_FLOW_WRITEWONTBLOCK 2
@@ -570,6 +673,30 @@ typedef struct ssh_packet_callbacks_struct *ssh_packet_callbacks;
  * @return SSH_OK on success, SSH_ERROR on error.
  */
 LIBSSH_API int ssh_set_callbacks(ssh_session session, ssh_callbacks cb);
+
+
+/**
+* @brief Set the session io callback functions.
+*
+* This functions sets the session io callback functions 
+* It allows you to use your own custom network interactions
+*
+* @code
+* struct ssh_socket_io_callbacks_struct io_cb = {
+*   .userdata = data,
+*   .send = my_send_function
+*   .recv = my_recv_function
+* };
+* ssh_set_io_callbacks(session, &io_cb);
+* @endcode
+*
+* @param  session      The session to set the callback structure.
+*
+* @param  io_cb           The callback structure itself.
+*
+* @return SSH_OK on success, SSH_ERROR on error.
+*/
+LIBSSH_API int ssh_set_io_callbacks(ssh_session session, ssh_socket_io_callbacks cb);
 
 /**
  * @brief SSH channel data callback. Called when data is available on a channel

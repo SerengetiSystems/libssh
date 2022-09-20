@@ -94,6 +94,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     bool no = false;
     int rc;
 
+    /* This is the maximum that can be handled by the socket buffer before the
+     * other side will read some data. Other option would be feeding the socket
+     * from different thread which would not mind if it would be blocked, but I
+     * believe all the important inputs should fit into this size */
+    if (size > 219264) {
+        return -1;
+    }
+
     /* Set up the socket to send data */
     rc = socketpair(AF_UNIX, SOCK_STREAM, 0, socket_fds);
     assert(rc == 0);
@@ -144,7 +152,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
 
     channel = ssh_channel_new(session);
-    assert(channel != NULL);
+    if (channel == NULL) {
+        goto out;
+    }
 
     rc = ssh_channel_open_session(channel);
     if (rc != SSH_OK) {
@@ -152,7 +162,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
 
     rc = ssh_channel_request_exec(channel, "ls");
-    assert(rc == SSH_OK);
+    if (rc != SSH_OK) {
+        goto out;
+    }
 
     select_loop(session, channel);
 

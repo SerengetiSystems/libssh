@@ -107,7 +107,7 @@ struct ssh_crypto_struct {
     bignum shared_secret;
     struct dh_ctx *dh_ctx;
 #ifdef WITH_GEX
-    size_t dh_pmin; size_t dh_pn; size_t dh_pmax; /* preferred group parameters */
+	unsigned char using_old_gex; size_t dh_pmin; size_t dh_pn; size_t dh_pmax; /* preferred group parameters */
 #endif /* WITH_GEX */
 #ifdef HAVE_ECDH
 #ifdef HAVE_OPENSSL_ECC

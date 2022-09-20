@@ -67,6 +67,8 @@ ssh_session ssh_new(void)
         return NULL;
     }
 
+    session->common.log_verbosity = ssh_get_log_level();
+
     session->next_crypto = crypto_new();
     if (session->next_crypto == NULL) {
         goto err;
@@ -639,7 +641,7 @@ int ssh_handle_packets(ssh_session session, int timeout) {
     int tm = timeout;
     int rc;
 
-    if (session == NULL || session->socket == NULL) {
+    if (session == NULL || session->socket == NULL || !ssh_socket_is_open(session->socket)) {
         return SSH_ERROR;
     }
 
@@ -740,7 +742,10 @@ int ssh_handle_packets_termination(ssh_session session,
         tm = ssh_timeout_update(&ts, timeout_ms);
     }
 
-    return ret;
+    if (ret == 0 && (session->session_state >= SSH_SESSION_STATE_ERROR || session->socket == NULL || !ssh_socket_is_open(session->socket)))
+      return SSH_ERROR; //if fct said continue because we aren't connected this function needs to return an error
+    else
+      return ret;
 }
 
 /**
@@ -852,7 +857,7 @@ int ssh_get_version(ssh_session session) {
 void ssh_socket_exception_callback(int code, int errno_code, void *user){
     ssh_session session=(ssh_session)user;
 
-    SSH_LOG(SSH_LOG_RARE,"Socket exception callback: %d (%d)",code, errno_code);
+    SSH_LOG_COMMON(session, SSH_LOG_RARE,"Socket exception callback: %d (%d)",code, errno_code);
     session->session_state = SSH_SESSION_STATE_ERROR;
     if (errno_code == 0 && code == SSH_SOCKET_EXCEPTION_EOF) {
         ssh_set_error(session, SSH_FATAL, "Socket error: disconnected");

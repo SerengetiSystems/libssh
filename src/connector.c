@@ -251,7 +251,7 @@ static void ssh_connector_fd_in_cb(ssh_connector connector)
     ssize_t total = 0;
     int rc;
 
-    SSH_LOG(SSH_LOG_TRACE, "connector POLLIN event for fd %d", connector->in_fd);
+    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "connector POLLIN event for fd %d", connector->in_fd);
 
     if (connector->out_wontblock) {
         if (connector->out_channel != NULL) {
@@ -269,7 +269,7 @@ static void ssh_connector_fd_in_cb(ssh_connector connector)
 
         if (connector->out_channel != NULL) {
             if (r == 0) {
-                SSH_LOG(SSH_LOG_TRACE, "input fd %d is EOF", connector->in_fd);
+                SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "input fd %d is EOF", connector->in_fd);
                 if (connector->out_channel->local_eof == 0) {
                     rc = ssh_channel_send_eof(connector->out_channel);
                     (void)rc; /* TODO Handle rc? */
@@ -331,7 +331,7 @@ static void ssh_connector_fd_out_cb(ssh_connector connector){
     ssize_t r;
     ssize_t w;
     ssize_t total = 0;
-    SSH_LOG(SSH_LOG_TRACE, "connector POLLOUT event for fd %d", connector->out_fd);
+    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "connector POLLOUT event for fd %d", connector->out_fd);
 
     if(connector->in_available){
         if (connector->in_channel != NULL){
@@ -438,7 +438,7 @@ static int ssh_connector_channel_data_cb(ssh_session session,
     (void) channel;
     (void) is_stderr;
 
-    SSH_LOG(SSH_LOG_TRACE,"connector data on channel");
+    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE,"connector data on channel");
 
     if (is_stderr && !(connector->in_flags & SSH_CONNECTOR_STDERR)) {
         /* ignore stderr */
@@ -526,7 +526,7 @@ static int ssh_connector_channel_write_wontblock_cb(ssh_session session,
 
     (void) channel;
 
-    SSH_LOG(SSH_LOG_TRACE, "Channel write won't block");
+    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "Channel write won't block");
     if (connector->in_available) {
         if (connector->in_channel != NULL) {
             uint32_t len = MIN(CHUNKSIZE, bytes);

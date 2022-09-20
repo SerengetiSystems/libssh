@@ -111,6 +111,7 @@ typedef struct ssh_session_struct* ssh_session;
 typedef struct ssh_string_struct* ssh_string;
 typedef struct ssh_event_struct* ssh_event;
 typedef struct ssh_connector_struct * ssh_connector;
+typedef struct pollfd* ssh_pollfd;
 typedef void* ssh_gssapi_creds;
 
 /* Socket type */
@@ -339,7 +340,10 @@ enum {
 	SSH_LOG_PACKET,
 	/** Every function path
 	 */
-	SSH_LOG_FUNCTIONS
+	SSH_LOG_FUNCTIONS,
+	/** Encryption/Decryption results
+	 */
+	SSH_LOG_CRYPTO
 };
 /** @} */
 #define SSH_LOG_RARE SSH_LOG_WARNING
@@ -361,7 +365,8 @@ enum {
 #define SSH_LOG_DEBUG 3
 /** Get trace output, packet information, ... */
 #define SSH_LOG_TRACE 4
-
+/** Get crypto/packet output */
+#define SSH_LOG_CRYPT 5
 /** @} */
 
 enum ssh_options_e {
@@ -452,6 +457,8 @@ LIBSSH_API int ssh_channel_is_closed(ssh_channel channel);
 LIBSSH_API int ssh_channel_is_eof(ssh_channel channel);
 LIBSSH_API int ssh_channel_is_open(ssh_channel channel);
 LIBSSH_API ssh_channel ssh_channel_new(ssh_session session);
+LIBSSH_API void ssh_channel_set_manual_window_refund(ssh_channel session);
+LIBSSH_API int ssh_channel_refund_window(ssh_channel channel, uint32_t bytes);
 LIBSSH_API int ssh_channel_open_auth_agent(ssh_channel channel);
 LIBSSH_API int ssh_channel_open_forward(ssh_channel channel, const char *remotehost,
     int remoteport, const char *sourcehost, int localport);
@@ -487,6 +494,8 @@ LIBSSH_API int ssh_channel_write_stderr(ssh_channel channel,
                                         const void *data,
                                         uint32_t len);
 LIBSSH_API uint32_t ssh_channel_window_size(ssh_channel channel);
+LIBSSH_API uint32_t ssh_channel_local_packet_size(ssh_channel channel);
+LIBSSH_API uint32_t ssh_channel_remote_packet_size(ssh_channel channel);
 
 LIBSSH_API char *ssh_basename (const char *path);
 LIBSSH_API void ssh_clean_pubkey_hash(unsigned char **hash);
@@ -541,6 +550,7 @@ enum ssh_publickey_hash_type {
     SSH_PUBLICKEY_HASH_MD5,
     SSH_PUBLICKEY_HASH_SHA256
 };
+
 LIBSSH_API int ssh_get_publickey_hash(const ssh_key key,
                                       enum ssh_publickey_hash_type type,
                                       unsigned char **hash,
@@ -638,6 +648,7 @@ LIBSSH_API int ssh_message_subtype(ssh_message msg);
 LIBSSH_API int ssh_message_type(ssh_message msg);
 LIBSSH_API int ssh_mkdir (const char *pathname, mode_t mode);
 LIBSSH_API ssh_session ssh_new(void);
+LIBSSH_API int ssh_packet_in_rekey(ssh_session session);
 
 LIBSSH_API int ssh_options_copy(ssh_session src, ssh_session *dest);
 LIBSSH_API int ssh_options_getopt(ssh_session session, int *argcptr, char **argv);
@@ -800,7 +811,7 @@ LIBSSH_API int ssh_string_fill(ssh_string str, const void *data, size_t len);
     do { if ((x) != NULL) { ssh_string_free(x); x = NULL; } } while(0)
 LIBSSH_API void ssh_string_free(ssh_string str);
 LIBSSH_API ssh_string ssh_string_from_char(const char *what);
-LIBSSH_API size_t ssh_string_len(ssh_string str);
+LIBSSH_API uint32_t ssh_string_len(ssh_string str);
 LIBSSH_API ssh_string ssh_string_new(size_t size);
 LIBSSH_API const char *ssh_string_get_char(ssh_string str);
 LIBSSH_API char *ssh_string_to_char(ssh_string str);
@@ -837,8 +848,9 @@ LIBSSH_API void ssh_buffer_free(ssh_buffer buffer);
 #define SSH_BUFFER_FREE(x) \
     do { if ((x) != NULL) { ssh_buffer_free(x); x = NULL; } } while(0)
 LIBSSH_API int ssh_buffer_reinit(ssh_buffer buffer);
-LIBSSH_API int ssh_buffer_add_data(ssh_buffer buffer, const void *data, uint32_t len);
-LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, uint32_t requestedlen);
+LIBSSH_API int ssh_buffer_add_data(ssh_buffer buffer, const void *data, size_t len);
+LIBSSH_API uint32_t ssh_buffer_get_data(ssh_buffer buffer, void *data, size_t requestedlen);
+LIBSSH_API uint32_t ssh_buffer_peek_data(struct ssh_buffer_struct* buffer, void* data, size_t len);
 LIBSSH_API void *ssh_buffer_get(ssh_buffer buffer);
 LIBSSH_API uint32_t ssh_buffer_get_len(ssh_buffer buffer);
 LIBSSH_API int ssh_session_set_disconnect_message(ssh_session session, const char *message);

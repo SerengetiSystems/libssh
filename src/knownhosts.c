@@ -836,7 +836,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
     if (session->opts.knownhosts != NULL) {
         known_hosts_found = ssh_file_readaccess_ok(session->opts.knownhosts);
         if (!known_hosts_found) {
-            SSH_LOG(SSH_LOG_WARN, "Cannot access file %s",
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Cannot access file %s",
                     session->opts.knownhosts);
         }
     }
@@ -845,7 +845,7 @@ enum ssh_known_hosts_e ssh_session_has_known_hosts_entry(ssh_session session)
         global_known_hosts_found =
                 ssh_file_readaccess_ok(session->opts.global_knownhosts);
         if (!global_known_hosts_found) {
-            SSH_LOG(SSH_LOG_WARN, "Cannot access file %s",
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Cannot access file %s",
                     session->opts.global_knownhosts);
         }
     }

@@ -88,4 +88,7 @@ int ssh_packet_set_newkeys(ssh_session session,
 struct ssh_crypto_struct *ssh_packet_get_current_crypto(ssh_session session,
         enum ssh_crypto_direction_e direction);
 
+int ssh_queue_send(ssh_session session);
+
+
 #endif /* PACKET_H_ */

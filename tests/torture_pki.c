@@ -31,7 +31,7 @@ char *torture_pki_read_file(const char *filename)
         return NULL;
     }
 
-    fd = open(filename, O_RDONLY);
+    fd = open(filename, O_RDONLY);// | _O_BINARY);
     if (fd < 0) {
         return NULL;
     }
@@ -48,14 +48,22 @@ char *torture_pki_read_file(const char *filename)
         return NULL;
     }
 
-    size = read(fd, key, sb.st_size);
-    close(fd);
-    if (size != sb.st_size) {
+    size = sb.st_size;
+    do
+    {
+      rc = read(fd, key + (sb.st_size - size), size);
+      if (rc < 0)
+      {
+        key[sb.st_size - size] = 0;
+        fprintf(stderr, "Can't read full size of pki file, %d remaining, got:\r\n%s", size, key);
         free(key);
         return NULL;
-    }
+      }
+      size -= rc;
+    } while (size && rc); //on windows the the size might be to great
+    close(fd);
 
-    key[size] = '\0';
+    key[sb.st_size - size] = '\0';
     return key;
 }
 

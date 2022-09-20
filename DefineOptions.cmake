@@ -25,6 +25,7 @@ option(WITH_GEX "Enable DH Group exchange mechanisms" ON)
 option(WITH_INSECURE_NONE "Enable insecure none cipher and MAC algorithms (not suitable for production!)" OFF)
 option(FUZZ_TESTING "Build with fuzzer for the server and client (automatically enables none cipher!)" OFF)
 option(PICKY_DEVELOPER "Build with picky developer flags" OFF)
+option(WITH_THREADLOCAL_LOGGING "Define logging functions thread local" OFF)
 
 if (WITH_ZLIB)
     set(WITH_LIBZ ON)

@@ -130,6 +130,7 @@ static ssh_packet_callback default_packet_handlers[]= {
   ssh_packet_channel_failure,              // SSH2_MSG_CHANNEL_FAILURE            100
 };
 
+#define DEBUG_PACKET 1
 /** @internal
  * @brief check if the received packet is allowed for the current session state
  * @param session current ssh_session
@@ -142,7 +143,7 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
     enum ssh_packet_filter_result_e rc;
 
 #ifdef DEBUG_PACKET
-    SSH_LOG(SSH_LOG_PACKET, "Filtering packet type %d",
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Filtering packet type %d",
             session->in_packet.type);
 #endif
 
@@ -915,12 +916,12 @@ static enum ssh_packet_filter_result_e ssh_packet_incoming_filter(ssh_session se
 end:
 #ifdef DEBUG_PACKET
     if (rc == SSH_PACKET_DENIED) {
-        SSH_LOG(SSH_LOG_PACKET, "REJECTED packet type %d: ",
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "REJECTED packet type %d: ",
                 session->in_packet.type);
     }
 
     if (rc == SSH_PACKET_UNKNOWN) {
-        SSH_LOG(SSH_LOG_PACKET, "UNKNOWN packet type %d",
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "UNKNOWN packet type %d",
                 session->in_packet.type);
     }
 #endif
@@ -957,7 +958,7 @@ ssh_packet_get_current_crypto(ssh_session session,
     case SSH_DIRECTION_IN:
         if (crypto->in_cipher != NULL) {
             return crypto;
-        }
+    }
         break;
     case SSH_DIRECTION_OUT:
         if (crypto->out_cipher != NULL) {
@@ -1033,7 +1034,7 @@ static bool ssh_packet_need_rekey(ssh_session session,
                          (in_cipher->max_blocks != 0 &&
                          in_cipher->blocks + next_blocks > in_cipher->max_blocks);
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "rekey: [data_rekey_needed=%d, out_blocks=%" PRIu64 ", in_blocks=%" PRIu64 "]",
             data_rekey_needed,
             out_cipher->blocks + next_blocks,
@@ -1102,8 +1103,8 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
         goto error;
     }
 #ifdef DEBUG_PACKET
-    SSH_LOG(SSH_LOG_PACKET,
-            "rcv packet cb (len=%zu, state=%s)",
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
+            "rcv packet cb (len=%" PRIuS ", state=%s)",
             receivedlen,
             session->packet_state == PACKET_STATE_INIT ?
                 "INIT" :
@@ -1120,8 +1121,8 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
                  * block size or the unencrypted length in EtM mode.
                  */
 #ifdef DEBUG_PACKET
-                SSH_LOG(SSH_LOG_PACKET,
-                        "Waiting for more data (%zu < %u)",
+                SSH_LOG_COMMON(session, SSH_LOG_PACKET,
+                        "Waiting for more data (%" PRIuS " < %" PRIu32 ")",
                         receivedlen,
                         lenfield_blocksize);
 #endif
@@ -1185,7 +1186,7 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
             if (to_be_read != 0) {
                 if (receivedlen  < (unsigned long)to_be_read) {
                     /* give up, not enough data in buffer */
-                    SSH_LOG(SSH_LOG_PACKET,
+                    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
                             "packet: partial packet (read len) "
                             "[len=%d, receivedlen=%d, to_be_read=%ld]",
                             packet_len,
@@ -1197,6 +1198,8 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
                 packet_second_block = (uint8_t*)data + lenfield_blocksize + etm_packet_offset;
                 processed = to_be_read - current_macsize;
             }
+
+
 
             /* remaining encrypted bytes from the packet, MAC not included */
             packet_remaining =
@@ -1323,7 +1326,7 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
              */
             session->packet_state = PACKET_STATE_PROCESSING;
             ssh_packet_parse_type(session);
-            SSH_LOG(SSH_LOG_PACKET,
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET,
                     "packet: read type %hhd [len=%d,padding=%hhd,comp=%d,payload=%d]",
                     session->in_packet.type, packet_len, padding, compsize, payloadsize);
 
@@ -1349,7 +1352,7 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
             session->packet_state = PACKET_STATE_INIT;
             if (processed < receivedlen) {
                 /* Handle a potential packet left in socket buffer */
-                SSH_LOG(SSH_LOG_PACKET,
+                SSH_LOG_COMMON(session, SSH_LOG_PACKET,
                         "Processing %zu bytes left in socket buffer",
                         receivedlen-processed);
 
@@ -1361,17 +1364,17 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
 
             ok = ssh_packet_need_rekey(session, 0);
             if (ok) {
-                SSH_LOG(SSH_LOG_PACKET, "Incoming packet triggered rekey");
+                SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Incoming packet triggered rekey");
                 rc = ssh_send_rekex(session);
                 if (rc != SSH_OK) {
-                    SSH_LOG(SSH_LOG_PACKET, "Rekey failed: rc = %d", rc);
+                    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Rekey failed: rc = %d", rc);
                     return rc;
                 }
             }
 
             return processed;
         case PACKET_STATE_PROCESSING:
-            SSH_LOG(SSH_LOG_PACKET, "Nested packet processing. Delaying.");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Nested packet processing. Delaying.");
             return 0;
     }
 
@@ -1382,7 +1385,7 @@ size_t ssh_packet_socket_callback(const void *data, size_t receivedlen, void *us
 
 error:
     session->session_state= SSH_SESSION_STATE_ERROR;
-    SSH_LOG(SSH_LOG_PACKET,"Packet: processed %zu bytes", processed);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,"Packet: processed %zu bytes", processed);
     return processed;
 }
 
@@ -1393,7 +1396,7 @@ static void ssh_packet_socket_controlflow_callback(int code, void *userdata)
     ssh_channel channel;
 
     if (code == SSH_SOCKET_FLOW_WRITEWONTBLOCK) {
-        SSH_LOG(SSH_LOG_TRACE, "sending channel_write_wontblock callback");
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "sending channel_write_wontblock callback");
 
         /* the out pipe is empty so we can forward this to channels */
         it = ssh_list_get_iterator(session->channels);
@@ -1422,15 +1425,15 @@ void ssh_packet_register_socket_callback(ssh_session session, ssh_socket s){
  * @brief sets the callbacks for the packet layer
  */
 void ssh_packet_set_callbacks(ssh_session session, ssh_packet_callbacks callbacks){
-    if (session->packet_callbacks == NULL) {
-        session->packet_callbacks = ssh_list_new();
+  if(session->packet_callbacks == NULL){
+    session->packet_callbacks = ssh_list_new();
         if (session->packet_callbacks == NULL) {
             ssh_set_error_oom(session);
             return;
-        }
+  }
     }
     ssh_list_append(session->packet_callbacks, callbacks);
-}
+  }
 
 /** @internal
  * @brief remove the callbacks from the packet layer
@@ -1464,9 +1467,9 @@ void ssh_packet_process(ssh_session session, uint8_t type)
     int rc = SSH_PACKET_NOT_USED;
     ssh_packet_callbacks cb;
 
-    SSH_LOG(SSH_LOG_PACKET, "Dispatching handler for packet type %d", type);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Dispatching handler for packet type %d", type);
     if (session->packet_callbacks == NULL) {
-        SSH_LOG(SSH_LOG_RARE, "Packet callback is not initialized !");
+        SSH_LOG_COMMON(session, SSH_LOG_RARE, "Packet callback is not initialized !");
         return;
     }
 
@@ -1499,10 +1502,10 @@ void ssh_packet_process(ssh_session session, uint8_t type)
     }
 
     if (rc == SSH_PACKET_NOT_USED) {
-        SSH_LOG(SSH_LOG_RARE, "Couldn't do anything with packet type %d", type);
+        SSH_LOG_COMMON(session, SSH_LOG_RARE, "Couldn't do anything with packet type %d", type);
         rc = ssh_packet_send_unimplemented(session, session->recv_seq - 1);
         if (rc != SSH_OK) {
-            SSH_LOG(SSH_LOG_RARE, "Failed to send unimplemented: %s",
+            SSH_LOG_COMMON(session, SSH_LOG_RARE, "Failed to send unimplemented: %s",
                     ssh_get_error(session));
         }
     }
@@ -1543,11 +1546,11 @@ SSH_PACKET_CALLBACK(ssh_packet_unimplemented){
 
     rc = ssh_buffer_unpack(packet, "d", &seq);
     if (rc != SSH_OK) {
-        SSH_LOG(SSH_LOG_WARNING,
+        SSH_LOG_COMMON(session, SSH_LOG_WARNING,
                 "Could not unpack SSH_MSG_UNIMPLEMENTED packet");
     }
 
-    SSH_LOG(SSH_LOG_RARE,
+    SSH_LOG_COMMON(session, SSH_LOG_RARE,
             "Received SSH_MSG_UNIMPLEMENTED (sequence number %d)",seq);
 
     return SSH_PACKET_USED;
@@ -1666,6 +1669,7 @@ static int packet_send2(ssh_session session)
         goto error;
     }
 
+
     rc = ssh_buffer_add_data(session->out_buffer, padding_data, padding_size);
     if (rc < 0) {
         goto error;
@@ -1713,7 +1717,7 @@ static int packet_send2(ssh_session session)
         session->raw_counter->out_packets++;
     }
 
-    SSH_LOG(SSH_LOG_PACKET,
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
             "packet: wrote [type=%u, len=%u, padding_size=%hhd, comp=%u, "
             "payload=%u]",
             type,
@@ -1751,7 +1755,7 @@ ssh_packet_is_kex(unsigned char type)
            type != SSH2_MSG_EXT_INFO;
 }
 
-static bool
+int
 ssh_packet_in_rekey(ssh_session session)
 {
     /* We know we are rekeying if we are authenticated and the DH
@@ -1759,6 +1763,40 @@ ssh_packet_in_rekey(ssh_session session)
      */
     return (session->flags & SSH_SESSION_FLAG_AUTHENTICATED) &&
            (session->dh_handshake_state != DH_STATE_FINISHED);
+}
+
+int ssh_queue_send(ssh_session session)
+{
+	uint32_t payloadsize;
+	uint8_t type, *payload;
+	int rc;
+	struct ssh_iterator *it;
+
+	for (it = ssh_list_get_iterator(session->out_queue);
+		it != NULL;
+		it = ssh_list_get_iterator(session->out_queue)) {
+		struct ssh_buffer_struct *next_buffer = NULL;
+
+		/* Peek only -- do not remove from queue yet */
+		next_buffer = (struct ssh_buffer_struct *)it->data;
+		payloadsize = ssh_buffer_get_len(next_buffer);
+		if (ssh_packet_need_rekey(session, payloadsize)) {
+			/* Sigh ... we still can not send this packet. Repeat. */
+			SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Queued packet triggered rekey");
+			return ssh_send_rekex(session);
+		}
+		ssh_buffer_free(session->out_buffer);
+		session->out_buffer = ssh_list_pop_head(struct ssh_buffer_struct *,
+			session->out_queue);
+		payload = (uint8_t *)ssh_buffer_get(session->out_buffer);
+		type = payload[0];
+		SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Dequeue packet type %d", type);
+		rc = packet_send2(session);
+		if (rc != SSH_OK) {
+			return rc;
+		}
+	}
+	return SSH_OK;
 }
 
 int ssh_packet_send(ssh_session session)
@@ -1783,10 +1821,10 @@ int ssh_packet_send(ssh_session session)
      */
     if (need_rekey || (in_rekey && !ssh_packet_is_kex(type))) {
         if (need_rekey) {
-            SSH_LOG(SSH_LOG_PACKET, "Outgoing packet triggered rekey");
+            SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Outgoing packet triggered rekey");
         }
         /* Queue the current packet -- we will send it after the rekey */
-        SSH_LOG(SSH_LOG_PACKET, "Queuing packet type %d", type);
+        SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Queuing packet type %d", type);
         rc = ssh_list_append(session->out_queue, session->out_buffer);
         if (rc != SSH_OK) {
             return SSH_ERROR;
@@ -1804,48 +1842,29 @@ int ssh_packet_send(ssh_session session)
              * After that we need to handle the key exchange responses
              * up to the point where we can send the rest of the queue.
              */
-            return ssh_send_rekex(session);
+            rc = ssh_send_rekex(session);
+			if (rc == SSH_ERROR)
+				return SSH_ERROR;
         }
-        return SSH_OK;
+		return SSH_OK;
     }
 
     /* Send the packet normally */
     rc = packet_send2(session);
 
     /* We finished the key exchange so we can try to send our queue now */
-    if (rc == SSH_OK && type == SSH2_MSG_NEWKEYS) {
-        struct ssh_iterator *it;
-
-        for (it = ssh_list_get_iterator(session->out_queue);
-             it != NULL;
-             it = ssh_list_get_iterator(session->out_queue)) {
-            struct ssh_buffer_struct *next_buffer = NULL;
-
-            /* Peek only -- do not remove from queue yet */
-            next_buffer = (struct ssh_buffer_struct *)it->data;
-            payloadsize = ssh_buffer_get_len(next_buffer);
-            if (ssh_packet_need_rekey(session, payloadsize)) {
-                /* Sigh ... we still can not send this packet. Repeat. */
-                SSH_LOG(SSH_LOG_PACKET, "Queued packet triggered rekey");
-                return ssh_send_rekex(session);
-            }
-            SSH_BUFFER_FREE(session->out_buffer);
-            session->out_buffer = ssh_list_pop_head(struct ssh_buffer_struct *,
-                                                    session->out_queue);
-            payload = (uint8_t *)ssh_buffer_get(session->out_buffer);
-            type = payload[0];
-            SSH_LOG(SSH_LOG_PACKET, "Dequeue packet type %d", type);
-            rc = packet_send2(session);
-            if (rc != SSH_OK) {
-                return rc;
-            }
-        }
+	/* server has to do this differently */
+    if (rc == SSH_OK && type == SSH2_MSG_NEWKEYS && !session->server) {
+		//not really sure it makes sense to assign this to rc as this is 
+		//not about the packet we are sending now. What if it returns e_again
+		//don't want to send that packet again. 
+		rc = ssh_queue_send(session);
     }
 
     return rc;
 }
 
-static void
+static uint64_t
 ssh_init_rekey_state(struct ssh_session_struct *session,
                      struct ssh_cipher_struct *cipher)
 {
@@ -1867,9 +1886,7 @@ ssh_init_rekey_state(struct ssh_session_struct *session,
                                  session->opts.rekey_data / cipher->blocksize);
     }
 
-    SSH_LOG(SSH_LOG_PROTOCOL,
-            "Set rekey after %" PRIu64 " blocks",
-            cipher->max_blocks);
+    return cipher->max_blocks;
 }
 
 /*
@@ -1880,10 +1897,11 @@ int
 ssh_packet_set_newkeys(ssh_session session,
                        enum ssh_crypto_direction_e direction)
 {
+    uint64_t rekey_after;
     struct ssh_cipher_struct *in_cipher = NULL, *out_cipher = NULL;
     int rc;
 
-    SSH_LOG(SSH_LOG_TRACE,
+    SSH_LOG_COMMON(session, SSH_LOG_TRACE,
             "called, direction =%s%s",
             direction & SSH_DIRECTION_IN ? " IN " : "",
             direction & SSH_DIRECTION_OUT ? " OUT " : "");
@@ -1895,7 +1913,7 @@ ssh_packet_set_newkeys(ssh_session session,
     session->next_crypto->used |= direction;
     if (session->current_crypto != NULL) {
         if (session->current_crypto->used & direction) {
-            SSH_LOG(SSH_LOG_WARNING, "This direction isn't used anymore.");
+            SSH_LOG_COMMON(session, SSH_LOG_WARNING, "This direction isn't used anymore.");
         }
         /* Mark the current requested direction unused */
         session->current_crypto->used &= ~direction;
@@ -1904,10 +1922,11 @@ ssh_packet_set_newkeys(ssh_session session,
     /* Both sides switched: do the actual switch now */
     if (session->next_crypto->used == SSH_DIRECTION_BOTH) {
         size_t session_id_len;
+		uint8_t rekey = 0;
 
         if (session->current_crypto != NULL) {
             crypto_free(session->current_crypto);
-            session->current_crypto = NULL;
+			rekey = 1;
         }
 
         session->current_crypto = session->next_crypto;
@@ -1932,7 +1951,32 @@ ssh_packet_set_newkeys(ssh_session session,
                session_id_len);
 	session->next_crypto->session_id_len = session_id_len;
 
-        return SSH_OK;
+  	if (session->client)
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+			rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" : 
+			"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+			session->current_crypto->kex_methods[SSH_KEX],
+			session->current_crypto->kex_methods[SSH_HOSTKEYS],
+			session->current_crypto->kex_methods[SSH_CRYPT_C_S],
+			session->current_crypto->kex_methods[SSH_MAC_C_S],
+			session->current_crypto->kex_methods[SSH_CRYPT_S_C],
+			session->current_crypto->kex_methods[SSH_MAC_S_C]);
+	}
+	else
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, 
+			rekey ? "!REX! Complete: %s:%s:%s:%s <-> %s:%s" :
+			"!KEX! Complete: %s:%s:%s:%s <-> %s:%s",
+			session->current_crypto->kex_methods[SSH_KEX],
+			session->current_crypto->kex_methods[SSH_HOSTKEYS],
+			session->current_crypto->kex_methods[SSH_CRYPT_S_C],
+			session->current_crypto->kex_methods[SSH_MAC_S_C],
+			session->current_crypto->kex_methods[SSH_CRYPT_C_S],
+			session->current_crypto->kex_methods[SSH_MAC_C_S]);
+	}
+
+	return SSH_OK;
     }
 
     /* Initialize common structures so the next context can be used in
@@ -1964,12 +2008,17 @@ ssh_packet_set_newkeys(ssh_session session,
         return SSH_ERROR;
     }
 
+
     /* Initialize rekeying states */
-    ssh_init_rekey_state(session, out_cipher);
-    ssh_init_rekey_state(session, in_cipher);
+    rekey_after = ssh_init_rekey_state(session, out_cipher);
+    rekey_after = ssh_init_rekey_state(session, in_cipher);
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,
+      "Set rekey after %" PRIu64 " blocks",
+      rekey_after);
+
     if (session->opts.rekey_time != 0) {
         ssh_timestamp_init(&session->last_rekey_time);
-        SSH_LOG(SSH_LOG_PROTOCOL, "Set rekey after %" PRIu32 " seconds",
+        SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Set rekey after %" PRIu32 " seconds",
                 session->opts.rekey_time/1000);
     }
 

@@ -99,7 +99,7 @@ static void chacha20_poly1305_aead_encrypt(struct ssh_cipher_struct *cipher,
     chacha_encrypt_bytes(&keys->k2,
                          in_packet->payload,
                          out_packet->payload,
-                         len - sizeof(uint32_t));
+                         (uint32_t)(len - sizeof(uint32_t)));
 
     /* ssh_log_hexdump("poly1305_ctx", poly1305_ctx, sizeof(poly1305_ctx)); */
     /* step 4, compute the MAC */
@@ -167,14 +167,14 @@ static int chacha20_poly1305_aead_decrypt(struct ssh_cipher_struct *cipher,
     cmp = secure_memcmp(tag, mac, POLY1305_TAGLEN);
     if(cmp != 0) {
         /* mac error */
-        SSH_LOG(SSH_LOG_PACKET,"poly1305 verify error");
+        SSH_LOG(SSH_LOG_WARNING,"poly1305 verify error");
         return SSH_ERROR;
     }
     chacha_ivsetup(&keys->k2, (uint8_t *)&seq, payload_block_counter);
     chacha_encrypt_bytes(&keys->k2,
                          (uint8_t *)complete_packet + sizeof(uint32_t),
                          out,
-                         encrypted_size);
+                         (uint32_t)encrypted_size);
 
     return SSH_OK;
 }

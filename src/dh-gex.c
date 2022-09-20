@@ -24,9 +24,10 @@
 #include "config.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <stdbool.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "libssh/priv.h"
 #include "libssh/dh-gex.h"
@@ -37,8 +38,8 @@
 #include "libssh/buffer.h"
 #include "libssh/session.h"
 
-/* Minimum, recommanded and maximum size of DH group */
-#define DH_PMIN 2048
+/* Minimum, recommended and maximum size of DH group */
+#define DH_PMIN 1024
 #define DH_PREQ 2048
 #define DH_PMAX 8192
 
@@ -116,7 +117,7 @@ SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_group)
     (void) type;
     (void) user;
 
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_GROUP received");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_GROUP received");
 
     if (bignum_ctx_invalid(ctx)) {
         goto error;
@@ -256,7 +257,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     bignum server_pubkey = NULL;
     (void)type;
     (void)user;
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
 
     ssh_packet_remove_callbacks(session, &ssh_dhgex_client_callbacks);
     rc = ssh_buffer_unpack(packet,
@@ -300,7 +301,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     if (rc == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG(SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
+    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
     session->dh_handshake_state = DH_STATE_NEWKEYS_SENT;
 
     return SSH_PACKET_USED;
@@ -314,7 +315,9 @@ error:
 
 #ifdef WITH_SERVER
 
-#define MODULI_FILE "/etc/ssh/moduli"
+#include <libssh/server.h>
+
+#define DEFAULT_MODULI_FILE "/etc/ssh/moduli"
 /* 2     "Safe" prime; (p-1)/2 is also prime. */
 #define SAFE_PRIME 2
 /* 0x04  Probabilistic Miller-Rabin primality tests. */
@@ -403,11 +406,11 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
     char timestamp[32] = {0};
     char generator[32] = {0};
     char modulus[4096] = {0};
-    size_t type, tests, tries, size, proposed_size;
+	uint32_t type, tests, tries, size, proposed_size;
     int firstbyte;
     int rc;
-    size_t line = 0;
-    size_t best_nlines = 0;
+	uint32_t line = 0;
+	uint32_t best_nlines = 0;
 
     for(;;) {
         line++;
@@ -423,7 +426,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
         }
         ungetc(firstbyte, moduli);
         rc = fscanf(moduli,
-                    "%31s %zu %zu %zu %zu %31s %4095s\n",
+			        "%31s %u %u %u %u %31s %4095s\n",
                     timestamp,
                     &type,
                     &tests,
@@ -435,7 +438,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
             if (rc == EOF) {
                 break;
             }
-            SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line %zu", line);
+			SSH_LOG(SSH_LOG_INFO, "Invalid moduli entry line %u", line);
             do {
                 firstbyte = getc(moduli);
             } while(firstbyte != '\n' && firstbyte != EOF);
@@ -474,7 +477,7 @@ static int ssh_retrieve_dhgroup_file(FILE *moduli,
     }
     if (*best_size != 0) {
         SSH_LOG(SSH_LOG_INFO,
-                "Selected %zu bits modulus out of %zu candidates in %zu lines",
+                "Selected %zu bits modulus out of %u candidates in %u lines",
                 *best_size,
                 best_nlines - 1,
                 line);
@@ -519,10 +522,7 @@ static int ssh_retrieve_dhgroup(char *moduli_file,
         return ssh_fallback_group(pmax, p, g);
     }
 
-    if (moduli_file != NULL)
-        moduli = fopen(moduli_file, "r");
-    else
-        moduli = fopen(MODULI_FILE, "r");
+    moduli = fopen(moduli_file, "r");
 
     if (moduli == NULL) {
         char err_msg[SSH_ERRNO_MSG_MAX] = {0};
@@ -573,7 +573,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request);
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_init);
 
 static ssh_packet_callback dhgex_server_callbacks[]= {
-    NULL, /* SSH_MSG_KEX_DH_GEX_REQUEST_OLD */
+	ssh_packet_server_dhgex_request, /* SSH_MSG_KEX_DH_GEX_REQUEST_OLD */
     NULL, /* SSH_MSG_KEX_DH_GEX_GROUP */
     ssh_packet_server_dhgex_init,   /* SSH_MSG_KEX_DH_GEX_INIT */
     NULL,                           /* SSH_MSG_KEX_DH_GEX_REPLY */
@@ -598,6 +598,11 @@ void ssh_server_dhgex_init(ssh_session session){
     session->dh_handshake_state = DH_STATE_INIT;
 }
 
+#ifndef min
+#define min(a,b) (((a)<(b))?(a):(b))
+#define max(a,b) (((a)>(b))?(a):(b))
+#endif
+
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
 {
     bignum modulus = NULL, generator = NULL;
@@ -605,7 +610,6 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
     size_t size = 0;
     int rc;
 
-    (void) type;
     (void) user;
 
     if (session->dh_handshake_state != DH_STATE_INIT) {
@@ -615,13 +619,29 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
         goto error;
     }
 
-    /* Minimum group size, preferred group size, maximum group size */
-    rc = ssh_buffer_unpack(packet, "ddd", &pmin, &pn, &pmax);
-    if (rc != SSH_OK){
-        ssh_set_error_invalid(session);
-        goto error;
-    }
-    SSH_LOG(SSH_LOG_INFO, "dh-gex: DHGEX_REQUEST[%u:%u:%u]", pmin, pn, pmax);
+	if (type == SSH2_MSG_KEX_DH_GEX_REQUEST_OLD)
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST_OLD");
+		session->next_crypto->using_old_gex = 1;
+		rc = ssh_buffer_unpack(packet, "d", &pn);
+		pmin = min(pn, DH_PMIN);
+		pmax = max(pn, DH_PMAX);
+		if (rc != SSH_OK){
+			ssh_set_error_invalid(session);
+			goto error;
+		}
+	}
+	else
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH2_MSG_KEX_DH_GEX_REQUEST");
+		session->next_crypto->using_old_gex = 0;
+		/* Minimum group size, preferred group size, maximum group size */
+		rc = ssh_buffer_unpack(packet, "ddd", &pmin, &pn, &pmax);
+		if (rc != SSH_OK){
+			ssh_set_error_invalid(session);
+			goto error;
+		}
+	}
 
     if (pmin > pn || pn > pmax || pn > DH_PMAX || pmax < DH_PMIN) {
         ssh_set_error(session,
@@ -632,6 +652,11 @@ static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_request)
                       pmax);
         goto error;
     }
+	else
+	{
+		SSH_LOG_COMMON(session, SSH_LOG_INFO, "dh-gex: DHGEX_REQUEST[%u:%u:%u]", pmin, pn, pmax);
+	}
+
     session->next_crypto->dh_pmin = pmin;
     session->next_crypto->dh_pn = pn;
     session->next_crypto->dh_pmax = pmax;
@@ -700,7 +725,7 @@ error:
 static SSH_PACKET_CALLBACK(ssh_packet_server_dhgex_init){
     (void) type;
     (void) user;
-    SSH_LOG(SSH_LOG_DEBUG, "Received SSH_MSG_KEX_DHGEX_INIT");
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Received SSH_MSG_KEX_DHGEX_INIT");
     ssh_packet_remove_callbacks(session, &ssh_dhgex_server_callbacks);
     ssh_server_dh_process_init(session, packet);
     return SSH_PACKET_USED;

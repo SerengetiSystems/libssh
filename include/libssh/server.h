@@ -319,6 +319,14 @@ SSH_DEPRECATED LIBSSH_API const char *ssh_message_auth_password(ssh_message msg)
  */
 SSH_DEPRECATED LIBSSH_API ssh_key ssh_message_auth_pubkey(ssh_message msg);
 
+//functions to inspect keys
+LIBSSH_API const char* ssh_key_type_name(const ssh_key key);
+LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_cert(const ssh_key key);
+LIBSSH_API int ssh_key_is_dsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_rsa(const ssh_key key);
+LIBSSH_API int ssh_key_is_ed25519(const ssh_key key);
+
 LIBSSH_API int ssh_message_auth_kbdint_is_response(ssh_message msg);
 
 /* Replaced by callback based server implementation auth_pubkey_function */
@@ -377,7 +385,7 @@ LIBSSH_API int ssh_message_global_request_port(ssh_message msg);
 
 LIBSSH_API int ssh_channel_open_reverse_forward(ssh_channel channel, const char *remotehost,
     int remoteport, const char *sourcehost, int localport);
-LIBSSH_API int ssh_channel_open_x11(ssh_channel channel,
+LIBSSH_API int ssh_channel_open_x11(ssh_channel channel, 
                                         const char *orig_addr, int orig_port);
 
 LIBSSH_API int ssh_channel_request_send_exit_status(ssh_channel channel,

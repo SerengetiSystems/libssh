@@ -57,6 +57,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string>
+#include <exception>
 
 namespace ssh {
 
@@ -71,7 +72,7 @@ class Channel;
  * by several SSH functions that interact with the network, and may fail because of
  * socket, protocol or memory errors.
  */
-class SshException{
+class SshException : public std::exception {
 public:
   SshException(ssh_session csession){
     code=ssh_get_error_code(csession);
@@ -86,16 +87,22 @@ public:
    * @returns SSH_REQUEST_DENIED Request was denied by remote host
    * @see ssh_get_error_code
    */
-  int getCode(){
+  int getCode() const {
     return code;
   }
   /** @brief returns the error message of the last exception
    * @returns pointer to a c string containing the description of error
    * @see ssh_get_error
    */
-  std::string getError(){
+  std::string getError() const {
     return description;
   }
+
+  virtual const char* what() const noexcept
+  {
+    return description.c_str();
+  }
+
 private:
   int code;
   std::string description;

@@ -86,6 +86,9 @@ if (OPENSSL_FOUND)
         message(FATAL_ERROR "Could not detect openssl/aes.h")
     endif()
 
+    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
+    check_include_file(openssl/modes.h HAVE_OPENSSL_MODES_H)
+
     if (WITH_BLOWFISH_CIPHER)
         set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
         check_include_file(openssl/blowfish.h HAVE_OPENSSL_BLOWFISH_H)
@@ -302,19 +305,23 @@ if (UNIT_TESTING)
 endif ()
 
 # OPTIONS
-check_c_source_compiles("
+
+if (WITH_THREADLOCAL_LOGGING)
+  message(STATUS "Logging functions and userdata are thread local")
+    check_c_source_compiles("
 __thread int tls;
 
 int main(void) {
     return 0;
 }" HAVE_GCC_THREAD_LOCAL_STORAGE)
 
-check_c_source_compiles("
+    check_c_source_compiles("
 __declspec(thread) int tls;
 
 int main(void) {
     return 0;
 }" HAVE_MSC_THREAD_LOCAL_STORAGE)
+endif (WITH_THREADLOCAL_LOGGING)
 
 ###########################################################
 # For detecting attributes we need to treat warnings as

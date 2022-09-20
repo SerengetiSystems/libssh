@@ -376,17 +376,17 @@ int ssh_key_algorithm_allowed(ssh_session session, const char *type)
     else if (session->server) {
         allowed_list = session->opts.wanted_methods[SSH_HOSTKEYS];
         if (allowed_list == NULL) {
-            SSH_LOG(SSH_LOG_WARN, "Session invalid: no host key available");
+            SSH_LOG_COMMON(session, SSH_LOG_WARN, "Session invalid: no host key available");
             return 0;
         }
     }
 #endif /* WITH_SERVER */
     else {
-        SSH_LOG(SSH_LOG_WARN, "Session invalid: not set as client nor server");
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Session invalid: not set as client nor server");
         return 0;
     }
 
-    SSH_LOG(SSH_LOG_DEBUG, "Checking %s with list <%s>", type, allowed_list);
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Checking %s with list <%s>", type, allowed_list);
     return ssh_match_group(allowed_list, type);
 }
 
@@ -450,7 +450,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
         if ((session->openssh > 0) &&
             (session->openssh < SSH_VERSION_INT(7, 2, 0)))
         {
-            SSH_LOG(SSH_LOG_DEBUG,
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                     "We are talking to an old OpenSSH (%x); "
                     "returning SSH_DIGEST_SHA1",
                     session->openssh);
@@ -488,7 +488,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
     case SSH_KEYTYPE_ECDSA:
     case SSH_KEYTYPE_UNKNOWN:
     default:
-        SSH_LOG(SSH_LOG_WARN, "Digest algorithm to be used with key type %u "
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Digest algorithm to be used with key type %u "
                 "is not defined", type);
     }
 
@@ -517,7 +517,7 @@ ssh_key_get_signature_algorithm(ssh_session session,
         if ((session->openssh > 0) &&
             (session->openssh < SSH_VERSION_INT(7, 8, 0)))
         {
-            SSH_LOG(SSH_LOG_DEBUG,
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                     "We are talking to an old OpenSSH (%x); "
                     "using old cert format",
                     session->openssh);
@@ -991,7 +991,7 @@ int ssh_pki_import_privkey_file(const char *filename,
         return SSH_ERROR;
     }
 
-    size = fread(key_buf, 1, sb.st_size, file);
+    size = (off_t)fread(key_buf, 1, sb.st_size, file);
     fclose(file);
 
     if (size != sb.st_size) {
@@ -1069,7 +1069,7 @@ int ssh_pki_export_privkey_file(const ssh_key privkey,
         return -1;
     }
 
-    rc = fwrite(ssh_string_data(blob), ssh_string_len(blob), 1, fp);
+    rc = (int)fwrite(ssh_string_data(blob), ssh_string_len(blob), 1, fp);
     SSH_STRING_FREE(blob);
     if (rc != 1 || ferror(fp)) {
         fclose(fp);
@@ -1693,7 +1693,7 @@ int ssh_pki_import_pubkey_blob(const ssh_string key_blob,
 
     type = ssh_key_type_from_name(ssh_string_get_char(type_s));
     if (type == SSH_KEYTYPE_UNKNOWN) {
-        SSH_LOG(SSH_LOG_WARN, "Unknown key type found!");
+		SSH_LOG(SSH_LOG_WARN, "Unknown key type '%s' found!", ssh_string_get_char(type_s));
         goto fail;
     }
     SSH_STRING_FREE(type_s);
@@ -1827,7 +1827,7 @@ int ssh_pki_import_pubkey_file(const char *filename, ssh_key *pkey)
         return SSH_ERROR;
     }
 
-    size = fread(key_buf, 1, sb.st_size, file);
+    size = (off_t)fread(key_buf, 1, sb.st_size, file);
     fclose(file);
 
     if (size != sb.st_size) {
@@ -2194,7 +2194,7 @@ int ssh_pki_export_pubkey_file(const ssh_key key,
     if (fp == NULL) {
         return SSH_ERROR;
     }
-    rc = fwrite(key_buf, strlen(key_buf), 1, fp);
+    rc = (int)fwrite(key_buf, strlen(key_buf), 1, fp);
     if (rc != 1 || ferror(fp)) {
         fclose(fp);
         unlink(filename);
@@ -2306,7 +2306,8 @@ int ssh_pki_export_signature_blob(const ssh_signature sig,
     return SSH_OK;
 }
 
-int ssh_pki_import_signature_blob(const ssh_string sig_blob,
+int ssh_pki_import_signature_blob(ssh_session session,
+                                  const ssh_string sig_blob,
                                   const ssh_key pubkey,
                                   ssh_signature *psig)
 {
@@ -2345,6 +2346,7 @@ int ssh_pki_import_signature_blob(const ssh_string sig_blob,
 
     alg = ssh_string_get_char(algorithm);
     type = ssh_key_type_from_signature_name(alg);
+    hash_type = ssh_key_hash_from_name(alg);
     hash_type = ssh_key_hash_from_name(alg);
     SSH_STRING_FREE(algorithm);
 
@@ -2394,7 +2396,7 @@ int pki_key_check_hash_compatible(ssh_key key,
                                   enum ssh_digest_e hash_type)
 {
     if (key == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Null pointer provided as key to "
+        SSH_LOG(SSH_LOG_WARN, "Null pointer provided as key to "
                                "pki_key_check_hash_compatible()");
         return SSH_ERROR;
     }
@@ -2480,18 +2482,18 @@ int ssh_pki_signature_verify(ssh_session session,
     enum ssh_keytypes_e key_type;
 
     if (session == NULL || sig == NULL || key == NULL || input == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_WARN, "Bad parameter provided to "
                                "ssh_pki_signature_verify()");
         return SSH_ERROR;
     }
     key_type = ssh_key_type_plain(key->type);
 
-    SSH_LOG(SSH_LOG_FUNCTIONS,
+    SSH_LOG_COMMON(session, SSH_LOG_FUNCTIONS,
             "Going to verify a %s type signature",
             sig->type_c);
 
     if (key_type != sig->type) {
-        SSH_LOG(SSH_LOG_WARN,
+        SSH_LOG_COMMON(session, SSH_LOG_WARN,
                 "Can not verify %s signature with %s key",
                 sig->type_c, key->type_c);
         return SSH_ERROR;
@@ -2536,7 +2538,7 @@ int ssh_pki_signature_verify(ssh_session session,
                     "Can not create SHA256CTX for input hash");
            return SSH_ERROR;
         }
-        sha256_update(ctx, input, input_len);
+        sha256_update(ctx, input, (unsigned long)input_len);
         sha256_final(input_hash, ctx);
 
         sk_buffer = ssh_buffer_new();
@@ -2573,22 +2575,10 @@ ssh_signature pki_do_sign(const ssh_key privkey,
                           size_t input_len,
                           enum ssh_digest_e hash_type)
 {
-    int rc;
-
-    if (privkey == NULL || input == NULL) {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
-                               "pki_do_sign()");
-        return NULL;
-    }
-
-    /* Check if public key and hash type are compatible */
-    rc = pki_key_check_hash_compatible(privkey, hash_type);
-    if (rc != SSH_OK) {
-        return NULL;
-    }
-
+    //JQS: TODO: this function was doing nothing that wasn't duplicated in pki_sign_data
+    //JQS:       we should remove this function entirely and just call pki_sign_data
     return pki_sign_data(privkey, hash_type, input, input_len);
-}
+    }
 
 /*
  * This function signs the session id as a string then
@@ -2611,7 +2601,7 @@ ssh_string ssh_pki_do_sign(ssh_session session,
     if (session == NULL || sigbuf == NULL || privkey == NULL ||
         !ssh_key_is_private(privkey))
     {
-        SSH_LOG(SSH_LOG_TRACE, "Bad parameter provided to "
+        SSH_LOG_COMMON(session, SSH_LOG_TRACE, "Bad parameter provided to "
                                "ssh_pki_do_sign()");
         return NULL;
     }
@@ -2724,6 +2714,38 @@ ssh_string ssh_pki_do_sign_agent(ssh_session session,
 }
 
 #ifdef WITH_SERVER
+#include <libssh/server.h>
+//these functions are needed to verify key types before using them on the bind member of server
+LIBSSH_API const char* ssh_key_type_name(const ssh_key key)
+{
+  return key->type_c;
+}
+
+LIBSSH_API int ssh_key_is_ecdsa(const ssh_key key)
+{
+  return is_ecdsa_key_type(key->type);
+}
+
+LIBSSH_API int ssh_key_is_cert(const ssh_key key)
+{
+  return is_cert_type(key->type);
+}
+
+LIBSSH_API int ssh_key_is_dsa(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_DSS;
+}
+
+LIBSSH_API int ssh_key_is_rsa(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_RSA;
+}
+
+LIBSSH_API int ssh_key_is_ed25519(const ssh_key key)
+{
+  return key->type == SSH_KEYTYPE_ED25519;
+}
+
 ssh_string ssh_srv_pki_do_sign_sessionid(ssh_session session,
                                          const ssh_key privkey,
                                          const enum ssh_digest_e digest)
