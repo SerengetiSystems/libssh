@@ -188,7 +188,7 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, uint32_t needed)
     /* Find the smallest power of two which is greater or equal to needed */
     while(smallest <= needed) {
         if (smallest == 0) {
-          SSH_LOG(SSH_LOG_WARN, "no power of two greater than  %" PRIuS , needed);
+          SSH_LOG(SSH_LOG_WARN, "no power of two greater than  %u", needed);
           return -1;
         }
         smallest <<= 1;
@@ -196,14 +196,14 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, uint32_t needed)
     needed = smallest;
 
     if (needed > BUFFER_SIZE_MAX) {
-      SSH_LOG(SSH_LOG_WARN, "requested BUFFFER_SIZE_MAX < %" PRIuS, needed);
+      SSH_LOG(SSH_LOG_WARN, "requested BUFFFER_SIZE_MAX < %u", needed);
       return -1;
     }
 
     if (buffer->secure) {
         new = malloc(needed);
         if (new == NULL) {
-          SSH_LOG(SSH_LOG_WARN, "malloc failed requesting %" PRIuS, needed);
+          SSH_LOG(SSH_LOG_WARN, "malloc failed requesting %u", needed);
           return -1;
         }
         memcpy(new, buffer->data, buffer->used);
@@ -212,7 +212,7 @@ static int realloc_buffer(struct ssh_buffer_struct *buffer, uint32_t needed)
     } else {
         new = realloc(buffer->data, needed);
         if (new == NULL) {
-            SSH_LOG(SSH_LOG_WARN, "realloc failed requesting %" PRIuS, needed);
+            SSH_LOG(SSH_LOG_WARN, "realloc failed requesting %u", needed);
             return -1;
         }
     }
@@ -314,7 +314,7 @@ int ssh_buffer_add_data(struct ssh_buffer_struct *buffer, const void *data, size
     }
 
     if (buffer->used + len < len) {
-        SSH_LOG(SSH_LOG_WARN, "size_t overflow %" PRIuS " + %" PRIuS , buffer->used, len);
+        SSH_LOG(SSH_LOG_WARN, "size_t overflow %u + %" PRIuS , buffer->used, len);
         return -1;
     }
 
