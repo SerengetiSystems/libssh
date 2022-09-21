@@ -687,9 +687,9 @@ static void torture_pki_rsa_key_size(void **state)
     rc = ssh_pki_export_privkey_to_pubkey(key, &pubkey);
     assert_int_equal(rc, SSH_OK);
     assert_non_null(pubkey);
-    sign = pki_do_sign(key, INPUT, sizeof(INPUT), SSH_DIGEST_SHA256);
+    sign = pki_do_sign(key, INPUTdata, sizeof(INPUTdata), SSH_DIGEST_SHA256);
     assert_non_null(sign);
-    rc = ssh_pki_signature_verify(session, sign, pubkey, INPUT, sizeof(INPUT));
+    rc = ssh_pki_signature_verify(session, sign, pubkey, INPUTdata, sizeof(INPUTdata));
     assert_ssh_return_code(session, rc);
 
     /* Set the minumum RSA key size to 4k */
@@ -697,7 +697,7 @@ static void torture_pki_rsa_key_size(void **state)
     assert_ssh_return_code(session, rc);
 
     /* the verification should fail now */
-    rc = ssh_pki_signature_verify(session, sign, pubkey, INPUT, sizeof(INPUT));
+    rc = ssh_pki_signature_verify(session, sign, pubkey, INPUTdata, sizeof(INPUTdata));
     assert_true(rc == SSH_ERROR);
 
     ssh_signature_free(sign);
