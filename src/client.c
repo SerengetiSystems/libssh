@@ -248,9 +248,12 @@ end:
  * @warning this function returning is no proof that DH handshake is
  * completed
  */
-static int dh_handshake(ssh_session session)
+int dh_handshake(ssh_session session)
 {
   int rc = SSH_AGAIN;
+
+  SSH_LOG(SSH_LOG_TRACE, "dh_handshake_state = %d, kex_type = %d",
+          session->dh_handshake_state,  session->next_crypto->kex_type);
 
   switch (session->dh_handshake_state) {
     case DH_STATE_INIT:
@@ -316,8 +319,13 @@ static int ssh_service_request_termination(void *s)
 }
 
 /**
- * @internal
+ * @addtogroup libssh_session
  *
+ * @{
+ */
+
+/**
+ * @internal
  * @brief Request a service from the SSH server.
  *
  * Service requests are for example: ssh-userauth, ssh-connection, etc.
@@ -379,12 +387,6 @@ pending:
 }
 
 /**
- * @addtogroup libssh_session
- *
- * @{
- */
-
-/**
  * @internal
  *
  * @brief A function to be called each time a step has been done in the
@@ -393,6 +395,8 @@ pending:
 static void ssh_client_connection_callback(ssh_session session)
 {
     int rc;
+
+    SSH_LOG(SSH_LOG_DEBUG, "session_state=%d", session->session_state);
 
     switch(session->session_state) {
         case SSH_SESSION_STATE_NONE:
@@ -428,7 +432,7 @@ static void ssh_client_connection_callback(ssh_session session)
             if (rc != SSH_OK) {
                 goto error;
             }
-            rc = ssh_send_kex(session, 0);
+        rc = ssh_send_kex(session);
             if (rc < 0) {
                 goto error;
             }
@@ -441,13 +445,13 @@ static void ssh_client_connection_callback(ssh_session session)
         case SSH_SESSION_STATE_KEXINIT_RECEIVED:
             set_status(session,0.6f);
             ssh_list_kex(&session->next_crypto->server_kex);
-            if (session->next_crypto->client_kex.methods[0] == NULL) {
-                /* in rekeying state if next_crypto client_kex is empty */
+        if ((session->flags & SSH_SESSION_FLAG_KEXINIT_SENT) == 0) {
+            /* in rekeying state if next_crypto client_kex might be empty */
                 rc = ssh_set_client_kex(session);
                 if (rc != SSH_OK) {
                     goto error;
                 }
-                rc = ssh_send_kex(session, 0);
+            rc = ssh_send_kex(session);
                 if (rc < 0) {
                     goto error;
                 }
@@ -456,6 +460,9 @@ static void ssh_client_connection_callback(ssh_session session)
                 goto error;
             set_status(session,0.8f);
             session->session_state=SSH_SESSION_STATE_DH;
+
+        /* If the init packet was already sent in previous step, this will be no
+         * operation */
             if (dh_handshake(session) == SSH_ERROR) {
                 goto error;
             }
@@ -475,7 +482,8 @@ static void ssh_client_connection_callback(ssh_session session)
         case SSH_SESSION_STATE_ERROR:
             goto error;
         default:
-            ssh_set_error(session,SSH_FATAL,"Invalid state %d",session->session_state);
+        ssh_set_error(session, SSH_FATAL, "Invalid state %d",
+                      session->session_state);
     }
 
     return;
@@ -734,8 +742,8 @@ ssh_session_set_disconnect_message(ssh_session session, const char *message)
  *
  * The session can then be reused to open a new session.
  *
- * @note Note that this function wont close the socket if it was set with
- * @ssh_options_set and SSH_OPTIONS_FD. You're responsible for closing the
+ * @note Note that this function won't close the socket if it was set with
+ * ssh_options_set and SSH_OPTIONS_FD. You're responsible for closing the
  * socket. This is new behavior in libssh 0.10.
  *
  * @param[in]  session  The SSH session to use.
@@ -837,9 +845,16 @@ error:
     }
 }
 
+/**
+ * @brief Copyright information
+ *
+ * Returns copyright information
+ *
+ * @returns SSH_STRING copyright
+ */
 const char *ssh_copyright(void)
 {
-    return SSH_STRINGIFY(LIBSSH_VERSION) " (c) 2003-2022 "
+    return SSH_STRINGIFY(LIBSSH_VERSION) " (c) 2003-2023 "
            "Aris Adamantiadis, Andreas Schneider "
            "and libssh contributors. "
            "Distributed under the LGPL, please refer to COPYING "

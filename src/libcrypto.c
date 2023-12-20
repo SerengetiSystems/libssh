@@ -133,60 +133,6 @@ ENGINE *pki_get_engine(void)
     return engine;
 }
 
-#ifdef HAVE_OPENSSL_ECC
-static const EVP_MD *nid_to_evpmd(int nid)
-{
-    switch (nid) {
-        case NID_X9_62_prime256v1:
-            return EVP_sha256();
-        case NID_secp384r1:
-            return EVP_sha384();
-        case NID_secp521r1:
-            return EVP_sha512();
-        default:
-            return NULL;
-    }
-
-    return NULL;
-}
-
-void evp(int nid, unsigned char *digest, size_t len, unsigned char *hash, unsigned int *hlen)
-{
-    const EVP_MD *evp_md = nid_to_evpmd(nid);
-    EVP_MD_CTX *md = EVP_MD_CTX_new();
-
-    EVP_DigestInit(md, evp_md);
-    EVP_DigestUpdate(md, digest, len);
-    EVP_DigestFinal(md, hash, hlen);
-    EVP_MD_CTX_free(md);
-}
-
-EVPCTX evp_init(int nid)
-{
-    const EVP_MD *evp_md = nid_to_evpmd(nid);
-
-    EVPCTX ctx = EVP_MD_CTX_new();
-    if (ctx == NULL) {
-        return NULL;
-    }
-
-    EVP_DigestInit(ctx, evp_md);
-
-    return ctx;
-}
-
-void evp_update(EVPCTX ctx, const void *data, size_t len)
-{
-    EVP_DigestUpdate(ctx, data, len);
-}
-
-void evp_final(EVPCTX ctx, unsigned char *md, unsigned int *mdlen)
-{
-    EVP_DigestFinal(ctx, md, mdlen);
-    EVP_MD_CTX_free(ctx);
-}
-#endif /* HAVE_OPENSSL_ECC */
-
 #ifdef HAVE_OPENSSL_EVP_KDF_CTX
 #if OPENSSL_VERSION_NUMBER < 0x30000000L
 static const EVP_MD *sshkdf_digest_to_md(enum ssh_kdf_digest digest_type)
@@ -724,7 +670,7 @@ evp_cipher_aead_decrypt(struct ssh_cipher_struct *cipher,
                            (unsigned char *)out,
                            &outlen,
                            (unsigned char *)complete_packet + aadlen,
-                           (int)encrypted_size /* already substracted aadlen*/);
+                           encrypted_size /* already subtracted aadlen */);
     if (rc != 1) {
         SSH_LOG(SSH_LOG_WARNING, "EVP_DecryptUpdate failed");
         return SSH_ERROR;
@@ -1581,19 +1527,19 @@ static int evp_dup_pkey(const char* name, const ssh_key key, int demote,
     return SSH_OK;
 }
 
-int evp_dup_dsa_pkey(const ssh_key key, ssh_key new, int demote)
+int evp_dup_dsa_pkey(const ssh_key key, ssh_key new_key, int demote)
 {
-    return evp_dup_pkey("DSA", key, demote, new);
+    return evp_dup_pkey("DSA", key, demote, new_key);
 }
 
-int evp_dup_rsa_pkey(const ssh_key key, ssh_key new, int demote)
+int evp_dup_rsa_pkey(const ssh_key key, ssh_key new_key, int demote)
 {
-    return evp_dup_pkey("RSA", key, demote, new);
+    return evp_dup_pkey("RSA", key, demote, new_key);
 }
 
-int evp_dup_ecdsa_pkey(const ssh_key key, ssh_key new, int demote)
+int evp_dup_ecdsa_pkey(const ssh_key key, ssh_key new_key, int demote)
 {
-    return evp_dup_pkey("EC", key, demote, new);
+    return evp_dup_pkey("EC", key, demote, new_key);
 }
 #endif /* OPENSSL_VERSION_NUMBER */
 

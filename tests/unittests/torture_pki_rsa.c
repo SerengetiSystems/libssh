@@ -692,7 +692,7 @@ static void torture_pki_rsa_key_size(void **state)
     rc = ssh_pki_signature_verify(session, sign, pubkey, INPUTdata, sizeof(INPUTdata));
     assert_ssh_return_code(session, rc);
 
-    /* Set the minumum RSA key size to 4k */
+    /* Set the minimum RSA key size to 4k */
     rc = ssh_options_set(session, SSH_OPTIONS_RSA_MIN_SIZE, &length);
     assert_ssh_return_code(session, rc);
 

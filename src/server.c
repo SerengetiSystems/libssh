@@ -92,7 +92,11 @@ int server_set_kex(ssh_session session)
     size_t len;
     int ok;
 
-    ZERO_STRUCTP(server);
+    /* Skip if already set, for example for the rekey or when we do the guessing
+     * it could have been already used to make some protocol decisions. */
+    if (server->methods[0] != NULL) {
+        return SSH_OK;
+    }
 
     ok = ssh_get_random(server->cookie, 16, 0);
     if (!ok) {
@@ -191,7 +195,13 @@ int server_set_kex(ssh_session session)
         }
     }
 
-    return 0;
+    /* Do not append the extensions during rekey */
+    if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED) {
+        return SSH_OK;
+}
+
+    rc = ssh_kex_append_extensions(session, server);
+    return rc;
 }
 
 int ssh_server_init_kex(ssh_session session) {
@@ -363,7 +373,8 @@ ssh_get_key_params(ssh_session session,
  * @brief A function to be called each time a step has been done in the
  * connection.
  */
-static void ssh_server_connection_callback(ssh_session session){
+static void ssh_server_connection_callback(ssh_session session)
+{
     int rc;
 
     switch(session->session_state){
@@ -394,7 +405,7 @@ static void ssh_server_connection_callback(ssh_session session){
             ssh_packet_set_default_callbacks(session);
             set_status(session, 0.5f);
             session->session_state=SSH_SESSION_STATE_INITIAL_KEX;
-            if (ssh_send_kex(session, 1) < 0) {
+        if (ssh_send_kex(session) < 0) {
                 goto error;
             }
             break;
@@ -403,11 +414,11 @@ static void ssh_server_connection_callback(ssh_session session){
             break;
         case SSH_SESSION_STATE_KEXINIT_RECEIVED:
             set_status(session,0.6f);
-            if(session->next_crypto->server_kex.methods[0]==NULL){
+        if ((session->flags & SSH_SESSION_FLAG_KEXINIT_SENT) == 0) {
                 if(server_set_kex(session) == SSH_ERROR)
                     goto error;
                 /* We are in a rekeying, so we need to send the server kex */
-                if(ssh_send_kex(session, 1) < 0)
+            if (ssh_send_kex(session) < 0)
                     goto error;
             }
             ssh_list_kex(&session->next_crypto->client_kex); // log client kex
@@ -427,8 +438,6 @@ static void ssh_server_connection_callback(ssh_session session){
                     goto error;
                 }
 
-
-
                 /*
                  * If the client supports extension negotiation, we will send
                  * our supported extensions now. This is the first message after
@@ -436,15 +445,16 @@ static void ssh_server_connection_callback(ssh_session session){
                  */
                 if (session->extensions & SSH_EXT_NEGOTIATION &&
                     session->session_state != SSH_SESSION_STATE_AUTHENTICATED) {
-
                     /*
-                     * Only send an SSH_MSG_EXT_INFO message the first time the client
-                     * undergoes NEWKEYS.  It is unexpected for this message to be sent
-                     * upon rekey, and may cause clients to log error messages.
+                 * Only send an SSH_MSG_EXT_INFO message the first time the
+                 * client undergoes NEWKEYS.  It is unexpected for this message
+                 * to be sent upon rekey, and may cause clients to log error
+                 * messages.
                      *
-                     * The session_state can not be used for this purpose because it is
-                     * re-set to SSH_SESSION_STATE_KEXINIT_RECEIVED during rekey.  So,
-                     * use the connected flag which transitions from non-zero below.
+                 * The session_state can not be used for this purpose because it
+                 * is re-set to SSH_SESSION_STATE_KEXINIT_RECEIVED during rekey.
+                 * So, use the connected flag which transitions from non-zero
+                 * below.
                      *
                      * See also:
                      * - https://bugzilla.mindrot.org/show_bug.cgi?id=2929
@@ -455,21 +465,21 @@ static void ssh_server_connection_callback(ssh_session session){
                 }
 
                 set_status(session,1.0f);
-				if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED)
-				{
-					session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
-					rc = ssh_queue_send(session);
-					if (rc != SSH_OK) {
-						//probably need to handle SSH_AGAIN differently 
-						//not sure how to make it retry this though. 
-						goto error;
-					}
-				}
-				else
-				{
-					session->connected = 1;
-					session->session_state = SSH_SESSION_STATE_AUTHENTICATING;
-				}
+                if (session->flags & SSH_SESSION_FLAG_AUTHENTICATED)
+                {
+                    session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
+                    rc = ssh_queue_send(session);
+                    if (rc != SSH_OK) {
+                        //probably need to handle SSH_AGAIN differently 
+                        //not sure how to make it retry this though. 
+                        goto error;
+                    }
+                }
+                else
+                {
+                    session->connected = 1;
+                    session->session_state = SSH_SESSION_STATE_AUTHENTICATING;
+                }
             }
             break;
         case SSH_SESSION_STATE_AUTHENTICATING:
@@ -477,7 +487,8 @@ static void ssh_server_connection_callback(ssh_session session){
         case SSH_SESSION_STATE_ERROR:
             goto error;
         default:
-            ssh_set_error(session,SSH_FATAL,"Invalid state %d",session->session_state);
+        ssh_set_error(session, SSH_FATAL, "Invalid state %d",
+                      session->session_state);
     }
 
     return;
@@ -498,7 +509,8 @@ error:
  * @param  user is a pointer to session
  * @returns Number of bytes processed, or zero if the banner is not complete.
  */
-static size_t callback_receive_banner(const void *data, size_t len, void *user) {
+static size_t callback_receive_banner(const void *data, size_t len, void *user)
+{
     char *buffer = (char *) data;
     ssh_session session = (ssh_session) user;
     char *str = NULL;
@@ -536,7 +548,8 @@ static size_t callback_receive_banner(const void *data, size_t len, void *user) 
         if(i > 127) {
             /* Too big banner */
             session->session_state = SSH_SESSION_STATE_ERROR;
-            ssh_set_error(session, SSH_FATAL, "Receiving banner: too large banner");
+            ssh_set_error(session, SSH_FATAL,
+                          "Receiving banner: too large banner");
 
             return 0;
         }
@@ -575,9 +588,10 @@ int ssh_send_issue_banner(ssh_session session, const ssh_string banner)
             "Sending a server issue banner");
 
     rc = ssh_buffer_pack(session->out_buffer,
-                         "bS",
+                         "bSs",
                          SSH2_MSG_USERAUTH_BANNER,
-                         banner);
+                         banner,
+                         "");
     if (rc != SSH_OK) {
         ssh_set_error_oom(session);
         return SSH_ERROR;
@@ -588,10 +602,14 @@ int ssh_send_issue_banner(ssh_session session, const ssh_string banner)
 }
 
 /* Do the banner and key exchange */
-int ssh_handle_key_exchange(ssh_session session) {
+int ssh_handle_key_exchange(ssh_session session)
+{
     int rc;
-    if (session->session_state != SSH_SESSION_STATE_NONE)
+
+    if (session->session_state != SSH_SESSION_STATE_NONE) {
       goto pending;
+    }
+
     rc = ssh_send_banner(session, 1);
     if (rc < 0) {
         return SSH_ERROR;
@@ -615,8 +633,9 @@ int ssh_handle_key_exchange(ssh_session session) {
         ssh_server_kex_termination,session);
     SSH_LOG_COMMON(session, SSH_LOG_PACKET, "ssh_handle_key_exchange: current state : %d",
         session->session_state);
-    if (rc != SSH_OK)
+    if (rc != SSH_OK) {
       return rc;
+    }
     if (session->session_state == SSH_SESSION_STATE_ERROR ||
         session->session_state == SSH_SESSION_STATE_DISCONNECTED) {
       return SSH_ERROR;
@@ -735,6 +754,13 @@ static int ssh_message_service_request_reply_default(ssh_message msg) {
   return ssh_message_service_reply_success(msg);
 }
 
+/**
+ * @brief   Sends SERVICE_ACCEPT to the client
+ *
+ * @param msg The message to reply to
+ *
+ * @returns SSH_OK when success otherwise SSH_ERROR
+ */
 int ssh_message_service_reply_success(ssh_message msg) {
     ssh_session session;
     int rc;
@@ -759,6 +785,15 @@ int ssh_message_service_reply_success(ssh_message msg) {
     return rc;
 }
 
+/**
+ * @brief Send a global request success message
+ *
+ * @param msg The message
+ *
+ * @param bound_port The remote bind port
+ *
+ * @returns SSH_OK on success, otherwise SSH_ERROR
+ */
 int ssh_message_global_request_reply_success(ssh_message msg, uint16_t bound_port) {
     int rc;
 
@@ -837,6 +872,13 @@ int ssh_message_reply_default(ssh_message msg) {
   return -1;
 }
 
+/**
+ * @brief Gets the service name from the service request message
+ *
+ * @param msg The service request message
+ *
+ * @returns the service name from the message
+ */
 const char *ssh_message_service_service(ssh_message msg){
   if (msg == NULL) {
     return NULL;
@@ -868,7 +910,6 @@ ssh_key ssh_message_auth_pubkey(ssh_message msg) {
   return msg->auth_request.pubkey;
 }
 
-/* Get the publickey of an auth request */
 ssh_public_key ssh_message_auth_publickey(ssh_message msg){
   if (msg == NULL) {
     return NULL;
@@ -884,6 +925,13 @@ enum ssh_publickey_state_e ssh_message_auth_publickey_state(ssh_message msg){
 	  return msg->auth_request.signature_state;
 }
 
+/**
+ *  @brief Check if the message is a keyboard-interactive response
+ *
+ *  @param msg The message to check
+ *
+ *  @returns 1 if the message is a response, otherwise 0
+ */
 int ssh_message_auth_kbdint_is_response(ssh_message msg) {
   if (msg == NULL) {
     return -1;
@@ -893,6 +941,17 @@ int ssh_message_auth_kbdint_is_response(ssh_message msg) {
 }
 
 /* FIXME: methods should be unsigned */
+/**
+ * @brief Sets the supported authentication methods to a message
+ *
+ * @param msg The message
+ *
+ * @param methods Methods to set to the message.
+ * The supported methods are listed in ssh_set_auth_methods
+ * @see ssh_set_auth_methods
+ *
+ * @returns 0 on success, otherwise -1
+ */
 int ssh_message_auth_set_methods(ssh_message msg, int methods) {
   if (msg == NULL || msg->session == NULL) {
     return -1;
@@ -1013,6 +1072,17 @@ int ssh_message_auth_interactive_request(ssh_message msg, const char *name,
   return rc;
 }
 
+/**
+ * @brief Sends SSH2_MSG_USERAUTH_SUCCESS or SSH2_MSG_USERAUTH_FAILURE message
+ * depending on the success of the authentication method
+ *
+ * @param session The session to reply to
+ *
+ * @param partial Denotes if the authentication process was partially completed
+ * (unsuccessful)
+ *
+ * @returns SSH_OK on success, otherwise SSH_ERROR
+ */
 int ssh_auth_reply_success(ssh_session session, int partial)
 {
     struct ssh_crypto_struct *crypto = NULL;
@@ -1062,7 +1132,17 @@ int ssh_message_auth_reply_success(ssh_message msg, int partial) {
 	return ssh_auth_reply_success(msg->session, partial);
 }
 
-/* Answer OK to a pubkey auth request */
+/**
+ * @brief Answer SSH2_MSG_USERAUTH_PK_OK to a pubkey authentication request
+ *
+ * @param msg The message
+ *
+ * @param algo The algorithm of the accepted public key
+ *
+ * @param pubkey The accepted public key
+ *
+ * @returns SSH_OK on success, otherwise SSH_ERROR
+ */
 int ssh_message_auth_reply_pk_ok(ssh_message msg, ssh_string algo, ssh_string pubkey) {
     int rc;
     if (msg == NULL) {
@@ -1083,6 +1163,13 @@ int ssh_message_auth_reply_pk_ok(ssh_message msg, ssh_string algo, ssh_string pu
     return rc;
 }
 
+/**
+ * @brief Answer SSH2_MSG_USERAUTH_PK_OK to a pubkey authentication request
+ *
+ * @param msg The message
+ *
+ * @returns SSH_OK on success, otherwise SSH_ERROR
+ */
 int ssh_message_auth_reply_pk_ok_simple(ssh_message msg) {
     ssh_string algo;
     ssh_string pubkey_blob = NULL;
@@ -1233,6 +1320,13 @@ int ssh_execute_message_callbacks(ssh_session session){
   return SSH_OK;
 }
 
+/**
+ * @brief Sends a keepalive message to the session
+ *
+ * @param session   The session to send the message to
+ *
+ * @returns SSH_OK
+ */
 int ssh_send_keepalive(ssh_session session)
 {
     /* Client denies the request, so the error code is not meaningful */

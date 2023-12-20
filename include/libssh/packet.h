@@ -51,6 +51,10 @@ enum ssh_packet_filter_result_e {
 
 int ssh_packet_send(ssh_session session);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 SSH_PACKET_CALLBACK(ssh_packet_unimplemented);
 SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback);
 SSH_PACKET_CALLBACK(ssh_packet_ignore_callback);
@@ -63,6 +67,7 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info);
 SSH_PACKET_CALLBACK(ssh_packet_kexdh_init);
 #endif
 
+int ssh_packet_send_newkeys(ssh_session session);
 int ssh_packet_send_unimplemented(ssh_session session, uint32_t seqnum);
 int ssh_packet_parse_type(ssh_session session);
 //int packet_flush(ssh_session session, int enforce_blocking);
@@ -90,5 +95,9 @@ struct ssh_crypto_struct *ssh_packet_get_current_crypto(ssh_session session,
 
 int ssh_queue_send(ssh_session session);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* PACKET_H_ */

@@ -43,7 +43,9 @@ ssh_string ssh_make_bignum_string(bignum num) {
   }
 
 #ifdef DEBUG_CRYPTO
-  SSH_LOG(SSH_LOG_CRYPTO, "%" PRIuS " bits, %" PRIuS " bytes, %" PRIuS " padding", bits, len, pad);
+  SSH_LOG(SSH_LOG_TRACE,
+          "%zu bits, %zu bytes, %zu padding",
+          bits, len, pad);
 #endif /* DEBUG_CRYPTO */
 
   ptr = ssh_string_new(len + pad);
@@ -83,7 +85,8 @@ void ssh_print_bignum(const char *name, const_bignum num)
     if (num != NULL) {
         bignum_bn2hex(num, &hex);
     }
-    SSH_LOG(SSH_LOG_DEBUG, "%s value: %s", name, (hex == NULL) ? "(null)" : (char *)hex);
+    SSH_LOG(SSH_LOG_DEBUG, "%s value: %s", name,
+            (hex == NULL) ? "(null)" : (char *)hex);
 #ifdef HAVE_LIBGCRYPT
     SAFE_FREE(hex);
 #elif defined HAVE_LIBCRYPTO

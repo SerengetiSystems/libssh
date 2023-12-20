@@ -65,8 +65,6 @@ struct sockaddr_un {
 #include "libssh/session.h"
 
 /**
- * @internal
- *
  * @defgroup libssh_socket The SSH socket functions.
  * @ingroup libssh
  *
@@ -192,6 +190,15 @@ void ssh_socket_set_callbacks(ssh_socket s, ssh_socket_callbacks callbacks){
     s->callbacks=callbacks;
 }
 
+void ssh_socket_set_connected(ssh_socket s, struct ssh_poll_handle_struct *p)
+{
+    s->state = SSH_SOCKET_CONNECTED;
+    /* POLLOUT is the event to wait for in a nonblocking connect */
+    if (p != NULL) {
+        ssh_poll_set_events(p, POLLIN | POLLOUT);
+    }
+}
+
 /**
 * @internal
 * @brief the socket io callbacks, i.e. the callbacks to called
@@ -213,7 +220,7 @@ void ssh_socket_set_io_callbacks(ssh_socket s, ssh_socket_io_callbacks io_callba
  * @param p             Poll object this callback belongs to.
  * @param fd            The raw socket.
  * @param revents       The current poll events on the socket.
- * @param userdata      Userdata to be passed to the callback function,
+ * @param v_s           Userdata to be passed to the callback function,
  *                      in this case the socket object.
  *
  * @return              0 on success, < 0 when the poll object has been removed
@@ -235,7 +242,8 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
     if (!ssh_socket_is_open(s)) {
         return -1;
     }
-    SSH_LOG_COMMON(s->session, SSH_LOG_TRACE, "Poll callback on socket %d (%s%s%s), out buffer %d",fd,
+    SSH_LOG_COMMON(s->session, SSH_LOG_TRACE,
+            "Poll callback on socket %d (%s%s%s), out buffer %" PRIu32, fd,
             (revents & POLLIN) ? "POLLIN ":"",
             (revents & POLLOUT) ? "POLLOUT ":"",
             (revents & POLLERR) ? "POLLERR":"",
@@ -319,12 +327,13 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
 
         /* Call the callback */
         if (s->callbacks != NULL && s->callbacks->data != NULL) {
+            size_t processed;
             do {
-                nread = s->callbacks->data(ssh_buffer_get(s->in_buffer),
+                processed = s->callbacks->data(ssh_buffer_get(s->in_buffer),
                                        ssh_buffer_get_len(s->in_buffer),
                                        s->callbacks->userdata);
-                ssh_buffer_pass_bytes(s->in_buffer, nread);
-            } while ((nread > 0) && (s->state == SSH_SOCKET_CONNECTED));
+                ssh_buffer_pass_bytes(s->in_buffer, processed);
+            } while ((processed > 0) && (s->state == SSH_SOCKET_CONNECTED));
 
             /* p may have been freed, so don't use it
              * anymore in this function */
@@ -341,10 +350,7 @@ int ssh_socket_pollcallback(struct ssh_poll_handle_struct *p,
         /* First, POLLOUT is a sign we may be connected */
         if (s->state == SSH_SOCKET_CONNECTING) {
             SSH_LOG_COMMON(s->session, SSH_LOG_PACKET, "Received POLLOUT in connecting state");
-            s->state = SSH_SOCKET_CONNECTED;
-            if (p != NULL) {
-                ssh_poll_set_events(p, POLLOUT | POLLIN);
-            }
+            ssh_socket_set_connected(s, p);
 
 	    if (!(s->io_callbacks && s->io_callbacks->closecb))
 	    {   //if socket is externally managed don't try and do this
@@ -523,17 +529,23 @@ void ssh_socket_close(ssh_socket s){
  */
 void ssh_socket_set_fd(ssh_socket s, socket_t fd)
 {
+    ssh_poll_handle h = NULL;
+
     s->fd = fd;
 
     if (s->poll_handle) {
         ssh_poll_set_fd(s->poll_handle,fd);
     } else {
         s->state = SSH_SOCKET_CONNECTING;
+        h = ssh_socket_get_poll_handle(s);
+        if (h == NULL) {
+            return;
+        }
 
         /* POLLOUT is the event to wait for in a nonblocking connect */
-        ssh_poll_set_events(ssh_socket_get_poll_handle(s), POLLOUT);
+        ssh_poll_set_events(h, POLLOUT);
 #ifdef _WIN32
-        ssh_poll_add_events(ssh_socket_get_poll_handle(s), POLLWRNORM);
+        ssh_poll_add_events(h, POLLWRNORM);
 #endif
     }
 }
@@ -582,6 +594,8 @@ static ssize_t ssh_socket_unbuffered_read(ssh_socket s,
 
     if (rc < 0) {
         s->data_except = 1;
+    } else {
+        SSH_LOG(SSH_LOG_TRACE, "read %zd", rc);
     }
 
     return rc;
@@ -622,12 +636,13 @@ static ssize_t ssh_socket_unbuffered_write(ssh_socket s,
     /* Reactive the POLLOUT detector in the poll multiplexer system */
     if (s->poll_handle) {
         SSH_LOG_COMMON(s->session, SSH_LOG_PACKET, "Enabling POLLOUT for socket");
-        ssh_poll_set_events(s->poll_handle,ssh_poll_get_events(s->poll_handle) | POLLOUT);
+        ssh_poll_add_events(s->poll_handle, POLLOUT);
     }
     if (w < 0) {
         s->data_except = 1;
     }
 
+    SSH_LOG(SSH_LOG_TRACE, "wrote %zd", w);
     return w;
 }
 
@@ -750,6 +765,8 @@ int ssh_socket_nonblocking_flush(ssh_socket s)
     /* Is there some data pending? */
     len = ssh_buffer_get_len(s->out_buffer);
     if (s->poll_handle && len > 0) {
+        SSH_LOG(SSH_LOG_TRACE,
+                "did not send all the data, queuing pollout event");
         /* force the poll system to catch pollout events */
         ssh_poll_add_events(s->poll_handle, POLLOUT);
 
@@ -921,9 +938,14 @@ ssh_execute_command(const char *command, socket_t in, socket_t out)
      */
     shell = getenv("SHELL");
     if (shell == NULL || shell[0] == '\0') {
-        /* Fall back to bash. There are issues with dash or
-         * whatever people tend to link to /bin/sh */
+        /* Fall back to the /bin/sh only if the bash is not available. But there are 
+         * issues with dash or whatever people tend to link to /bin/sh */
+        rc = access("/bin/bash", 0);
+        if (rc != 0) {
+            shell = "/bin/sh";
+        } else {
         shell = "/bin/bash";
+    }
     }
     args[0] = shell;
 
@@ -958,6 +980,7 @@ int
 ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
 {
     socket_t pair[2];
+    ssh_poll_handle h = NULL;
     int pid;
     int rc;
 
@@ -980,10 +1003,12 @@ ssh_socket_connect_proxycommand(ssh_socket s, const char *command)
     close(pair[0]);
     SSH_LOG_COMMON(s->session, SSH_LOG_PROTOCOL, "ProxyCommand connection pipe: [%d,%d]",pair[0],pair[1]);
     ssh_socket_set_fd(s, pair[1]);
-    s->state=SSH_SOCKET_CONNECTED;
     s->fd_is_socket=0;
-    /* POLLOUT is the event to wait for in a nonblocking connect */
-    ssh_poll_set_events(ssh_socket_get_poll_handle(s), POLLIN | POLLOUT);
+    h = ssh_socket_get_poll_handle(s);
+    if (h == NULL) {
+        return SSH_ERROR;
+    }
+    ssh_socket_set_connected(s, h);
     if (s->callbacks && s->callbacks->connected) {
         s->callbacks->connected(SSH_SOCKET_CONNECTED_OK, 0, s->callbacks->userdata);
     }

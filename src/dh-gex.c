@@ -249,6 +249,11 @@ error:
     return SSH_PACKET_USED;
 }
 
+void ssh_client_dhgex_remove_callbacks(ssh_session session)
+{
+    ssh_packet_remove_callbacks(session, &ssh_dhgex_client_callbacks);
+}
+
 static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
 {
     struct ssh_crypto_struct *crypto=session->next_crypto;
@@ -259,7 +264,7 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     (void)user;
     SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_KEX_DH_GEX_REPLY received");
 
-    ssh_packet_remove_callbacks(session, &ssh_dhgex_client_callbacks);
+    ssh_client_dhgex_remove_callbacks(session);
     rc = ssh_buffer_unpack(packet,
                            "SBS",
                            &pubkey_blob, &server_pubkey,
@@ -293,15 +298,10 @@ static SSH_PACKET_CALLBACK(ssh_packet_client_dhgex_reply)
     }
 
     /* Send the MSG_NEWKEYS */
-    if (ssh_buffer_add_u8(session->out_buffer, SSH2_MSG_NEWKEYS) < 0) {
-        goto error;
-    }
-
-    rc = ssh_packet_send(session);
+    rc = ssh_packet_send_newkeys(session);
     if (rc == SSH_ERROR) {
         goto error;
     }
-    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "SSH_MSG_NEWKEYS sent");
     session->dh_handshake_state = DH_STATE_NEWKEYS_SENT;
 
     return SSH_PACKET_USED;

@@ -326,16 +326,20 @@ static void ssh_connector_fd_in_cb(ssh_connector connector)
 /** @internal
  * @brief Callback called when a poll event is received on an output fd
  */
-static void ssh_connector_fd_out_cb(ssh_connector connector){
+static void
+ssh_connector_fd_out_cb(ssh_connector connector)
+{
     unsigned char buffer[CHUNKSIZE];
     ssize_t r;
     ssize_t w;
     ssize_t total = 0;
-    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "connector POLLOUT event for fd %d", connector->out_fd);
+    SSH_LOG_COMMON(connector->session, SSH_LOG_TRACE, "connector POLLOUT event for fd %d",
+            connector->out_fd);
 
     if(connector->in_available){
         if (connector->in_channel != NULL){
-            r = ssh_channel_read_nonblocking(connector->in_channel, buffer, CHUNKSIZE, 0);
+            r = ssh_channel_read_nonblocking(connector->in_channel, buffer,
+                                             CHUNKSIZE, 0);
             if(r == SSH_ERROR){
                 ssh_connector_except_channel(connector, connector->in_channel);
                 return;
@@ -346,7 +350,8 @@ static void ssh_connector_fd_out_cb(ssh_connector connector){
             } else if(r>0) {
                 /* loop around write in case the write blocks even for CHUNKSIZE bytes */
                 while (total != r){
-                        w = ssh_connector_fd_write(connector, buffer + total, r - total);
+                    w = ssh_connector_fd_write(connector, buffer + total,
+                                               r - total);
                     if (w < 0){
                         ssh_connector_except(connector, connector->out_fd);
                         return;
