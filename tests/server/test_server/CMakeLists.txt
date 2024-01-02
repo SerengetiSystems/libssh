@@ -10,7 +10,8 @@ set(server_SRCS
 
 add_library(testserver STATIC
             test_server.c
-            default_cb.c)
+            default_cb.c
+            sftpserver_cb.c)
 
 set(LIBSSH_SERVER_TESTS
 #    torture_server_kbdint
@@ -30,7 +31,7 @@ if (UNIX AND NOT WIN32)
     target_link_libraries(test_server
                           testserver
                           ssh::ssh
-                          ${ARGP_LIBRARY}
+                          ${ARGP_LIBRARIES}
                           util)
 endif ()
 

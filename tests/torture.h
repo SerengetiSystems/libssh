@@ -46,6 +46,7 @@
 #endif /* assert_return_code */
 
 #define TORTURE_SSH_SERVER "127.0.0.10"
+#define TORTURE_SSH_SERVER_IP6 "fd00::5357:5f0a"
 #define TORTURE_SSH_USER_BOB "bob"
 #define TORTURE_SSH_USER_BOB_PASSWORD "secret"
 
@@ -120,6 +121,8 @@ void _torture_filter_tests(struct CMUnitTest *tests, size_t ntests);
 const char *torture_server_address(int domain);
 int torture_server_port(void);
 
+int torture_wait_for_daemon(unsigned int seconds);
+
 #ifdef SSHD_EXECUTABLE
 void torture_setup_socket_dir(void **state);
 void torture_setup_sshd_server(void **state, bool pam);
@@ -130,10 +133,13 @@ void torture_teardown_sshd_server(void **state);
 int torture_update_sshd_config(void **state, const char *config);
 #endif /* SSHD_EXECUTABLE */
 
+#ifdef WITH_PKCS11_URI
 void torture_setup_tokens(const char *temp_dir,
                           const char *filename,
                           const char object_name[],
                           const char *load_public);
+void torture_cleanup_tokens(const char *temp_dir);
+#endif /* WITH_PKCS11_URI */
 
 void torture_reset_config(ssh_session session);
 
@@ -149,6 +155,8 @@ __attribute__((weak)) int torture_run_tests(void);
  */
 int torture_run_tests(void);
 #endif
+
+void torture_free_state(struct torture_state *s);
 
 char *torture_make_temp_dir(const char *template);
 char *torture_create_temp_file(const char *template);

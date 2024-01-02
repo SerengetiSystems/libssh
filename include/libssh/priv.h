@@ -47,6 +47,10 @@
 # endif
 #endif /* !defined(HAVE_STRTOULL) */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if !defined(HAVE_STRNDUP)
 char *strndup(const char *s, size_t n);
 #endif /* ! HAVE_STRNDUP */
@@ -170,6 +174,20 @@ int ssh_gettimeofday(struct timeval *__p, void *__t);
 #define gettimeofday ssh_gettimeofday
 
 #define _XCLOSESOCKET closesocket
+
+# ifdef HAVE_IO_H
+#  include <io.h>
+#  undef open
+#  define open _open
+#  undef close
+#  define close _close
+#  undef read
+#  define read _read
+#  undef write
+#  define write _write
+#  undef unlink
+#  define unlink _unlink
+# endif /* HAVE_IO_H */
 
 #else /* _WIN32 */
 
@@ -455,5 +473,9 @@ bool is_ssh_initialized(void);
 
 #define SSH_ERRNO_MSG_MAX   1024
 char *ssh_strerror(int err_num, char *buf, size_t buflen);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _LIBSSH_PRIV_H */

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3.0)
+cmake_minimum_required(VERSION 3.5.0)
 cmake_policy(SET CMP0048 NEW)
 
 # Specify search path for CMake modules to be loaded by include()
@@ -58,7 +58,7 @@ elseif(WITH_MBEDTLS)
       message(FATAL_ERROR "Could not find mbedTLS")
     endif (NOT MBEDTLS_FOUND)
 else (WITH_GCRYPT)
-  find_package(OpenSSL 1.0.1)
+  find_package(OpenSSL 1.1.1)
   if (OPENSSL_FOUND)
     # On CMake < 3.16, OPENSSL_CRYPTO_LIBRARIES is usually a synonym for OPENSSL_CRYPTO_LIBRARY, but is not defined
     # when building on Windows outside of Cygwin. We provide the synonym here, if FindOpenSSL didn't define it already.
@@ -89,23 +89,12 @@ if (WITH_GSSAPI)
     find_package(GSSAPI)
 endif (WITH_GSSAPI)
 
-if (WITH_PKCS11_URI)
-    find_package(softhsm)
-    if (NOT SOFTHSM_FOUND)
-        message(SEND_ERROR "Could not find softhsm module!")
-     endif (NOT SOFTHSM_FOUND)
-endif (WITH_PKCS11_URI)
-
 if (WITH_NACL)
     find_package(NaCl)
     if (NOT NACL_FOUND)
         set(WITH_NACL OFF)
     endif (NOT NACL_FOUND)
 endif (WITH_NACL)
-
-if (BSD OR SOLARIS OR OSX OR CYGWIN)
-    find_package(Argp)
-endif (BSD OR SOLARIS OR OSX OR CYGWIN)
 
 # Disable symbol versioning in non UNIX platforms
 if (UNIX)
@@ -118,6 +107,10 @@ endif (UNIX)
 include(ConfigureChecks.cmake)
 configure_file(config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
+if (NOT HAVE_ARGP_PARSE)
+  find_package(Argp)
+endif (NOT HAVE_ARGP_PARSE)
+
 # check subdirectories
 add_subdirectory(doc)
 add_subdirectory(include)
@@ -125,7 +118,7 @@ add_subdirectory(src)
 
 # pkg-config file
 if (UNIX OR MINGW)
-configure_file(libssh.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libssh.pc)
+configure_file(libssh.pc.cmake ${CMAKE_CURRENT_BINARY_DIR}/libssh.pc @ONLY)
 install(
   FILES
     ${CMAKE_CURRENT_BINARY_DIR}/libssh.pc
@@ -223,7 +216,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Coverage")
         NAME "coverage"
         EXECUTABLE make test
         DEPENDENCIES ssh tests)
-    set(GCOVR_ADDITIONAL_ARGS --xml-pretty --exclude-unreachable-branches --print-summary)
+    set(GCOVR_ADDITIONAL_ARGS --xml-pretty --exclude-unreachable-branches --print-summary --gcov-ignore-parse-errors)
     setup_target_for_coverage_gcovr_xml(
         NAME "coverage_xml"
         EXECUTABLE make test
@@ -232,10 +225,13 @@ endif (CMAKE_BUILD_TYPE STREQUAL "Coverage")
 
 add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source DEPENDS ${_SYMBOL_TARGET} VERBATIM)
 
-# Link compile database for clangd
-execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-                "${CMAKE_BINARY_DIR}/compile_commands.json"
-                "${CMAKE_SOURCE_DIR}/compile_commands.json")
+get_directory_property(hasParent PARENT_DIRECTORY)
+if(NOT(hasParent))
+  # Link compile database for clangd if we are the master project
+  execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+    "${CMAKE_BINARY_DIR}/compile_commands.json"
+    "${CMAKE_SOURCE_DIR}/compile_commands.json")
+endif()
 
 message(STATUS "********************************************")
 message(STATUS "********** ${PROJECT_NAME} build options : **********")
@@ -256,7 +252,7 @@ message(STATUS "Unit testing: ${UNIT_TESTING}")
 message(STATUS "Client code testing: ${CLIENT_TESTING}")
 message(STATUS "Blowfish cipher support: ${WITH_BLOWFISH_CIPHER}")
 message(STATUS "PKCS #11 URI support: ${WITH_PKCS11_URI}")
-message(STATUS "DSA support: ${WITH_DSA}")
+message(STATUS "With PKCS #11 provider support: ${WITH_PKCS11_PROVIDER}")
 set(_SERVER_TESTING OFF)
 if (WITH_SERVER)
     set(_SERVER_TESTING ${SERVER_TESTING})

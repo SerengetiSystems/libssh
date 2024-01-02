@@ -41,11 +41,6 @@
 #elif (defined _WIN32) || (defined _WIN64)
 #define strdup _strdup
 #include <direct.h>
-#include <io.h>
-#define read _read
-#define open _open
-#define write _write
-#define close _close
 #define chdir _chdir
 #endif
 
@@ -53,6 +48,10 @@
 #include "torture_key.h"
 #include "libssh/misc.h"
 #include "libssh/token.h"
+
+#ifdef HAVE_VALGRIND_VALGRIND_H
+#include <valgrind/valgrind.h>
+#endif
 
 #define TORTURE_SSHD_SRV_IPV4 "127.0.0.10"
 /* socket wrapper IPv6 prefix  fd00::5357:5fxx */
@@ -78,6 +77,7 @@ static const char *pattern = NULL;
 
 #ifndef _WIN32
 
+/* TODO missing code coverage */
 static int _torture_auth_kbdint(ssh_session session,
                                const char *password) {
     const char *prompt;
@@ -245,6 +245,13 @@ int torture_terminate_process(const char *pidfile)
 
         /* 10 ms */
         usleep(10 * 1000);
+#ifdef HAVE_VALGRIND_VALGRIND_H
+        if (RUNNING_ON_VALGRIND) {
+            SSH_LOG(SSH_LOG_INFO, "Running within Valgrind, wait one more "
+                    "second for the server to clean up.");
+            usleep(1000 * 1000);
+         }
+#endif /* HAVE_VALGRIND_VALGRIND_H */
 
         rc = kill(pid, 0);
         if (rc != 0) {
@@ -384,18 +391,12 @@ ssh_bind torture_ssh_bind(const char *addr,
     }
 
     switch (key_type) {
-#ifdef HAVE_DSA
-        case SSH_KEYTYPE_DSS:
-            opts = SSH_BIND_OPTIONS_DSAKEY;
-            break;
-#endif /* HAVE_DSA */
         case SSH_KEYTYPE_RSA:
-            opts = SSH_BIND_OPTIONS_RSAKEY;
-            break;
         case SSH_KEYTYPE_ECDSA_P256:
         case SSH_KEYTYPE_ECDSA_P384:
         case SSH_KEYTYPE_ECDSA_P521:
-            opts = SSH_BIND_OPTIONS_ECDSAKEY;
+        case SSH_KEYTYPE_ED25519:
+            opts = SSH_BIND_OPTIONS_HOSTKEY;
             break;
         default:
             goto out_free;
@@ -632,9 +633,6 @@ void torture_setup_create_libssh_config(void **state)
 {
     struct torture_state *s = *state;
     char ed25519_hostkey[1024] = {0};
-#ifdef HAVE_DSA
-    char dsa_hostkey[1024];
-#endif /* HAVE_DSA */
     char rsa_hostkey[1024];
     char ecdsa_hostkey[1024];
     char sshd_config[2048];
@@ -648,9 +646,6 @@ void torture_setup_create_libssh_config(void **state)
              "%s %s\n"
              "%s %s\n"
              "%s %s\n"
-#ifdef HAVE_DSA
-             "%s %s\n"
-#endif /* HAVE_DSA */
              "%s\n"; /* The space for test-specific options */
     bool written = false;
     int rc;
@@ -687,13 +682,6 @@ void torture_setup_create_libssh_config(void **state)
              "%s/sshd/ssh_host_ecdsa_key",
              s->socket_dir);
 
-#ifdef HAVE_DSA
-    snprintf(dsa_hostkey,
-             sizeof(dsa_hostkey),
-             "%s/sshd/ssh_host_dsa_key",
-             s->socket_dir);
-#endif /* HAVE_DSA */
-
     if (!written) {
         torture_write_file(ed25519_hostkey,
                            torture_get_openssh_testkey(SSH_KEYTYPE_ED25519, 0));
@@ -701,10 +689,6 @@ void torture_setup_create_libssh_config(void **state)
                            torture_get_testkey(SSH_KEYTYPE_RSA, 0));
         torture_write_file(ecdsa_hostkey,
                            torture_get_testkey(SSH_KEYTYPE_ECDSA_P521, 0));
-#ifdef HAVE_DSA
-        torture_write_file(dsa_hostkey,
-                           torture_get_testkey(SSH_KEYTYPE_DSS, 0));
-#endif /* HAVE_DSA */
     }
 
     additional_config = (s->srv_additional_config != NULL ?
@@ -715,9 +699,6 @@ void torture_setup_create_libssh_config(void **state)
             "HostKey", ed25519_hostkey,
             "HostKey", rsa_hostkey,
             "HostKey", ecdsa_hostkey,
-#ifdef HAVE_DSA
-            "HostKey", dsa_hostkey,
-#endif /* HAVE_DSA */
             additional_config);
 
     torture_write_file(s->srv_config, sshd_config);
@@ -728,9 +709,6 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
 {
     struct torture_state *s = *state;
     char ed25519_hostkey[1024] = {0};
-#ifdef HAVE_DSA
-    char dsa_hostkey[1024];
-#endif /* HAVE_DSA */
     char rsa_hostkey[1024];
     char ecdsa_hostkey[1024];
     char trusted_ca_pubkey[1024];
@@ -748,10 +726,8 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
     const char config_string[]=
              "Port 22\n"
              "ListenAddress 127.0.0.10\n"
+             "ListenAddress fd00::5357:5f0a\n"
              "%s %s\n" /* ed25519 HostKey */
-#ifdef HAVE_DSA
-             "%s %s\n" /* DSA HostKey */
-#endif /* HAVE_DSA */
              "%s %s\n" /* RSA HostKey */
              "%s %s\n" /* ECDSA HostKey */
              "\n"
@@ -786,6 +762,7 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
     const char fips_config_string[]=
              "Port 22\n"
              "ListenAddress 127.0.0.10\n"
+             "ListenAddress fd00::5357:5f0a\n"
              "%s %s\n" /* RSA HostKey */
              "%s %s\n" /* ECDSA HostKey */
              "\n"
@@ -871,13 +848,6 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
              "%s/sshd/ssh_host_ed25519_key",
              s->socket_dir);
 
-#ifdef HAVE_DSA
-    snprintf(dsa_hostkey,
-             sizeof(dsa_hostkey),
-             "%s/sshd/ssh_host_dsa_key",
-             s->socket_dir);
-#endif /* HAVE_DSA */
-
     snprintf(rsa_hostkey,
              sizeof(rsa_hostkey),
              "%s/sshd/ssh_host_rsa_key",
@@ -896,10 +866,6 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
     if (!written) {
         torture_write_file(ed25519_hostkey,
                            torture_get_openssh_testkey(SSH_KEYTYPE_ED25519, 0));
-#ifdef HAVE_DSA
-        torture_write_file(dsa_hostkey,
-                           torture_get_testkey(SSH_KEYTYPE_DSS, 0));
-#endif /* HAVE_DSA */
         torture_write_file(rsa_hostkey,
                            torture_get_testkey(SSH_KEYTYPE_RSA, 0));
         torture_write_file(ecdsa_hostkey,
@@ -936,9 +902,6 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
         snprintf(sshd_config, sizeof(sshd_config),
                 config_string,
                 "HostKey", ed25519_hostkey,
-#ifdef HAVE_DSA
-                "HostKey", dsa_hostkey,
-#endif /* HAVE_DSA */
                 "HostKey", rsa_hostkey,
                 "HostKey", ecdsa_hostkey,
                 trusted_ca_pubkey,
@@ -951,7 +914,7 @@ static void torture_setup_create_sshd_config(void **state, bool pam)
     torture_write_file(s->srv_config, sshd_config);
 }
 
-static int torture_wait_for_daemon(unsigned int seconds)
+int torture_wait_for_daemon(unsigned int seconds)
 {
     struct ssh_timestamp start;
     int rc;
@@ -1149,6 +1112,16 @@ void torture_setup_sshd_server(void **state, bool pam)
     assert_int_equal(rc, 0);
 }
 
+void torture_free_state(struct torture_state *s)
+{
+    free(s->srv_config);
+    free(s->socket_dir);
+    free(s->pcap_file);
+    free(s->srv_pidfile);
+    free(s->srv_additional_config);
+    free(s);
+}
+
 void torture_teardown_socket_dir(void **state)
 {
     struct torture_state *s = *state;
@@ -1172,13 +1145,7 @@ void torture_teardown_socket_dir(void **state)
     }
     s->plain_pcap = NULL;
 #endif /* WITH_PCAP */
-
-    free(s->srv_config);
-    free(s->socket_dir);
-    free(s->pcap_file);
-    free(s->srv_pidfile);
-    free(s->srv_additional_config);
-    free(s);
+    torture_free_state(s);
 }
 
 static int
@@ -1232,24 +1199,69 @@ void torture_teardown_sshd_server(void **state)
 }
 #endif /* SSHD_EXECUTABLE */
 
+#ifdef WITH_PKCS11_URI
 void torture_setup_tokens(const char *temp_dir,
                           const char *filename,
                           const char object_name[],
                           const char *load_public)
 {
     char token_setup_start_cmd[1024] = {0};
+    char socket_path[1204] = {0};
+    char conf_path[1024] = {0};
     int rc;
 
-    snprintf(token_setup_start_cmd, sizeof(token_setup_start_cmd),
-             "%s/tests/pkcs11/setup-softhsm-tokens.sh %s %s %s %s",
-             BINARYDIR,
-             temp_dir,
-             filename,
-             object_name, load_public);
+    rc = snprintf(token_setup_start_cmd,
+                  sizeof(token_setup_start_cmd),
+                  "%s/tests/pkcs11/setup-softhsm-tokens.sh %s %s %s %s %s %s",
+                  BINARYDIR,
+                  temp_dir,
+                  filename,
+                  object_name,
+                  load_public,
+                  SOFTHSM2_LIBRARY,
+#ifdef WITH_PKCS11_PROVIDER
+                  P11_KIT_CLIENT
+#else
+                  ""
+#endif
+                 );
+    assert_int_not_equal(rc, sizeof(token_setup_start_cmd));
 
     rc = system(token_setup_start_cmd);
     assert_return_code(rc, errno);
+
+#ifdef WITH_PKCS11_PROVIDER
+    rc = snprintf(socket_path,
+                  sizeof(socket_path),
+                  "unix:path=%s/p11-kit-server.socket",
+                  temp_dir);
+    assert_int_not_equal(rc, sizeof(socket_path));
+    setenv("P11_KIT_SERVER_ADDRESS", socket_path, 1);
+
+    setenv("PKCS11_PROVIDER_MODULE", P11_KIT_CLIENT, 1);
+    /* This is useful for debugging PKCS#11 calls */
+    setenv("PKCS11SPY", P11_KIT_CLIENT, 1);
+    setenv("PKCS11_PROVIDER_MODULE", "/usr/lib64/pkcs11-spy.so", 1);
+#else
+    snprintf(conf_path, sizeof(conf_path), "%s/softhsm.conf", temp_dir);
+    setenv("SOFTHSM2_CONF", conf_path, 1);
+#endif /* WITH_PKCS11_PROVIDER */
 }
+
+void torture_cleanup_tokens(const char *temp_dir)
+{
+    char pidfile[1024] = {0};
+    int rc;
+    pid_t pid;
+
+#ifdef WITH_PKCS11_PROVIDER
+    snprintf(pidfile, sizeof(pidfile), "%s/p11-kit-server.pid", temp_dir);
+    torture_terminate_process(pidfile);
+#else
+    unsetenv("SOFTHSM2_CONF");
+#endif /* WITH_PKCS11_PROVIDER */
+}
+#endif /* WITH_PKCS11_URI */
 
 char *torture_make_temp_dir(const char *template)
 {

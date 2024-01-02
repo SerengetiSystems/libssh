@@ -47,7 +47,7 @@
 #include "libssh/legacy.h"
 
 /**
- * @defgroup libssh_auth The SSH authentication functions.
+ * @defgroup libssh_auth The SSH authentication functions
  * @ingroup libssh
  *
  * Functions to authenticate with a server.
@@ -250,6 +250,10 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_failure) {
                       "Access denied for '%s'. Authentication that can continue: %s",
                       current_method,
                       auth_methods);
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
+                "%s",
+                ssh_get_error(session));
+
     }
     session->auth.supported_methods = 0;
     if (strstr(auth_methods, "password") != NULL) {
@@ -554,6 +558,7 @@ int ssh_userauth_try_publickey(ssh_session session,
         goto fail;
     }
 
+    SSH_LOG(SSH_LOG_TRACE, "Trying signature type %s", sig_type_c);
     /* request */
     rc = ssh_buffer_pack(session->out_buffer, "bsssbsS",
             SSH2_MSG_USERAUTH_REQUEST,
@@ -688,6 +693,7 @@ int ssh_userauth_publickey(ssh_session session,
         goto fail;
     }
 
+    SSH_LOG(SSH_LOG_TRACE, "Sending signature type %s", sig_type_c);
     /* request */
     rc = ssh_buffer_pack(session->out_buffer, "bsssbsS",
             SSH2_MSG_USERAUTH_REQUEST,
@@ -760,7 +766,8 @@ static int ssh_userauth_agent_publickey(ssh_session session,
         default:
             ssh_set_error(session,
                           SSH_FATAL,
-                          "Bad call during pending SSH call in ssh_userauth_try_publickey");
+                      "Bad call during pending SSH call in %s",
+                      __func__);
             return SSH_ERROR;
     }
 
@@ -856,6 +863,7 @@ fail:
 enum ssh_agent_state_e {
     SSH_AGENT_STATE_NONE = 0,
     SSH_AGENT_STATE_PUBKEY,
+    SSH_AGENT_STATE_CERT,
     SSH_AGENT_STATE_AUTH
 };
 
@@ -903,7 +911,12 @@ int ssh_userauth_agent(ssh_session session,
                        const char *username)
 {
     int rc = SSH_AUTH_ERROR;
-    struct ssh_agent_state_struct *state;
+    struct ssh_agent_state_struct *state = NULL;
+    ssh_key *configKeys = NULL;
+    ssh_key *configCerts = NULL;
+    size_t configKeysCount = 0;
+    size_t configCertsCount = 0;
+    size_t i;
 
     if (session == NULL) {
         return SSH_AUTH_ERROR;
@@ -932,62 +945,230 @@ int ssh_userauth_agent(ssh_session session,
         return SSH_AUTH_DENIED;
     }
 
+    if (session->opts.identities_only) {
+        /*
+         * Read keys mentioned in the config, so we can check if key from agent
+         * is in there.
+         */
+        size_t identityLen = ssh_list_count(session->opts.identity);
+        size_t certsLen = ssh_list_count(session->opts.certificate);
+        struct ssh_iterator *it = ssh_list_get_iterator(session->opts.identity);
+
+        configKeys = malloc(identityLen * sizeof(ssh_key));
+        configCerts = malloc((certsLen + identityLen) * sizeof(ssh_key));
+        if (configKeys == NULL || configCerts == NULL) {
+            free(configKeys);
+            free(configCerts);
+            ssh_set_error_oom(session);
+            return SSH_AUTH_ERROR;
+        }
+
+        while (it != NULL && configKeysCount < identityLen) {
+            const char *privkeyFile = it->data;
+            size_t certPathLen;
+            char *certFile = NULL;
+            ssh_key pubkey = NULL;
+            ssh_key cert = NULL;
+
+            /*
+             * Read the private key file listed in the config, but we're only
+             * interested in the public key. Don't try to decrypt private key.
+             */
+            rc = ssh_pki_import_pubkey_file(privkeyFile, &pubkey);
+            if (rc == SSH_OK) {
+                configKeys[configKeysCount++] = pubkey;
+            } else {
+                char *pubkeyFile = NULL;
+                size_t pubkeyPathLen = strlen(privkeyFile) + sizeof(".pub");
+
+                SSH_KEY_FREE(pubkey);
+
+                /*
+                * If we couldn't get the public key from the private key file,
+                * try a .pub file instead.
+                */
+                pubkeyFile = malloc(pubkeyPathLen);
+                if (!pubkeyFile) {
+                    ssh_set_error_oom(session);
+                    rc = SSH_AUTH_ERROR;
+                    goto done;
+                }
+                snprintf(pubkeyFile, pubkeyPathLen, "%s.pub", privkeyFile);
+                rc = ssh_pki_import_pubkey_file(pubkeyFile, &pubkey);
+                free(pubkeyFile);
+                if (rc == SSH_OK) {
+                    configKeys[configKeysCount++] = pubkey;
+                } else if (pubkey) {
+                    SSH_KEY_FREE(pubkey);
+                }
+            }
+            /* Now try to see if there is a certificate with default name
+             * do not merge it yet with the key as we need to try first the
+             * non-certified key */
+            certPathLen = strlen(privkeyFile) + sizeof("-cert.pub");
+            certFile = malloc(certPathLen);
+            if (!certFile) {
+                ssh_set_error_oom(session);
+                rc = SSH_AUTH_ERROR;
+                goto done;
+            }
+            snprintf(certFile, certPathLen, "%s-cert.pub", privkeyFile);
+            rc = ssh_pki_import_cert_file(certFile, &cert);
+            free(certFile);
+            if (rc == SSH_OK) {
+                configCerts[configCertsCount++] = cert;
+            } else if (cert) {
+                SSH_KEY_FREE(cert);
+            }
+
+            it = it->next;
+        }
+        /* And now load separately-listed certificates. */
+        it = ssh_list_get_iterator(session->opts.certificate);
+        while (it != NULL && configCertsCount < certsLen + identityLen) {
+            const char *certFile = it->data;
+            ssh_key cert = NULL;
+
+            rc = ssh_pki_import_cert_file(certFile, &cert);
+            if (rc == SSH_OK) {
+                configCerts[configCertsCount++] = cert;
+            } else if (cert) {
+                SSH_KEY_FREE(cert);
+            }
+
+            it = it->next;
+        }
+    }
+
     while (state->pubkey != NULL) {
         if (state->state == SSH_AGENT_STATE_NONE) {
             SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-                    "Trying identity %s", state->comment);
+                    "Trying identity %s",
+                    state->comment);
+            if (session->opts.identities_only) {
+                /* Check if this key is one of the keys listed in the config */
+                bool found_key = false;
+                for (i = 0; i < configKeysCount; i++) {
+                    int cmp = ssh_key_cmp(state->pubkey,
+                                          configKeys[i],
+                                          SSH_KEY_CMP_PUBLIC);
+                    if (cmp == 0) {
+                        found_key = true;
+                        break;
+        }
+                }
+                /* or in separate certificates */
+                for (i = 0; i < configCertsCount; i++) {
+                    int cmp = ssh_key_cmp(state->pubkey,
+                                          configCerts[i],
+                                          SSH_KEY_CMP_PUBLIC);
+                    if (cmp == 0) {
+                        found_key = true;
+                        break;
+                    }
+                }
+
+                if (!found_key) {
+                    SSH_LOG(SSH_LOG_DEBUG,
+                            "Identities only is enabled and identity %s was "
+                            "not listed in config, skipping",
+                            state->comment);
+                    SSH_STRING_FREE_CHAR(state->comment);
+                    state->comment = NULL;
+                    SSH_KEY_FREE(state->pubkey);
+                    state->pubkey = ssh_agent_get_next_ident(
+                        session, &state->comment);
+
+                    if (state->pubkey == NULL) {
+                        rc = SSH_AUTH_DENIED;
+                    }
+                    continue;
+                }
+            }
         }
         if (state->state == SSH_AGENT_STATE_NONE ||
-                state->state == SSH_AGENT_STATE_PUBKEY) {
+            state->state == SSH_AGENT_STATE_PUBKEY ||
+            state->state == SSH_AGENT_STATE_CERT) {
             rc = ssh_userauth_try_publickey(session, username, state->pubkey);
             if (rc == SSH_AUTH_ERROR) {
                 ssh_agent_state_free (state);
                 session->agent_state = NULL;
-                return rc;
+                goto done;
             } else if (rc == SSH_AUTH_AGAIN) {
-                state->state = SSH_AGENT_STATE_PUBKEY;
-                return rc;
+                state->state = (state->state == SSH_AGENT_STATE_NONE ?
+                                SSH_AGENT_STATE_PUBKEY : state->state);
+                goto done;
             } else if (rc != SSH_AUTH_SUCCESS) {
                 SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-                        "Public key of %s refused by server", state->comment);
+                        "Public key of %s refused by server",
+                        state->comment);
+                if (state->state == SSH_AGENT_STATE_PUBKEY) {
+                    for (i = 0; i < configCertsCount; i++) {
+                        int cmp = ssh_key_cmp(state->pubkey,
+                                              configCerts[i],
+                                              SSH_KEY_CMP_PUBLIC);
+                        if (cmp == 0) {
+                            SSH_LOG(SSH_LOG_DEBUG,
+                                    "Retry with matching certificate");
+                            SSH_KEY_FREE(state->pubkey);
+                            state->pubkey = ssh_key_dup(configCerts[i]);
+                            state->state = SSH_AGENT_STATE_CERT;
+                            continue;
+                        }
+                    }
+                }
                 SSH_STRING_FREE_CHAR(state->comment);
                 state->comment = NULL;
-                ssh_key_free(state->pubkey);
-                state->pubkey = ssh_agent_get_next_ident(session, &state->comment);
+                SSH_KEY_FREE(state->pubkey);
+                state->pubkey = ssh_agent_get_next_ident(session,
+                                                         &state->comment);
                 state->state = SSH_AGENT_STATE_NONE;
                 continue;
             }
 
             SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-                    "Public key of %s accepted by server", state->comment);
+                    "Public key of %s accepted by server",
+                    state->comment);
             state->state = SSH_AGENT_STATE_AUTH;
         }
         if (state->state == SSH_AGENT_STATE_AUTH) {
             rc = ssh_userauth_agent_publickey(session, username, state->pubkey);
-            if (rc == SSH_AUTH_AGAIN)
-                return rc;
+            if (rc == SSH_AUTH_AGAIN) {
+                goto done;
+            }
             SSH_STRING_FREE_CHAR(state->comment);
             state->comment = NULL;
             if (rc == SSH_AUTH_ERROR || rc == SSH_AUTH_PARTIAL) {
                 ssh_agent_state_free (session->agent_state);
                 session->agent_state = NULL;
-                return rc;
+                goto done;
             } else if (rc != SSH_AUTH_SUCCESS) {
                 SSH_LOG_COMMON(session, SSH_LOG_INFO,
                         "Server accepted public key but refused the signature");
-                ssh_key_free(state->pubkey);
-                state->pubkey = ssh_agent_get_next_ident(session, &state->comment);
+                SSH_KEY_FREE(state->pubkey);
+                state->pubkey = ssh_agent_get_next_ident(session,
+                                                         &state->comment);
                 state->state = SSH_AGENT_STATE_NONE;
                 continue;
             }
             ssh_agent_state_free (session->agent_state);
             session->agent_state = NULL;
-            return SSH_AUTH_SUCCESS;
+            rc = SSH_AUTH_SUCCESS;
+            goto done;
         }
     }
 
     ssh_agent_state_free (session->agent_state);
     session->agent_state = NULL;
+done:
+    for (i = 0; i < configKeysCount; i++) {
+        ssh_key_free(configKeys[i]);
+    }
+    free(configKeys);
+    for (i = 0; i < configCertsCount; i++) {
+        ssh_key_free(configCerts[i]);
+    }
+    free(configCerts);
     return rc;
 }
 
@@ -995,6 +1176,8 @@ enum ssh_auth_auto_state_e {
     SSH_AUTH_AUTO_STATE_NONE = 0,
     SSH_AUTH_AUTO_STATE_PUBKEY,
     SSH_AUTH_AUTO_STATE_KEY_IMPORTED,
+    SSH_AUTH_AUTO_STATE_CERTIFICATE_FILE,
+    SSH_AUTH_AUTO_STATE_CERTIFICATE_OPTION,
     SSH_AUTH_AUTO_STATE_PUBKEY_ACCEPTED
 };
 
@@ -1003,6 +1186,8 @@ struct ssh_auth_auto_state_struct {
     struct ssh_iterator *it;
     ssh_key privkey;
     ssh_key pubkey;
+    ssh_key cert;
+    struct ssh_iterator *cert_it;
 };
 
 /**
@@ -1037,7 +1222,8 @@ int ssh_userauth_publickey_auto_get_current_identity(ssh_session session,
         return SSH_ERROR;
     }
 
-    if (session->auth.auto_state != NULL && session->auth.auto_state->it != NULL) {
+    if (session->auth.auto_state != NULL &&
+        session->auth.auto_state->it != NULL) {
         id = session->auth.auto_state->it->data;
     }
 
@@ -1081,6 +1267,9 @@ int ssh_userauth_publickey_auto_get_current_identity(ssh_session session,
  * @note Most server implementations do not permit changing the username during
  * authentication. The username should only be set with ssh_options_set() only
  * before you connect to the server.
+ *
+ * The OpenSSH iterates over the identities and first try the plain public key
+ * and then the certificate if it is in place.
  */
 int ssh_userauth_publickey_auto(ssh_session session,
                                 const char *username,
@@ -1088,7 +1277,7 @@ int ssh_userauth_publickey_auto(ssh_session session,
 {
     ssh_auth_callback auth_fn = NULL;
     void *auth_data = NULL;
-    struct ssh_auth_auto_state_struct *state;
+    struct ssh_auth_auto_state_struct *state = NULL;
     int rc;
 
     if (session == NULL) {
@@ -1134,10 +1323,13 @@ int ssh_userauth_publickey_auto(ssh_session session,
 
         if (state->state == SSH_AUTH_AUTO_STATE_PUBKEY) {
             SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-                    "Trying to authenticate with %s", privkey_file);
+                    "Trying to authenticate with %s",
+                    privkey_file);
+            state->cert = NULL;
             state->privkey = NULL;
             state->pubkey = NULL;
 
+#ifdef WITH_PKCS11_URI
             if (ssh_pki_is_uri(privkey_file)) {
                 char *pub_uri_from_priv = NULL;
                 SSH_LOG_COMMON(session, SSH_LOG_INFO,
@@ -1146,12 +1338,19 @@ int ssh_userauth_publickey_auto(ssh_session session,
                 if (pub_uri_from_priv == NULL) {
                     return SSH_ERROR;
                 } else {
-                    snprintf(pubkey_file, sizeof(pubkey_file), "%s",
+                    snprintf(pubkey_file,
+                             sizeof(pubkey_file),
+                             "%s",
                              pub_uri_from_priv);
                     SAFE_FREE(pub_uri_from_priv);
                 }
-            } else {
-                snprintf(pubkey_file, sizeof(pubkey_file), "%s.pub", privkey_file);
+            } else
+#endif /* WITH_PKCS11_URI */
+            {
+                snprintf(pubkey_file,
+                         sizeof(pubkey_file),
+                         "%s.pub",
+                         privkey_file);
             }
 
             rc = ssh_pki_import_pubkey_file(pubkey_file, &state->pubkey);
@@ -1185,9 +1384,10 @@ int ssh_userauth_publickey_auto(ssh_session session,
                     continue;
                 }
 
-                rc = ssh_pki_export_privkey_to_pubkey(state->privkey, &state->pubkey);
+                rc = ssh_pki_export_privkey_to_pubkey(state->privkey,
+                                                      &state->pubkey);
                 if (rc == SSH_ERROR) {
-                    ssh_key_free(state->privkey);
+                    SSH_KEY_FREE(state->privkey);
                     SAFE_FREE(session->auth.auto_state);
                     return SSH_AUTH_ERROR;
                 }
@@ -1201,28 +1401,101 @@ int ssh_userauth_publickey_auto(ssh_session session,
             }
             state->state = SSH_AUTH_AUTO_STATE_KEY_IMPORTED;
         }
-        if (state->state == SSH_AUTH_AUTO_STATE_KEY_IMPORTED) {
-            rc = ssh_userauth_try_publickey(session, username, state->pubkey);
+        if (state->state == SSH_AUTH_AUTO_STATE_KEY_IMPORTED ||
+            state->state == SSH_AUTH_AUTO_STATE_CERTIFICATE_FILE ||
+            state->state == SSH_AUTH_AUTO_STATE_CERTIFICATE_OPTION) {
+            ssh_key k = state->pubkey;
+            if (state->state != SSH_AUTH_AUTO_STATE_KEY_IMPORTED) {
+                k = state->cert;
+            }
+            rc = ssh_userauth_try_publickey(session, username, k);
             if (rc == SSH_AUTH_ERROR) {
                 SSH_LOG_COMMON(session, SSH_LOG_WARN,
                         "Public key authentication error for %s",
                         privkey_file);
-                ssh_key_free(state->privkey);
-                state->privkey = NULL;
-                ssh_key_free(state->pubkey);
-                state->pubkey = NULL;
+                SSH_KEY_FREE(state->cert);
+                SSH_KEY_FREE(state->privkey);
+                SSH_KEY_FREE(state->pubkey);
                 SAFE_FREE(session->auth.auto_state);
                 return rc;
             } else if (rc == SSH_AUTH_AGAIN) {
                 return rc;
             } else if (rc != SSH_AUTH_SUCCESS) {
+                int r; /* do not reuse `rc` as it is used to return from here */
+                SSH_KEY_FREE(state->cert);
                 SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-                        "Public key for %s refused by server",
+                        "Public key for %s%s refused by server",
+                        privkey_file,
+                        (state->state != SSH_AUTH_AUTO_STATE_KEY_IMPORTED
+                            ? " (with certificate)" : ""));
+                /* Try certificate file by appending -cert.pub (if present) */
+                if (state->state == SSH_AUTH_AUTO_STATE_KEY_IMPORTED) {
+                    char cert_file[PATH_MAX] = {0};
+                    ssh_key cert = NULL;
+
+                    snprintf(cert_file,
+                             sizeof(cert_file),
+                             "%s-cert.pub",
                         privkey_file);
-                ssh_key_free(state->privkey);
-                state->privkey = NULL;
-                ssh_key_free(state->pubkey);
-                state->pubkey = NULL;
+                    SSH_LOG(SSH_LOG_TRACE,
+                            "Trying to load the certificate %s (default path)",
+                            cert_file);
+                    r = ssh_pki_import_cert_file(cert_file, &cert);
+                    if (r == SSH_OK) {
+                        /* TODO check the pubkey and certs match */
+                        SSH_LOG(SSH_LOG_TRACE,
+                                "Certificate loaded %s. Retry the authentication.",
+                                cert_file);
+                        state->state = SSH_AUTH_AUTO_STATE_CERTIFICATE_FILE;
+                        SSH_KEY_FREE(state->cert);
+                        state->cert = cert;
+                        /* try to authenticate with this certificate */
+                        continue;
+                    }
+                    /* if the file does not exists, try configuration options */
+                    state->state = SSH_AUTH_AUTO_STATE_CERTIFICATE_OPTION;
+                }
+                /* Try certificate files loaded through options */
+                if (state->state == SSH_AUTH_AUTO_STATE_CERTIFICATE_OPTION) {
+                    SSH_KEY_FREE(state->cert);
+                    if (state->cert_it == NULL) {
+                        state->cert_it = ssh_list_get_iterator(session->opts.certificate);
+                    }
+                    while (state->cert_it != NULL) {
+                        const char *cert_file = state->cert_it->data;
+                        ssh_key cert = NULL;
+
+                        SSH_LOG(SSH_LOG_TRACE,
+                                "Trying to load the certificate %s (options)",
+                                cert_file);
+                        r = ssh_pki_import_cert_file(cert_file, &cert);
+                        if (r == SSH_OK) {
+                            int cmp = ssh_key_cmp(cert,
+                                                  state->pubkey,
+                                                  SSH_KEY_CMP_PUBLIC);
+                            if (cmp != 0) {
+                                state->cert_it = state->cert_it->next;
+                                SSH_KEY_FREE(cert);
+                                continue; /* with next cert */
+                            }
+                            SSH_LOG(SSH_LOG_TRACE,
+                                    "Found matching certificate %s in options. Retry the authentication.",
+                                    cert_file);
+                            state->cert = cert;
+                            cert = NULL;
+                            state->state = SSH_AUTH_AUTO_STATE_CERTIFICATE_OPTION;
+                            /* try to authenticate with this identity */
+                            break; /* try this cert */
+                        }
+                        /* continue with next identity */
+                    }
+                    if (state->cert != NULL) {
+                        continue; /* retry with the certificate */
+                    }
+                }
+                SSH_KEY_FREE(state->cert);
+                SSH_KEY_FREE(state->privkey);
+                SSH_KEY_FREE(state->pubkey);
                 state->it=state->it->next;
                 state->state = SSH_AUTH_AUTO_STATE_PUBKEY;
                 continue;
@@ -1238,8 +1511,8 @@ int ssh_userauth_publickey_auto(ssh_session session,
                         auth_data,
                         &state->privkey);
                 if (rc == SSH_ERROR) {
-                    ssh_key_free(state->pubkey);
-                    state->pubkey=NULL;
+                    SSH_KEY_FREE(state->cert);
+                    SSH_KEY_FREE(state->pubkey);
                     ssh_set_error(session,
                             SSH_FATAL,
                             "Failed to read private key: %s",
@@ -1249,8 +1522,8 @@ int ssh_userauth_publickey_auto(ssh_session session,
                     continue;
                 } else if (rc == SSH_EOF) {
                     /* If the file doesn't exist, continue */
-                    ssh_key_free(state->pubkey);
-                    state->pubkey = NULL;
+                    SSH_KEY_FREE(state->cert);
+                    SSH_KEY_FREE(state->pubkey);
                     SSH_LOG_COMMON(session, SSH_LOG_INFO,
                             "Private key %s doesn't exist.",
                             privkey_file);
@@ -1259,16 +1532,33 @@ int ssh_userauth_publickey_auto(ssh_session session,
                     continue;
                 }
             }
+            if (state->cert != NULL && !is_cert_type(state->privkey->cert_type)) {
+                rc = ssh_pki_copy_cert_to_privkey(state->cert, state->privkey);
+                if (rc != SSH_OK) {
+                    SSH_KEY_FREE(state->cert);
+                    SSH_KEY_FREE(state->privkey);
+                    SSH_KEY_FREE(state->pubkey);
+                    ssh_set_error(session,
+                                  SSH_FATAL,
+                                  "Failed to copy cert to private key");
+                    state->it = state->it->next;
+                    state->state = SSH_AUTH_AUTO_STATE_PUBKEY;
+                    continue;
+                }
+            }
 
             rc = ssh_userauth_publickey(session, username, state->privkey);
             if (rc != SSH_AUTH_AGAIN && rc != SSH_AUTH_DENIED) {
-                ssh_key_free(state->privkey);
-                ssh_key_free(state->pubkey);
+                bool cert_used = (state->cert != NULL);
+                SSH_KEY_FREE(state->cert);
+                SSH_KEY_FREE(state->privkey);
+                SSH_KEY_FREE(state->pubkey);
                 SAFE_FREE(session->auth.auto_state);
                 if (rc == SSH_AUTH_SUCCESS) {
                     SSH_LOG_COMMON(session, SSH_LOG_INFO,
-                            "Successfully authenticated using %s",
-                            privkey_file);
+                            "Successfully authenticated using %s%s",
+                            privkey_file,
+                            (cert_used ? " and certificate" : ""));
                 }
                 return rc;
             }
@@ -1277,19 +1567,19 @@ int ssh_userauth_publickey_auto(ssh_session session,
                 return rc;
             }
 
-            SSH_LOG_COMMON(session, SSH_LOG_WARN,
+            SSH_KEY_FREE(state->cert);
+            SSH_KEY_FREE(state->privkey);
+            SSH_KEY_FREE(state->pubkey);
+
+            SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
                     "The server accepted the public key but refused the signature");
-
-            ssh_key_free(state->privkey);
-            ssh_key_free(state->pubkey);
-
             state->it = state->it->next;
             state->state = SSH_AUTH_AUTO_STATE_PUBKEY;
             /* continue */
         }
     }
-    SSH_LOG_COMMON(session, SSH_LOG_INFO,
-            "Tried every public key, none matched");
+    SSH_LOG_COMMON(session, SSH_LOG_WARN,
+            "Access denied: Tried every public key, none matched");
     SAFE_FREE(session->auth.auto_state);
     return SSH_AUTH_DENIED;
 }
@@ -1406,21 +1696,19 @@ int ssh_userauth_agent_pubkey(ssh_session session,
     key->type = publickey->type;
     key->type_c = ssh_key_type_to_char(key->type);
     key->flags = SSH_KEY_FLAG_PUBLIC;
-#if !defined(HAVE_LIBCRYPTO) || OPENSSL_VERSION_NUMBER < 0x30000000L
-    key->dsa = publickey->dsa_pub;
+#ifndef HAVE_LIBCRYPTO
     key->rsa = publickey->rsa_pub;
 #else
     key->key = publickey->key_pub;
-#endif /* OPENSSL_VERSION_NUMBER */
+#endif /* HAVE_LIBCRYPTO */
 
     rc = ssh_userauth_agent_publickey(session, username, key);
 
-#if !defined(HAVE_LIBCRYPTO) || OPENSSL_VERSION_NUMBER < 0x30000000L
-    key->dsa = NULL;
+#ifndef HAVE_LIBCRYPTO
     key->rsa = NULL;
 #else
     key->key = NULL;
-#endif /* OPENSSL_VERSION_NUMBER */
+#endif /* HAVE_LIBCRYPTO */
     ssh_key_free(key);
 
     return rc;
@@ -1677,10 +1965,10 @@ SSH_PACKET_CALLBACK(ssh_packet_userauth_info_request) {
     }
 
     SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
-            "%d keyboard-interactive prompts", nprompts);
+            "%" PRIu32 " keyboard-interactive prompts", nprompts);
     if (nprompts > KBDINT_MAX_PROMPT) {
         ssh_set_error(session, SSH_FATAL,
-                "Too much prompts requested by the server: %u (0x%.4x)",
+                "Too much prompts requested by the server: %" PRIu32 " (0x%.4" PRIx32 ")",
                 nprompts, nprompts);
         ssh_kbdint_free(session->kbdint);
         session->kbdint = NULL;
@@ -2031,7 +2319,7 @@ int ssh_userauth_gssapi(ssh_session session)
     } else if (rc == SSH_ERROR) {
         return SSH_AUTH_ERROR;
     }
-    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Authenticating with gssapi-with-mic");
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Authenticating with gssapi-with-mic");
 
     session->auth.current_method = SSH_AUTH_METHOD_GSSAPI_MIC;
     session->auth.state = SSH_AUTH_STATE_NONE;

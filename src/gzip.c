@@ -24,8 +24,8 @@
 
 #include "config.h"
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef ZLIB_WINAPI //if zlib has ZLIB_WINAPI defined it includes windows.h so include this first
 #include <winsock2.h>
 #endif
@@ -40,7 +40,9 @@
 #define BLOCKSIZE 4092
 #endif
 
-static z_stream *initcompress(ssh_session session, int level) {
+static z_stream *
+initcompress(ssh_session session, int level)
+{
   z_stream *stream = NULL;
   int status;
 
@@ -52,15 +54,18 @@ static z_stream *initcompress(ssh_session session, int level) {
   status = deflateInit(stream, level);
   if (status != Z_OK) {
     SAFE_FREE(stream);
-    ssh_set_error(session, SSH_FATAL,
-        "status %d inititalising zlib deflate", status);
+        ssh_set_error(session,
+                      SSH_FATAL,
+                      "status %d initialising zlib deflate",
+                      status);
     return NULL;
   }
 
   return stream;
 }
 
-static ssh_buffer gzip_compress(ssh_session session, ssh_buffer source, int level)
+static ssh_buffer
+gzip_compress(ssh_session session, ssh_buffer source, int level)
 {
   struct ssh_crypto_struct *crypto = NULL;
   z_stream *zout = NULL;
@@ -96,8 +101,10 @@ static ssh_buffer gzip_compress(ssh_session session, ssh_buffer source, int leve
     status = deflate(zout, Z_PARTIAL_FLUSH);
     if (status != Z_OK) {
       SSH_BUFFER_FREE(dest);
-      ssh_set_error(session, SSH_FATAL,
-          "status %d deflating zlib packet", status);
+            ssh_set_error(session,
+                          SSH_FATAL,
+                          "status %d deflating zlib packet",
+                          status);
       return NULL;
     }
     len = BLOCKSIZE - zout->avail_out;
@@ -111,8 +118,11 @@ static ssh_buffer gzip_compress(ssh_session session, ssh_buffer source, int leve
   return dest;
 }
 
-int compress_buffer(ssh_session session, ssh_buffer buf) {
+int
+compress_buffer(ssh_session session, ssh_buffer buf)
+{
   ssh_buffer dest = NULL;
+    int rv;
 
   dest = gzip_compress(session, buf, session->opts.compressionlevel);
   if (dest == NULL) {
@@ -124,7 +134,10 @@ int compress_buffer(ssh_session session, ssh_buffer buf) {
     return -1;
   }
 
-  if (ssh_buffer_add_data(buf, ssh_buffer_get(dest), ssh_buffer_get_len(dest)) < 0) {
+    rv = ssh_buffer_add_data(buf,
+                             ssh_buffer_get(dest),
+                             ssh_buffer_get_len(dest));
+    if (rv < 0) {
     SSH_BUFFER_FREE(dest);
     return -1;
   }
@@ -135,7 +148,9 @@ int compress_buffer(ssh_session session, ssh_buffer buf) {
 
 /* decompression */
 
-static z_stream *initdecompress(ssh_session session) {
+static z_stream *
+initdecompress(ssh_session session)
+{
   z_stream *stream = NULL;
   int status;
 
@@ -147,15 +162,18 @@ static z_stream *initdecompress(ssh_session session) {
   status = inflateInit(stream);
   if (status != Z_OK) {
     SAFE_FREE(stream);
-    ssh_set_error(session, SSH_FATAL,
-        "Status = %d initiating inflate context!", status);
+        ssh_set_error(session,
+                      SSH_FATAL,
+                      "Status = %d initiating inflate context!",
+                      status);
     return NULL;
   }
 
   return stream;
 }
 
-static ssh_buffer gzip_decompress(ssh_session session, ssh_buffer source, size_t maxlen)
+static ssh_buffer
+gzip_decompress(ssh_session session, ssh_buffer source, size_t maxlen)
 {
   struct ssh_crypto_struct *crypto = NULL;
   z_stream *zin = NULL;
@@ -192,8 +210,10 @@ static ssh_buffer gzip_decompress(ssh_session session, ssh_buffer source, size_t
     zin->avail_out = BLOCKSIZE;
     status = inflate(zin, Z_PARTIAL_FLUSH);
     if (status != Z_OK && status != Z_BUF_ERROR) {
-      ssh_set_error(session, SSH_FATAL,
-          "status %d inflating zlib packet", status);
+            ssh_set_error(session,
+                          SSH_FATAL,
+                          "status %d inflating zlib packet",
+                          status);
       SSH_BUFFER_FREE(dest);
       return NULL;
     }
@@ -214,8 +234,11 @@ static ssh_buffer gzip_decompress(ssh_session session, ssh_buffer source, size_t
   return dest;
 }
 
-int decompress_buffer(ssh_session session,ssh_buffer buf, size_t maxlen){
+int
+decompress_buffer(ssh_session session, ssh_buffer buf, size_t maxlen)
+{
   ssh_buffer dest = NULL;
+    int rv;
 
   dest = gzip_decompress(session,buf, maxlen);
   if (dest == NULL) {
@@ -227,7 +250,10 @@ int decompress_buffer(ssh_session session,ssh_buffer buf, size_t maxlen){
     return -1;
   }
 
-  if (ssh_buffer_add_data(buf, ssh_buffer_get(dest), ssh_buffer_get_len(dest)) < 0) {
+    rv = ssh_buffer_add_data(buf,
+                             ssh_buffer_get(dest),
+                             ssh_buffer_get_len(dest));
+    if (rv < 0) {
     SSH_BUFFER_FREE(dest);
     return -1;
   }

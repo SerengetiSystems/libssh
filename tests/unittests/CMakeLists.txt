@@ -3,6 +3,7 @@ project(unittests C)
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 set(LIBSSH_UNIT_TESTS
+    torture_bignum
     torture_buffer
     torture_bytearray
     torture_callbacks
@@ -30,6 +31,12 @@ set(LIBSSH_THREAD_UNIT_TESTS
     torture_threads_crypto
 )
 
+set(TORTURE_UNIT_ENVIRONMENT
+    "LSAN_OPTIONS=suppressions=${libssh-tests_SOURCE_DIR}/suppressions/lsan.supp;")
+if (OPENSSL_FOUND)
+    list(APPEND TORTURE_UNIT_ENVIRONMENT OPENSSL_ENABLE_SHA1_SIGNATURES=1)
+endif (OPENSSL_FOUND)
+
 find_program(SSHKEYGEN_EXECUTABLE NAMES ssh-keygen)
 if(SSHKEYGEN_EXECUTABLE)
     set(LIBSSH_UNIT_TESTS
@@ -38,6 +45,7 @@ if(SSHKEYGEN_EXECUTABLE)
         torture_keyfiles
         torture_pki
         torture_pki_rsa
+        torture_pki_dsa
         torture_pki_ed25519
     )
 
@@ -53,20 +61,13 @@ if(SSHKEYGEN_EXECUTABLE)
         endif()
     endif()
 
-
-    if (HAVE_DSA)
-        set(LIBSSH_UNIT_TESTS
-            ${LIBSSH_UNIT_TESTS}
-            torture_pki_dsa
-        )
-    endif()
-
     if (WITH_PKCS11_URI)
         set(LIBSSH_UNIT_TESTS
             ${LIBSSH_UNIT_TESTS}
             torture_pki_rsa_uri
             torture_pki_ecdsa_uri
         )
+        list(APPEND TORTURE_UNIT_ENVIRONMENT PKCS11_PROVIDER_DEBUG=file:/tmp/p11prov-debug.log)
     endif()
 
     if (HAVE_ECC)
@@ -112,8 +113,7 @@ foreach(_UNIT_TEST ${LIBSSH_UNIT_TESTS})
 
     set_property(TEST ${_UNIT_TEST}
                  PROPERTY
-                     ENVIRONMENT
-                        LSAN_OPTIONS=suppressions=${libssh-tests_SOURCE_DIR}/suppressions/lsan.supp;OPENSSL_ENABLE_SHA1_SIGNATURES=1)
+                     ENVIRONMENT ${TORTURE_UNIT_ENVIRONMENT})
 endforeach()
 
 if (CMAKE_USE_PTHREADS_INIT)
@@ -126,8 +126,7 @@ if (CMAKE_USE_PTHREADS_INIT)
 
     set_property(TEST ${_UNIT_TEST}
                  PROPERTY
-                    ENVIRONMENT
-                        LSAN_OPTIONS=suppressions=${libssh-tests_SOURCE_DIR}/suppressions/lsan.supp;OPENSSL_ENABLE_SHA1_SIGNATURES=1)
+                    ENVIRONMENT ${TORTURE_UNIT_ENVIRONMENT})
     endforeach()
 endif ()
 

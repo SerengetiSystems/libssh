@@ -77,6 +77,8 @@ typedef struct sftp_request_queue_struct* sftp_request_queue;
 typedef struct sftp_session_struct* sftp_session;
 typedef struct sftp_status_message_struct* sftp_status_message;
 typedef struct sftp_statvfs_struct* sftp_statvfs_t;
+typedef struct sftp_limits_struct* sftp_limits_t;
+typedef struct sftp_aio_struct* sftp_aio;
 
 struct sftp_session_struct {
     ssh_session session;
@@ -198,6 +200,16 @@ struct sftp_statvfs_struct {
   uint64_t f_fsid;    /** file system id */
   uint64_t f_flag;    /** bit mask of f_flag values */
   uint64_t f_namemax; /** maximum filename length */
+};
+
+/**
+ * @brief SFTP limits structure.
+ */
+struct sftp_limits_struct {
+    uint64_t max_packet_length;   /** maximum number of bytes in a single sftp packet */
+    uint64_t max_read_length;     /** maximum length in a SSH_FXP_READ packet */
+    uint64_t max_write_length;    /** maximum length in a SSH_FXP_WRITE packet */
+    uint64_t max_open_handles;    /** maximum number of active handles allowed by server */
 };
 
 /**
@@ -520,7 +532,8 @@ LIBSSH_API ssize_t sftp_read(sftp_file file, void *buf, size_t count);
  * @see                 sftp_async_read()
  * @see                 sftp_open()
  */
-LIBSSH_API int sftp_async_read_begin(sftp_file file, uint32_t len);
+SSH_DEPRECATED LIBSSH_API int sftp_async_read_begin(sftp_file file,
+                                                    uint32_t len);
 
 /**
  * @brief Wait for an asynchronous read to complete and save the data.
@@ -545,7 +558,10 @@ LIBSSH_API int sftp_async_read_begin(sftp_file file, uint32_t len);
  *
  * @see sftp_async_read_begin()
  */
-LIBSSH_API int sftp_async_read(sftp_file file, void *data, uint32_t len, uint32_t id);
+SSH_DEPRECATED LIBSSH_API int sftp_async_read(sftp_file file,
+                                              void *data,
+                                              uint32_t len,
+                                              uint32_t id);
 
 /**
  * @brief start an asynchronous write and save the message id.
@@ -586,6 +602,10 @@ LIBSSH_API int sftp_async_write_end(sftp_file file, int id);
 /**
  * @brief Write to a file using an opened sftp file handle.
  *
+ * The maximum size of the SFTP packet payload is 32768 bytes so the count
+ * parameter is capped at this value. This is low-level function so it does not
+ * try to send more than this amount of data.
+ *
  * @param file          Open sftp file handle to write to.
  *
  * @param buf           Pointer to buffer to write data.
@@ -600,6 +620,216 @@ LIBSSH_API int sftp_async_write_end(sftp_file file, int id);
  * @see                 sftp_close()
  */
 LIBSSH_API ssize_t sftp_write(sftp_file file, const void *buf, size_t count);
+
+/**
+ * @brief Deallocate memory corresponding to a sftp aio handle.
+ *
+ * This function deallocates memory corresponding to the aio handle returned
+ * by the sftp_aio_begin_*() functions. Users can use this function to free
+ * memory corresponding to an aio handle for an outstanding async i/o request
+ * on encountering some error.
+ *
+ * @param aio           sftp aio handle corresponding to which memory has
+ *                      to be deallocated.
+ *
+ * @see sftp_aio_begin_read()
+ * @see sftp_aio_wait_read()
+ * @see sftp_aio_begin_write()
+ * @see sftp_aio_wait_write()
+ */
+LIBSSH_API void sftp_aio_free(sftp_aio aio);
+#define SFTP_AIO_FREE(x) \
+    do { if(x != NULL) {sftp_aio_free(x); x = NULL;} } while(0)
+
+/**
+ * @brief Start an asynchronous read from a file using an opened sftp
+ * file handle.
+ *
+ * Its goal is to avoid the slowdowns related to the request/response pattern
+ * of a synchronous read. To do so, you must call 2 functions :
+ *
+ * sftp_aio_begin_read() and sftp_aio_wait_read().
+ *
+ * - The first step is to call sftp_aio_begin_read(). This function sends a
+ *   read request to the sftp server, dynamically allocates memory to store
+ *   information about the sent request and provides the caller an sftp aio
+ *   handle to that memory.
+ *
+ * - The second step is to call sftp_aio_wait_read() and pass it the address
+ *   of a location storing the sftp aio handle provided by
+ *   sftp_aio_begin_read().
+ *
+ * These two functions do not close the open sftp file handle passed to
+ * sftp_aio_begin_read() irrespective of whether they fail or not.
+ *
+ * It is the responsibility of the caller to ensure that the open sftp file
+ * handle passed to sftp_aio_begin_read() must not be closed before the
+ * corresponding call to sftp_aio_wait_read(). After sftp_aio_wait_read()
+ * returns, it is caller's decision whether to immediately close the file by
+ * calling sftp_close() or to keep it open and perform some more operations
+ * on it.
+ *
+ * @param file          The opened sftp file handle to be read from.
+ *
+ * @param len           Number of bytes to read.
+ *
+ * @param aio           Pointer to a location where the sftp aio handle
+ *                      (corresponding to the sent request) should be stored.
+ *
+ * @returns             SSH_OK on success, SSH_ERROR on error with sftp and ssh
+ *                      errors set.
+ *
+ * @warning             When calling this function, the internal offset is
+ *                      updated corresponding to the len parameter.
+ *
+ * @warning             A call to sftp_aio_begin_read() sends a request to
+ *                      the server. When the server answers, libssh allocates
+ *                      memory to store it until sftp_aio_wait_read() is called.
+ *                      Not calling sftp_aio_wait_read() will lead to memory
+ *                      leaks.
+ *
+ * @see                 sftp_aio_wait_read()
+ * @see                 sftp_aio_free()
+ * @see                 sftp_open()
+ * @see                 sftp_close()
+ * @see                 sftp_get_error()
+ * @see                 ssh_get_error()
+ */
+LIBSSH_API int sftp_aio_begin_read(sftp_file file,
+                                   size_t len,
+                                   sftp_aio *aio);
+
+/**
+ * @brief Wait for an asynchronous read to complete and store the read data
+ * in the supplied buffer.
+ *
+ * A pointer to an sftp aio handle should be passed while calling
+ * this function. Except when the return value is SSH_AGAIN,
+ * this function releases the memory corresponding to the supplied
+ * aio handle and assigns NULL to that aio handle using the passed
+ * pointer to that handle.
+ *
+ * If the file is opened in non-blocking mode and the request hasn't been
+ * executed yet, this function returns SSH_AGAIN and must be called again
+ * using the same sftp aio handle.
+ *
+ * @param aio           Pointer to the sftp aio handle returned by
+ *                      sftp_aio_begin_read().
+ *
+ * @param buf           Pointer to the buffer in which read data will be stored.
+ *
+ * @param buf_size      Size of the buffer in bytes. It should be bigger or
+ *                      equal to the length parameter of the
+ *                      sftp_aio_begin_read() call.
+ *
+ * @return              Number of bytes read, 0 on EOF, SSH_ERROR if an error
+ *                      occurred, SSH_AGAIN if the file is opened in nonblocking
+ *                      mode and the request hasn't been executed yet.
+ *
+ * @warning             A call to this function with an invalid sftp aio handle
+ *                      may never return.
+ *
+ * @see sftp_aio_begin_read()
+ * @see sftp_aio_free()
+ */
+LIBSSH_API ssize_t sftp_aio_wait_read(sftp_aio *aio,
+                                      void *buf,
+                                      size_t buf_size);
+
+/**
+ * @brief Start an asynchronous write to a file using an opened sftp
+ * file handle.
+ *
+ * Its goal is to avoid the slowdowns related to the request/response pattern
+ * of a synchronous write. To do so, you must call 2 functions :
+ *
+ * sftp_aio_begin_write() and sftp_aio_wait_write().
+ *
+ * - The first step is to call sftp_aio_begin_write(). This function sends a
+ *   write request to the sftp server, dynamically allocates memory to store
+ *   information about the sent request and provides the caller an sftp aio
+ *   handle to that memory.
+ *
+ * - The second step is to call sftp_aio_wait_write() and pass it the address
+ *   of a location storing the sftp aio handle provided by
+ *   sftp_aio_begin_write().
+ *
+ * These two functions do not close the open sftp file handle passed to
+ * sftp_aio_begin_write() irrespective of whether they fail or not.
+ *
+ * It is the responsibility of the caller to ensure that the open sftp file
+ * handle passed to sftp_aio_begin_write() must not be closed before the
+ * corresponding call to sftp_aio_wait_write(). After sftp_aio_wait_write()
+ * returns, it is caller's decision whether to immediately close the file by
+ * calling sftp_close() or to keep it open and perform some more operations
+ * on it.
+ *
+ * @param file          The opened sftp file handle to write to.
+ *
+ * @param buf           Pointer to the buffer containing data to write.
+ *
+ * @param len           Number of bytes to write.
+ *
+ * @param aio           Pointer to a location where the sftp aio handle
+ *                      (corresponding to the sent request) should be stored.
+ *
+ * @returns             SSH_OK on success, SSH_ERROR with sftp and ssh errors
+ *                      set.
+ *
+ * @warning             When calling this function, the internal offset is
+ *                      updated corresponding to the len parameter.
+ *
+ * @warning             A call to sftp_aio_begin_write() sends a request to
+ *                      the server. When the server answers, libssh allocates
+ *                      memory to store it until sftp_aio_wait_write() is
+ *                      called. Not calling sftp_aio_wait_write() will lead to
+ *                      memory leaks.
+ *
+ * @see                 sftp_aio_wait_write()
+ * @see                 sftp_aio_free()
+ * @see                 sftp_open()
+ * @see                 sftp_close()
+ * @see                 sftp_get_error()
+ * @see                 ssh_get_error()
+ */
+LIBSSH_API int sftp_aio_begin_write(sftp_file file,
+                                    const void *buf,
+                                    size_t len,
+                                    sftp_aio *aio);
+
+/**
+ * @brief Wait for an asynchronous write to complete.
+ *
+ * A pointer to an sftp aio handle should be passed while calling
+ * this function. Except when the return value is SSH_AGAIN,
+ * this function releases the memory corresponding to the supplied
+ * aio handle and assigns NULL to that aio handle using the passed
+ * pointer to that handle.
+ *
+ * If the file is opened in non-blocking mode and the request hasn't
+ * been executed yet, this function returns SSH_AGAIN and must be called
+ * again using the same sftp aio handle.
+ *
+ * On success, this function returns the number of bytes written.
+ * The SFTP protocol doesn't support partial writes to remote files,
+ * hence on success this returned value will always be equal to the
+ * len passed in the previous corresponding call to sftp_aio_begin_write().
+ *
+ * @param aio           Pointer to the sftp aio handle returned by
+ *                      sftp_aio_begin_write().
+ *
+ * @return              Number of bytes written on success, SSH_ERROR
+ *                      if an error occurred, SSH_AGAIN if the file is
+ *                      opened in nonblocking mode and the request hasn't
+ *                      been executed yet.
+ *
+ * @warning             A call to this function with an invalid sftp aio handle
+ *                      may never return.
+ *
+ * @see sftp_aio_begin_write()
+ * @see sftp_aio_free()
+ */
+LIBSSH_API ssize_t sftp_aio_wait_write(sftp_aio *aio);
 
 /**
  * @brief Seek to a specific location in a file.
@@ -717,6 +947,11 @@ LIBSSH_API int sftp_rename(sftp_session sftp, const char *original, const  char 
 /**
  * @brief Set file attributes on a file, directory or symbolic link.
  *
+ * Note, that this function can only set time values using 32 bit values due to
+ * the restrictions in the SFTP protocol version 3 implemented by libssh.
+ * The support for 64 bit time values was introduced in SFTP version 5, which is
+ * not implemented by libssh nor any major SFTP servers.
+ *
  * @param sftp          The sftp session handle.
  *
  * @param file          The file which attributes should be changed.
@@ -806,10 +1041,28 @@ LIBSSH_API int sftp_symlink(sftp_session sftp, const char *target, const char *d
  * @param  path         Specifies the path name of the symlink to be read.
  *
  * @return              The target of the link, NULL on error.
+ *                      The caller needs to free the memory
+ *                      using ssh_string_free_char().
  *
  * @see sftp_get_error()
  */
 LIBSSH_API char *sftp_readlink(sftp_session sftp, const char *path);
+
+/**
+ * @brief Create a hard link.
+ *
+ * @param  sftp         The sftp session handle.
+ *
+ * @param  oldpath      Specifies the pathname of the file for
+ *                      which the new hardlink is to be created.
+ *
+ * @param  newpath      Specifies the pathname of the hardlink to be created.
+ *
+ * @return              0 on success, -1 on error with ssh and sftp error set.
+ *
+ * @see sftp_get_error()
+ */
+LIBSSH_API int sftp_hardlink(sftp_session sftp, const char *oldpath, const char *newpath);
 
 /**
  * @brief Get information about a mounted file system.
@@ -859,6 +1112,24 @@ LIBSSH_API void sftp_statvfs_free(sftp_statvfs_t statvfs_o);
 LIBSSH_API int sftp_fsync(sftp_file file);
 
 /**
+ * @brief Get information about the various limits the server might impose.
+ *
+ * @param  sftp         The sftp session handle.
+ *
+ * @return A limits structure or NULL on error.
+ *
+ * @see sftp_get_error()
+ */
+LIBSSH_API sftp_limits_t sftp_limits(sftp_session sftp);
+
+/**
+ * @brief Free the memory of an allocated limits.
+ *
+ * @param  limits      The limits to free.
+ */
+LIBSSH_API void sftp_limits_free(sftp_limits_t limits);
+
+/**
  * @brief Canonicalize a sftp path.
  *
  * @param sftp          The sftp session handle.
@@ -880,6 +1151,19 @@ LIBSSH_API char *sftp_canonicalize_path(sftp_session sftp, const char *path);
  */
 LIBSSH_API int sftp_server_version(sftp_session sftp);
 
+/**
+ * @brief Canonicalize path using expand-path@openssh.com extension
+ *
+ * @param sftp          The sftp session handle.
+ *
+ * @param path          The path to be canonicalized.
+ *
+ * @return              A pointer to the newly allocated canonicalized path,
+ *                      NULL on error. The caller needs to free the memory
+ *                      using ssh_string_free_char().
+ */
+LIBSSH_API char *sftp_expand_path(sftp_session sftp, const char *path);
+
 #ifdef WITH_SERVER
 /**
  * @brief Create a new sftp server session.
@@ -899,7 +1183,7 @@ LIBSSH_API sftp_session sftp_server_new(ssh_session session, ssh_channel chan);
  *
  * @return             0 on success, < 0 on error.
  */
-LIBSSH_API int sftp_server_init(sftp_session sftp);
+SSH_DEPRECATED LIBSSH_API int sftp_server_init(sftp_session sftp);
 
 /**
  * @brief Close and deallocate a sftp server session.

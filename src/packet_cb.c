@@ -45,7 +45,8 @@
  *
  * @brief Handle a SSH_DISCONNECT packet.
  */
-SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
+SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback)
+{
   int rc;
   uint32_t errorlen, code = 0;
   char *error = NULL;
@@ -58,16 +59,27 @@ SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
   }
 
   error = ssh_buffer_get_char_string(packet, &errorlen);
-  SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received SSH_MSG_DISCONNECT %d:%s",
-                          code, error != NULL ? error : "no error");
-  ssh_set_error(session, SSH_FATAL,
-      "Received SSH_MSG_DISCONNECT: %d:%s",
-      code, error != NULL ? error : "no error");
+    if (error != NULL) {
+        session->peer_discon_msg = strdup(error);
+    }
+
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET,
+            "Received SSH_MSG_DISCONNECT %" PRIu32 ":%s",
+            code,
+            error != NULL ? error : "no error");
+    ssh_set_error(session,
+                  SSH_FATAL,
+                  "Received SSH_MSG_DISCONNECT: %" PRIu32 ":%s",
+                  code,
+                  error != NULL ? error : "no error");
   SAFE_FREE(error);
 
   ssh_socket_close(session->socket);
   session->alive = 0;
   session->session_state = SSH_SESSION_STATE_ERROR;
+    /* correctly handle disconnect during authorization */
+    session->auth.state = SSH_AUTH_STATE_FAILED;
+
   /* TODO: handle a graceful disconnect */
   return SSH_PACKET_USED;
 }
@@ -77,39 +89,60 @@ SSH_PACKET_CALLBACK(ssh_packet_disconnect_callback){
  *
  * @brief Handle a SSH_IGNORE and SSH_DEBUG packet.
  */
-SSH_PACKET_CALLBACK(ssh_packet_ignore_callback){
+SSH_PACKET_CALLBACK(ssh_packet_ignore_callback)
+{
     (void)session; /* unused */
 	(void)user;
 	(void)type;
 	(void)packet;
-	SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Received %s packet",type==SSH2_MSG_IGNORE ? "SSH_MSG_IGNORE" : "SSH_MSG_DEBUG");
+
+    SSH_LOG_COMMON(session, SSH_LOG_DEBUG,
+            "Received %s packet",
+            type == SSH2_MSG_IGNORE ? "SSH_MSG_IGNORE" : "SSH_MSG_DEBUG");
+
 	/* TODO: handle a graceful disconnect */
 	return SSH_PACKET_USED;
 }
 
-SSH_PACKET_CALLBACK(ssh_packet_newkeys){
+SSH_PACKET_CALLBACK(ssh_packet_newkeys)
+{
   ssh_string sig_blob = NULL;
   ssh_signature sig = NULL;
   int rc;
+
   (void)packet;
   (void)user;
   (void)type;
-  SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL, "Received SSH_MSG_NEWKEYS");
+
+    SSH_LOG(SSH_LOG_DEBUG, "Received SSH_MSG_NEWKEYS");
 
   if (session->session_state != SSH_SESSION_STATE_DH ||
       session->dh_handshake_state != DH_STATE_NEWKEYS_SENT) {
       ssh_set_error(session,
                     SSH_FATAL,
                     "ssh_packet_newkeys called in wrong state : %d:%d",
-                    session->session_state,session->dh_handshake_state);
+                      session->session_state,
+                      session->dh_handshake_state);
       goto error;
   }
+
+    if (session->flags & SSH_SESSION_FLAG_KEX_STRICT) {
+        /* reset packet sequence number when running in strict kex mode */
+        session->recv_seq = 0;
+        /* Check that we aren't tainted */
+        if (session->flags & SSH_SESSION_FLAG_KEX_TAINTED) {
+            ssh_set_error(session,
+                          SSH_FATAL,
+                          "Received unexpected packets in strict KEX mode.");
+            goto error;
+        }
+    }
 
   if(session->server){
     /* server things are done in server.c */
     session->dh_handshake_state=DH_STATE_FINISHED;
   } else {
-    ssh_key server_key;
+        ssh_key server_key = NULL;
 
     /* client */
 
@@ -132,8 +165,9 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
 
     /* Check if signature from server matches user preferences */
     if (session->opts.wanted_methods[SSH_HOSTKEYS]) {
-        if (!ssh_match_group(session->opts.wanted_methods[SSH_HOSTKEYS],
-                             sig->type_c)) {
+            rc = ssh_match_group(session->opts.wanted_methods[SSH_HOSTKEYS],
+                                 sig->type_c);
+            if (rc == 0) {
             ssh_set_error(session,
                           SSH_FATAL,
                           "Public key from server (%s) doesn't match user "
@@ -144,18 +178,21 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
         }
     }
 
-    rc = ssh_pki_signature_verify(session, 
+        rc = ssh_pki_signature_verify(session,
                                   sig,
                                   server_key,
                                   session->next_crypto->secret_hash,
                                   session->next_crypto->digest_len);
     SSH_SIGNATURE_FREE(sig);
     if (rc == SSH_ERROR) {
+            ssh_set_error(session,
+                          SSH_FATAL,
+                          "Failed to verify server hostkey signature");
       goto error;
     }
-    SSH_LOG_COMMON(session, SSH_LOG_PROTOCOL,"Signature verified and valid");
+        SSH_LOG_COMMON(session, SSH_LOG_DEBUG, "Signature verified and valid");
 
-    /* When receiving this packet, we switch on the incomming crypto. */
+        /* When receiving this packet, we switch on the incoming crypto. */
     rc = ssh_packet_set_newkeys(session, SSH_DIRECTION_IN);
     if (rc != SSH_OK) {
         goto error;
@@ -164,6 +201,7 @@ SSH_PACKET_CALLBACK(ssh_packet_newkeys){
   session->dh_handshake_state = DH_STATE_FINISHED;
   session->ssh_connection_callback(session);
   return SSH_PACKET_USED;
+
 error:
   SSH_SIGNATURE_FREE(sig);
   ssh_string_burn(sig_blob);
@@ -177,14 +215,14 @@ error:
  * @brief handles a SSH_SERVICE_ACCEPT packet
  *
  */
-SSH_PACKET_CALLBACK(ssh_packet_service_accept){
+SSH_PACKET_CALLBACK(ssh_packet_service_accept)
+{
 	(void)packet;
 	(void)type;
 	(void)user;
 
     session->auth.service_state = SSH_AUTH_SERVICE_ACCEPTED;
-	SSH_LOG_COMMON(session, SSH_LOG_PACKET,
-	      "Received SSH_MSG_SERVICE_ACCEPT");
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Received SSH_MSG_SERVICE_ACCEPT");
 
 	return SSH_PACKET_USED;
 }
@@ -199,6 +237,7 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info)
     int rc;
     uint32_t nr_extensions = 0;
     uint32_t i;
+
     (void)type;
     (void)user;
 
@@ -216,7 +255,7 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info)
         return SSH_PACKET_USED;
     }
 
-    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Follows %u extensions", nr_extensions);
+    SSH_LOG_COMMON(session, SSH_LOG_PACKET, "Follows %" PRIu32 " extensions", nr_extensions);
 
     for (i = 0; i < nr_extensions; i++) {
         char *name = NULL;
@@ -239,6 +278,8 @@ SSH_PACKET_CALLBACK(ssh_packet_ext_info)
             if (ssh_match_group(value, "rsa-sha2-256")) {
                 session->extensions |= SSH_EXT_SIG_RSA_SHA256;
             }
+        } else {
+            SSH_LOG(SSH_LOG_PACKET, "Unknown extension: %s", name);
         }
         free(name);
         free(value);

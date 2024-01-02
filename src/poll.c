@@ -44,7 +44,7 @@
 #endif
 
 /**
- * @defgroup libssh_poll The SSH poll functions.
+ * @defgroup libssh_poll The SSH poll functions
  * @ingroup libssh
  *
  * Add a generic way to handle sockets asynchronously.
@@ -68,7 +68,7 @@ struct ssh_poll_handle_struct {
     size_t idx;
   } x;
   short events;
-  int lock;
+  uint32_t lock_cnt;
   ssh_poll_callback cb;
   void *cb_data;
   ctx_poll_fn poll_cb; //this call back is a subsitute for poll on this context
@@ -276,7 +276,7 @@ static int bsd_poll(ssh_pollfd_t *fds, nfds_t nfds, int timeout)
     if (rc < 0) {
         return -1;
     }
-    /* A timeout occured */
+    /* A timeout occurred */
     if (rc == 0) {
         return 0;
     }
@@ -365,7 +365,7 @@ void ssh_poll_free(ssh_poll_handle p)
 		ssh_poll_ctx_remove(p->ctx,p);
 		p->ctx=NULL;
 	}
-  if(!p->lock)   /*don't free if this is currently in use */
+  if(!p->lock_cnt)   /*don't free if this is currently in use */
     SAFE_FREE(p);/*it will be freed in ssh_poll_ctx_dopoll*/
 }
 
@@ -395,7 +395,8 @@ short ssh_poll_get_events(ssh_poll_handle p)
 
 /**
  * @brief  Set the events of a poll object. The events will also be propagated
- *         to an associated poll context.
+ *         to an associated poll context unless the fd is locked. In that case,
+ *         only the POLLOUT can be set.
  *
  * @param  p            Pointer to an already allocated poll object.
  * @param  events       Poll events.
@@ -403,9 +404,15 @@ short ssh_poll_get_events(ssh_poll_handle p)
 void ssh_poll_set_events(ssh_poll_handle p, short events)
 {
   p->events = events;
-  if (p->ctx != NULL && !p->lock) {
-    p->ctx->pollfds[p->x.idx].events = events;
-  }
+    if (p->ctx != NULL) {
+        if (p->lock_cnt == 0) {
+            p->ctx->pollfds[p->x.idx].events = events;
+        } else if (!(p->ctx->pollfds[p->x.idx].events & POLLOUT)) {
+            /* if locked, allow only setting POLLOUT to prevent recursive
+             * callbacks */
+            p->ctx->pollfds[p->x.idx].events = events & POLLOUT;
+        }
+}
 }
 
 /**
@@ -618,7 +625,7 @@ void ssh_set_poll_function(ssh_poll_handle handle, ctx_poll_fn function, void* u
  */
 int ssh_poll_ctx_add_socket (ssh_poll_ctx ctx, ssh_socket s)
 {
-    ssh_poll_handle p;
+    ssh_poll_handle p = NULL;
     int ret;
 
     p = ssh_socket_get_poll_handle(s);
@@ -688,6 +695,15 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
         return SSH_ERROR;
     }
 
+    /* Allow only POLLOUT events on locked sockets as that means we are called
+     * recursively and we only want process the POLLOUT events here to flush
+     * output buffer */
+    for (i = 0; i < ctx->polls_used; i++) {
+        /* The lock allows only POLLOUT events: drop the rest */
+        if (ctx->pollptrs[i]->lock_cnt > 0) {
+            ctx->pollfds[i].events &= POLLOUT;
+        }
+    }
     ssh_timestamp_init(&ts);
     if (ctx->poll_cb)
     {
@@ -713,21 +729,28 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
 
     used = ctx->polls_used;
     for (i = 0; i < used && rc > 0; ) {
-        if (!ctx->pollfds[i].revents || ctx->pollptrs[i]->lock) {
+        revents = ctx->pollfds[i].revents;
+        /* Do not pass any other events except for POLLOUT to callback when
+         * called recursively more than 2 times. On s390x the poll will be
+         * spammed with POLLHUP events causing infinite recursion when the user
+         * callback issues some write/flush/poll calls. */
+        if (ctx->pollptrs[i]->lock_cnt > 2) {
+            revents &= POLLOUT;
+        }
+        if (revents == 0) {
             i++;
         } else {
             int ret;
             p = ctx->pollptrs[i];
             fd = ctx->pollfds[i].fd;
-            revents = ctx->pollfds[i].revents;
             /* avoid having any event caught during callback */
             ctx->pollfds[i].events = 0;
-            p->lock = 1;
+            p->lock_cnt++;
             if (p->cb && (ret = p->cb(p, fd, revents, p->cb_data)) < 0) {
-                if (p->ctx == NULL) //the poll handle got released during cb
+                if (p->ctx == NULL) // the poll handle got released during cb
                     free(p);
                 else
-                    p->lock = 0; //unlock it now that we are done handling it
+                    p->lock_cnt--; // unlock it now that we are done handling it
                 if (ret == -2) {
                     return -1;
                 }
@@ -737,7 +760,7 @@ int ssh_poll_ctx_dopoll(ssh_poll_ctx ctx, int timeout)
             } else {
                 ctx->pollfds[i].revents = 0;
                 ctx->pollfds[i].events = p->events;
-                p->lock = 0;
+                p->lock_cnt--;
                 i++;
             }
 
@@ -994,7 +1017,7 @@ int ssh_event_add_connector(ssh_event event, ssh_connector connector)
  * @returns SSH_OK      on success.
  *          SSH_ERROR   Error happened during the poll. Check errno to get more
  *                      details about why it failed.
- *          SSH_AGAIN   Timeout occured
+ *          SSH_AGAIN   Timeout occurred
  */
 int ssh_event_dopoll(ssh_event event, int timeout)
 {

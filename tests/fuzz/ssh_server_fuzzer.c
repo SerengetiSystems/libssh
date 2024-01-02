@@ -177,7 +177,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         assert(rc == 0);
     }
     rc = ssh_bind_options_set(sshbind,
-                              SSH_BIND_OPTIONS_RSAKEY,
+                              SSH_BIND_OPTIONS_HOSTKEY,
                               "/tmp/libssh_fuzzer_private_key");
     assert(rc == 0);
     rc = ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_CIPHERS_C_S, "none");
@@ -194,6 +194,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     ssh_set_auth_methods(session, SSH_AUTH_METHOD_NONE);
 
     ssh_callbacks_init(&server_cb);
+    ssh_set_server_callbacks(session, &server_cb);
 
     rc = ssh_bind_accept_fd(sshbind, session, socket_fds[0]);
     assert(rc == SSH_OK);

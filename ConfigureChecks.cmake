@@ -44,6 +44,8 @@ int main(void){ return 0; }
 endif(CMAKE_COMPILER_IS_GNUCC AND NOT MINGW AND NOT OS2)
 
 # HEADER FILES
+check_function_exists(argp_parse HAVE_ARGP_PARSE)
+
 set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${ARGP_INCLUDE_DIR})
 check_include_file(argp.h HAVE_ARGP_H)
 unset(CMAKE_REQUIRED_INCLUDES)
@@ -121,34 +123,7 @@ if (OPENSSL_FOUND)
 
     set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
     set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
-    check_function_exists(EVP_DigestSign HAVE_OPENSSL_EVP_DIGESTSIGN)
-
-    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
-    check_function_exists(EVP_DigestVerify HAVE_OPENSSL_EVP_DIGESTVERIFY)
-
-    check_function_exists(OPENSSL_ia32cap_loc HAVE_OPENSSL_IA32CAP_LOC)
-
-    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
-    check_symbol_exists(EVP_PKEY_ED25519 "openssl/evp.h" FOUND_OPENSSL_ED25519)
-
-    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
     check_function_exists(EVP_chacha20 HAVE_OPENSSL_EVP_CHACHA20)
-
-    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
-    check_symbol_exists(EVP_PKEY_POLY1305 "openssl/evp.h" HAVE_OPENSSL_EVP_POLY1305)
-
-    if (HAVE_OPENSSL_EVP_DIGESTSIGN AND HAVE_OPENSSL_EVP_DIGESTVERIFY AND
-        FOUND_OPENSSL_ED25519)
-        set(HAVE_OPENSSL_ED25519 1)
-    endif()
-
-    set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
-    set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_CRYPTO_LIBRARIES})
-    check_symbol_exists(EVP_PKEY_X25519 "openssl/evp.h" HAVE_OPENSSL_X25519)
 
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
@@ -172,12 +147,6 @@ if (NOT WITH_GCRYPT AND NOT WITH_MBEDTLS)
     endif (HAVE_OPENSSL_EVP_KDF_CTX_NEW_ID OR HAVE_OPENSSL_EVP_KDF_CTX_NEW)
 
 endif ()
-
-if (WITH_DSA)
-    if (NOT WITH_MBEDTLS)
-        set(HAVE_DSA 1)
-    endif (NOT WITH_MBEDTLS)
-endif()
 
 # FUNCTIONS
 
@@ -327,7 +296,7 @@ endif (WITH_THREADLOCAL_LOGGING)
 # For detecting attributes we need to treat warnings as
 # errors
 if (UNIX OR MINGW)
-    # Get warnings for attributs
+    # Get warnings for attributes
     check_c_compiler_flag("-Wattributes" REQUIRED_FLAGS_WERROR)
     if (REQUIRED_FLAGS_WERROR)
         string(APPEND CMAKE_REQUIRED_FLAGS "-Wattributes ")
@@ -496,22 +465,21 @@ if (WITH_PKCS11_URI)
     if (WITH_GCRYPT)
         message(FATAL_ERROR "PKCS #11 is not supported for gcrypt.")
         set(WITH_PKCS11_URI 0)
-    endif()
-    if (WITH_MBEDTLS)
+    elseif (WITH_MBEDTLS)
         message(FATAL_ERROR "PKCS #11 is not supported for mbedcrypto")
         set(WITH_PKCS11_URI 0)
-    endif()
-    if (HAVE_OPENSSL AND NOT OPENSSL_VERSION VERSION_GREATER_EQUAL "1.1.1")
-        message(FATAL_ERROR "PKCS #11 requires at least OpenSSL 1.1.1")
-        set(WITH_PKCS11_URI 0)
-    endif()
-endif()
-
-if (WITH_MBEDTLS)
-    if (WITH_DSA)
-        message(FATAL_ERROR "DSA is not supported with mbedTLS crypto")
-        set(HAVE_DSA 0)
-    endif()
+    elseif (OPENSSL_FOUND AND OPENSSL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+        find_library(PKCS11_PROVIDER
+            NAMES
+                pkcs11.so
+            PATH_SUFFIXES
+                ossl-modules
+        )
+        if (NOT PKCS11_PROVIDER)
+            set(WITH_PKCS11_PROVIDER 0)
+            message(WARNING "Could not find pkcs11 provider! Falling back to engines")
+        endif (NOT PKCS11_PROVIDER)
+    endif ()
 endif()
 
 # ENDIAN

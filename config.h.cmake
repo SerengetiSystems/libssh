@@ -85,29 +85,17 @@
 /* Define to 1 if you have the <pthread.h> header file. */
 #cmakedefine HAVE_PTHREAD_H 1
 
-/* Define to 1 if you have eliptic curve cryptography in openssl */
+/* Define to 1 if you have elliptic curve cryptography in openssl */
 #cmakedefine HAVE_OPENSSL_ECC 1
 
-/* Define to 1 if you have eliptic curve cryptography in gcrypt */
+/* Define to 1 if you have elliptic curve cryptography in gcrypt */
 #cmakedefine HAVE_GCRYPT_ECC 1
 
-/* Define to 1 if you have eliptic curve cryptography */
+/* Define to 1 if you have elliptic curve cryptography */
 #cmakedefine HAVE_ECC 1
-
-/* Define to 1 if you have DSA */
-#cmakedefine HAVE_DSA 1
 
 /* Define to 1 if you have gl_flags as a glob_t sturct member */
 #cmakedefine HAVE_GLOB_GL_FLAGS_MEMBER 1
-
-/* Define to 1 if you have OpenSSL with Ed25519 support */
-#cmakedefine HAVE_OPENSSL_ED25519 1
-
-/* Define to 1 if you have OpenSSL with X25519 support */
-#cmakedefine HAVE_OPENSSL_X25519 1
-
-/* Define to 1 if you have OpenSSL with Poly1305 support */
-#cmakedefine HAVE_OPENSSL_EVP_POLY1305 1
 
 /* Define to 1 if you have gcrypt with ChaCha20/Poly1305 support */
 #cmakedefine HAVE_GCRYPT_CHACHA_POLY 1
@@ -122,15 +110,6 @@
 
 /* Define to 1 if you have the `FIPS_mode' function. */
 #cmakedefine HAVE_OPENSSL_FIPS_MODE 1
-
-/* Define to 1 if you have the `EVP_DigestSign' function. */
-#cmakedefine HAVE_OPENSSL_EVP_DIGESTSIGN 1
-
-/* Define to 1 if you have the `EVP_DigestVerify' function. */
-#cmakedefine HAVE_OPENSSL_EVP_DIGESTVERIFY 1
-
-/* Define to 1 if you have the `OPENSSL_ia32cap_loc' function. */
-#cmakedefine HAVE_OPENSSL_IA32CAP_LOC 1
 
 /* Define to 1 if you have the `snprintf' function. */
 #cmakedefine HAVE_SNPRINTF 1
@@ -278,6 +257,9 @@
 
 /* Define to 1 if you want to enable PKCS #11 URI support */
 #cmakedefine WITH_PKCS11_URI 1
+
+/* Define to 1 if we want to build a support for PKCS #11 provider. */
+#cmakedefine WITH_PKCS11_PROVIDER 1
 
 /*************************** ENDIAN *****************************/
 

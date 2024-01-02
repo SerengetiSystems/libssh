@@ -4,10 +4,12 @@ find_package(socket_wrapper)
 
 set(LIBSSH_CLIENT_TESTS
     torture_algorithms
+    torture_client_callbacks
     torture_client_config
     torture_connect
     torture_hostkey
     torture_auth
+    torture_auth_cert
     torture_rekey
     torture_forward
     torture_knownhosts
@@ -48,8 +50,16 @@ if (WITH_SFTP)
         torture_sftp_dir
         torture_sftp_read
         torture_sftp_fsync
+        torture_sftp_hardlink
+        torture_sftp_limits
+        torture_sftp_rename
+        torture_sftp_expand_path
+        torture_sftp_aio
         ${SFTP_BENCHMARK_TESTS})
 endif (WITH_SFTP)
+
+set(TORTURE_CLIENT_ENVIRONMENT ${TORTURE_ENVIRONMENT})
+list(APPEND TORTURE_CLIENT_ENVIRONMENT NSS_WRAPPER_HOSTS=${CMAKE_BINARY_DIR}/tests/etc/hosts)
 
 foreach(_CLI_TEST ${LIBSSH_CLIENT_TESTS})
     add_cmocka_test(${_CLI_TEST}
@@ -69,6 +79,6 @@ foreach(_CLI_TEST ${LIBSSH_CLIENT_TESTS})
             TEST
                 ${_CLI_TEST}
             PROPERTY
-                ENVIRONMENT ${TORTURE_ENVIRONMENT})
+                ENVIRONMENT ${TORTURE_CLIENT_ENVIRONMENT})
     endif()
 endforeach()

@@ -222,7 +222,7 @@ ssh_key pki_private_key_from_base64(const char *b64_key, const char *passphrase,
          * keys, so we need to figure out the correct type here */
         key->type = pki_key_ecdsa_to_key_type(key->ecdsa);
         if (key->type == SSH_KEYTYPE_UNKNOWN) {
-            SSH_LOG(SSH_LOG_WARN, "Invalid private key.");
+            SSH_LOG(SSH_LOG_TRACE, "Invalid private key.");
             goto fail;
         }
         break;
@@ -281,19 +281,19 @@ int pki_privkey_build_rsa(ssh_key key,
                                 ssh_string_data(d), ssh_string_len(d),
                                 ssh_string_data(e), ssh_string_len(e));
     if (rc != 0) {
-        SSH_LOG(SSH_LOG_WARN, "Failed to import private RSA key");
+        SSH_LOG(SSH_LOG_TRACE, "Failed to import private RSA key");
         goto fail;
     }
 
     rc = mbedtls_rsa_complete(rsa);
     if (rc != 0) {
-        SSH_LOG(SSH_LOG_WARN, "Failed to complete private RSA key");
+        SSH_LOG(SSH_LOG_TRACE, "Failed to complete private RSA key");
         goto fail;
     }
 
     rc = mbedtls_rsa_check_privkey(rsa);
     if (rc != 0) {
-        SSH_LOG(SSH_LOG_WARN, "Inconsistent private RSA key");
+        SSH_LOG(SSH_LOG_TRACE, "Inconsistent private RSA key");
         goto fail;
     }
 
@@ -638,7 +638,7 @@ int pki_key_compare(const ssh_key k1, const ssh_key k2, enum ssh_keycmp_e what)
     mbedtls_mpi_init(&E2);
 #endif
 
-    switch (k1->type) {
+    switch (ssh_key_type_plain(k1->type)) {
         case SSH_KEYTYPE_RSA: {
             mbedtls_rsa_context *rsa1, *rsa2;
             if (!mbedtls_pk_can_do(k1->rsa, MBEDTLS_PK_RSA) ||
@@ -878,7 +878,7 @@ static const char* pki_key_ecdsa_nid_to_char(int nid)
     return "unknown";
 }
 
-ssh_string pki_publickey_to_blob(const ssh_key key)
+ssh_string pki_key_to_blob(const ssh_key key, enum ssh_key_e type)
 {
     ssh_buffer buffer = NULL;
     ssh_string type_s = NULL;
@@ -888,6 +888,10 @@ ssh_string pki_publickey_to_blob(const ssh_key key)
 #if MBEDTLS_VERSION_MAJOR > 2
     mbedtls_mpi E;
     mbedtls_mpi N;
+    mbedtls_mpi D;
+    mbedtls_mpi IQMP;
+    mbedtls_mpi P;
+    mbedtls_mpi Q;
 #endif
     int rc;
 
@@ -961,21 +965,124 @@ ssh_string pki_publickey_to_blob(const ssh_key key)
             }
 #endif
 
-            if (ssh_buffer_add_ssh_string(buffer, e) < 0) {
-                goto fail;
-            }
+            if (type == SSH_KEY_PUBLIC) {
+                /* The N and E parts are swapped in the public key export ! */
+                rc = ssh_buffer_add_ssh_string(buffer, e);
+                if (rc < 0) {
+                    goto fail;
+                }
 
-            if (ssh_buffer_add_ssh_string(buffer, n) < 0) {
-                goto fail;
-            }
+                rc = ssh_buffer_add_ssh_string(buffer, n);
+                if (rc < 0) {
+                    goto fail;
+                }
+            } else if (type == SSH_KEY_PRIVATE) {
+                ssh_string p = NULL;
+                ssh_string q = NULL;
+                ssh_string d = NULL;
+                ssh_string iqmp = NULL;
 
+                rc = ssh_buffer_add_ssh_string(buffer, n);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                rc = ssh_buffer_add_ssh_string(buffer, e);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+#if MBEDTLS_VERSION_MAJOR > 2
+                rc = mbedtls_rsa_export(rsa, NULL, &P, &Q, &D, NULL);
+                if (rc != 0) {
+                    goto fail;
+                }
+
+                p = ssh_make_bignum_string(&P);
+                if (p == NULL) {
+                    goto fail;
+                }
+
+                q = ssh_make_bignum_string(&Q);
+                if (q == NULL) {
+                    goto fail;
+                }
+
+                d = ssh_make_bignum_string(&D);
+                if (d == NULL) {
+                    goto fail;
+                }
+                rc = mbedtls_rsa_export_crt(rsa, NULL, NULL, &IQMP)
+                if (rc != 0) {
+                    goto fail;
+                }
+
+                iqmp = ssh_make_bignum_string(&IQMP);
+                if (iqmp == NULL) {
+                    goto fail;
+                }
+
+#else
+                p = ssh_make_bignum_string(&rsa->P);
+                if (p == NULL) {
+                    goto fail;
+                }
+
+                q = ssh_make_bignum_string(&rsa->Q);
+                if (q == NULL) {
+                    goto fail;
+                }
+
+                d = ssh_make_bignum_string(&rsa->D);
+                if (d == NULL) {
+                    goto fail;
+                }
+
+                iqmp = ssh_make_bignum_string(&rsa->QP);
+                if (iqmp == NULL) {
+                    goto fail;
+                }
+#endif
+
+                rc = ssh_buffer_add_ssh_string(buffer, d);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                rc = ssh_buffer_add_ssh_string(buffer, iqmp);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                rc = ssh_buffer_add_ssh_string(buffer, p);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                rc = ssh_buffer_add_ssh_string(buffer, q);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                ssh_string_burn(d);
+                SSH_STRING_FREE(d);
+                d = NULL;
+                ssh_string_burn(iqmp);
+                SSH_STRING_FREE(iqmp);
+                iqmp = NULL;
+                ssh_string_burn(p);
+                SSH_STRING_FREE(p);
+                p = NULL;
+                ssh_string_burn(q);
+                SSH_STRING_FREE(q);
+                q = NULL;
+            }
             ssh_string_burn(e);
             SSH_STRING_FREE(e);
             e = NULL;
             ssh_string_burn(n);
             SSH_STRING_FREE(n);
             n = NULL;
-
             break;
         }
         case SSH_KEYTYPE_ECDSA_P256:
@@ -1013,21 +1120,51 @@ ssh_string pki_publickey_to_blob(const ssh_key key)
             SSH_STRING_FREE(e);
             e = NULL;
 
-            if (key->type == SSH_KEYTYPE_SK_ECDSA &&
-                ssh_buffer_add_ssh_string(buffer, key->sk_application) < 0) {
-                goto fail;
-            }
+            if (type == SSH_KEY_PRIVATE) {
+                ssh_string d = NULL;
+                d = ssh_make_bignum_string(&key->ecdsa->MBEDTLS_PRIVATE(d));
 
+                if (d == NULL) {
+                    SSH_BUFFER_FREE(buffer);
+                    return NULL;
+                }
+
+                rc = ssh_buffer_add_ssh_string(buffer, d);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+                ssh_string_burn(d);
+                SSH_STRING_FREE(d);
+                d = NULL;
+            } else if (key->type == SSH_KEYTYPE_SK_ECDSA) {
+                /* public key can contain certificate sk information */
+                rc = ssh_buffer_add_ssh_string(buffer, key->sk_application);
+                if (rc < 0) {
+                    goto fail;
+                }
+
+            }
             break;
         case SSH_KEYTYPE_ED25519:
         case SSH_KEYTYPE_SK_ED25519:
-            rc = pki_ed25519_public_key_to_blob(buffer, key);
-            if (rc != SSH_OK) {
-                goto fail;
-            }
-            if (key->type == SSH_KEYTYPE_SK_ED25519 &&
-                ssh_buffer_add_ssh_string(buffer, key->sk_application) < 0) {
-                goto fail;
+            if (type == SSH_KEY_PUBLIC) {
+                rc = pki_ed25519_public_key_to_blob(buffer, key);
+                if (rc == SSH_ERROR) {
+                    goto fail;
+                }
+                /* public key can contain certificate sk information */
+                if (key->type == SSH_KEYTYPE_SK_ED25519) {
+                    rc = ssh_buffer_add_ssh_string(buffer, key->sk_application);
+                    if (rc < 0) {
+                        goto fail;
+                    }
+                }
+            } else {
+                rc = pki_ed25519_private_key_to_blob(buffer, key);
+                if (rc == SSH_ERROR) {
+                    goto fail;
+                }
             }
             break;
         default:
@@ -1133,7 +1270,7 @@ ssh_string pki_signature_to_blob(const ssh_signature sig)
             sig_blob = pki_ed25519_signature_to_blob(sig);
             break;
         default:
-            SSH_LOG(SSH_LOG_WARN, "Unknown signature key type: %s",
+            SSH_LOG(SSH_LOG_TRACE, "Unknown signature key type: %s",
                     sig->type_c);
             return NULL;
     }
@@ -1153,20 +1290,20 @@ static ssh_signature pki_signature_from_rsa_blob(const ssh_key pubkey, const
     size_t len = ssh_string_len(sig_blob);
 
     if (pubkey->rsa == NULL) {
-        SSH_LOG(SSH_LOG_WARN, "Pubkey RSA field NULL");
+        SSH_LOG(SSH_LOG_TRACE, "Pubkey RSA field NULL");
         goto errout;
     }
 
     rsalen = mbedtls_pk_get_bitlen(pubkey->rsa) / 8;
     if (len > rsalen) {
-        SSH_LOG(SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_TRACE,
                 "Signature is too big: %lu > %lu",
                 (unsigned long) len,
                 (unsigned long) rsalen);
         goto errout;
     }
 #ifdef DEBUG_CRYPTO
-    SSH_LOG(SSH_LOG_DEBUG, "RSA signature len: %lu", (unsigned long)len);
+    SSH_LOG(SSH_LOG_TRACE, "RSA signature len: %lu", (unsigned long)len);
     ssh_log_hexdump("RSA signature", ssh_string_data(sig_blob), len);
 #endif
 
@@ -1207,7 +1344,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
     int rc;
 
     if (ssh_key_type_plain(pubkey->type) != type) {
-        SSH_LOG(SSH_LOG_WARN,
+        SSH_LOG(SSH_LOG_TRACE,
                 "Incompatible public key provided (%d) expecting (%d)",
                 type,
                 pubkey->type);
@@ -1292,7 +1429,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
             }
 
             if (rlen != 0) {
-                SSH_LOG(SSH_LOG_WARN, "Signature has remaining bytes in inner "
+                SSH_LOG(SSH_LOG_TRACE, "Signature has remaining bytes in inner "
                         "sigblob: %lu",
                         (unsigned long)rlen);
                 ssh_signature_free(sig);
@@ -1310,7 +1447,7 @@ ssh_signature pki_signature_from_blob(const ssh_key pubkey,
             }
             break;
         default:
-            SSH_LOG(SSH_LOG_WARN, "Unknown signature type");
+            SSH_LOG(SSH_LOG_TRACE, "Unknown signature type");
             return NULL;
     }
 
@@ -1341,7 +1478,7 @@ static ssh_string rsa_do_sign_hash(const unsigned char *digest,
         break;
     case SSH_DIGEST_AUTO:
     default:
-        SSH_LOG(SSH_LOG_WARN, "Incompatible key algorithm");
+        SSH_LOG(SSH_LOG_TRACE, "Incompatible key algorithm");
         return NULL;
     }
 
@@ -1874,36 +2011,6 @@ int pki_key_generate_ecdsa(ssh_key key, int parameter)
     return SSH_OK;
 }
 
-int pki_privkey_build_dss(ssh_key key, ssh_string p, ssh_string q, ssh_string g,
-        ssh_string pubkey, ssh_string privkey)
-{
-    (void) key;
-    (void) p;
-    (void) q;
-    (void) g;
-    (void) pubkey;
-    (void) privkey;
-    return SSH_ERROR;
-}
-
-int pki_pubkey_build_dss(ssh_key key, ssh_string p, ssh_string q, ssh_string g,
-        ssh_string pubkey)
-{
-    (void) key;
-    (void) p;
-    (void) q;
-    (void) g;
-    (void) pubkey;
-    return SSH_ERROR;
-}
-
-int pki_key_generate_dss(ssh_key key, int parameter)
-{
-    (void) key;
-    (void) parameter;
-    return SSH_ERROR;
-}
-
 int ssh_key_size(ssh_key key)
 {
     switch (key->type) {
@@ -1928,14 +2035,15 @@ int ssh_key_size(ssh_key key)
     case SSH_KEYTYPE_SK_ED25519_CERT01:
         /* ed25519 keys have fixed size */
         return 255;
-    case SSH_KEYTYPE_DSS:
-    case SSH_KEYTYPE_DSS_CERT01:
+    case SSH_KEYTYPE_DSS:   /* deprecated */
+    case SSH_KEYTYPE_DSS_CERT01:    /* deprecated */
     case SSH_KEYTYPE_UNKNOWN:
     default:
         return SSH_ERROR;
     }
 }
 
+#ifdef WITH_PKCS11_URI
 int pki_uri_import(const char *uri_name, ssh_key *key, enum ssh_key_e key_type)
 {
     (void) uri_name;
@@ -1945,4 +2053,5 @@ int pki_uri_import(const char *uri_name, ssh_key *key, enum ssh_key_e key_type)
             "mbedcrypto does not support PKCS #11");
     return SSH_ERROR;
 }
+#endif /* WITH_PKCS11_URI */
 #endif /* HAVE_LIBMBEDCRYPTO */
