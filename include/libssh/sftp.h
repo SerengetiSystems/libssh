@@ -964,8 +964,6 @@ LIBSSH_API int sftp_rename(sftp_session sftp, const char *original, const  char 
  * @see sftp_get_error()
  */
 LIBSSH_API int sftp_setstat(sftp_session sftp, const char *file, sftp_attributes attr);
-
-
 LIBSSH_API int sftp_fsetstat(sftp_file file, sftp_attributes attr);
 
 /**
@@ -984,6 +982,7 @@ LIBSSH_API int sftp_fsetstat(sftp_file file, sftp_attributes attr);
  * @see sftp_get_error()
  */
 LIBSSH_API int sftp_chown(sftp_session sftp, const char *file, uid_t owner, gid_t group);
+LIBSSH_API int sftp_fchown(sftp_file file, uid_t owner, gid_t group);
 
 /**
  * @brief Change permissions of a file
@@ -1001,6 +1000,7 @@ LIBSSH_API int sftp_chown(sftp_session sftp, const char *file, uid_t owner, gid_
  * @see sftp_get_error()
  */
 LIBSSH_API int sftp_chmod(sftp_session sftp, const char *file, mode_t mode);
+LIBSSH_API int sftp_fchmod(sftp_file file, mode_t mode);
 
 /**
  * @brief Change the last modification and access time of a file.
@@ -1017,6 +1017,7 @@ LIBSSH_API int sftp_chmod(sftp_session sftp, const char *file, mode_t mode);
  * @see sftp_get_error()
  */
 LIBSSH_API int sftp_utimes(sftp_session sftp, const char *file, const struct timeval *times);
+LIBSSH_API int sftp_futimes(sftp_file file, const struct timeval *times);
 
 /**
  * @brief Create a symbolic link.

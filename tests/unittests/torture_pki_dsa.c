@@ -1,6 +1,8 @@
 #include "config.h"
 
+#ifndef LIBSSH_STATIC
 #define LIBSSH_STATIC
+#endif
 
 #include <string.h>
 #include <sys/stat.h>
@@ -15,7 +17,6 @@
 #define LIBSSH_DSA_TESTKEY_PASSPHRASE "libssh_testkey_passphrase.id_dsa"
 
 const char template[] = "temp_dir_XXXXXX";
-const unsigned char INPUT[] = "12345678901234567890";
 
 struct pki_st {
     char *cwd;

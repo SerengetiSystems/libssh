@@ -62,6 +62,84 @@ struct sftp_ext_struct {
   char **data;
 };
 
+#ifdef __GNUC__
+#define thread_local __thread
+#elif defined(_MSC_VER)
+#define thread_local __declspec(thread)
+#elif __STDC_VERSION__ >= 201112L
+#define thread_local _Thread_local
+#else
+#error Cannot define thread_local
+#endif
+
+static const char *
+sftp_message_type(int t)
+{
+  static thread_local char buffer[64];
+  switch (t) {
+  // requests
+  case SSH_FXP_INIT: // 1
+      return "SSH_FXP_INIT";
+  case SSH_FXP_VERSION: // 2
+      return "SSH_FXP_VERSION";
+  case SSH_FXP_OPEN: // 3
+      return "SSH_FXP_OPEN";
+  case SSH_FXP_CLOSE: // 4
+      return "SSH_FXP_CLOSE";
+  case SSH_FXP_READ: // 5
+      return "SSH_FXP_READ";
+  case SSH_FXP_WRITE: // 6
+      return "SSH_FXP_WRITE";
+  case SSH_FXP_LSTAT: // 7
+      return "SSH_FXP_LSTAT";
+  case SSH_FXP_FSTAT: // 8
+      return "SSH_FXP_FSTAT";
+  case SSH_FXP_SETSTAT: // 9
+      return "SSH_FXP_SETSTAT";
+  case SSH_FXP_FSETSTAT: // 10
+      return "SSH_FXP_FSETSTAT";
+  case SSH_FXP_OPENDIR: // 11
+      return "SSH_FXP_OPENDIR";
+  case SSH_FXP_READDIR: // 12
+      return "SSH_FXP_READDIR";
+  case SSH_FXP_REMOVE: // 13
+      return "SSH_FXP_REMOVE";
+  case SSH_FXP_MKDIR: // 14
+      return "SSH_FXP_MKDIR";
+  case SSH_FXP_RMDIR: // 15
+      return "SSH_FXP_RMDIR";
+  case SSH_FXP_REALPATH: // 16
+      return "SSH_FXP_REALPATH";
+  case SSH_FXP_STAT: // 17
+      return "SSH_FXP_STAT";
+  case SSH_FXP_RENAME: // 18
+      return "SSH_FXP_RENAME";
+  case SSH_FXP_READLINK: // 19
+      return "SSH_FXP_READLINK";
+  case SSH_FXP_SYMLINK: // 20
+      return "SSH_FXP_SYMLINK";
+  case SSH_FXP_EXTENDED: // 200
+      return "SSH_FXP_EXTENDED";
+  // responses
+  case SSH_FXP_STATUS: // 101
+      return "SSH_FXP_STATUS";
+  case SSH_FXP_HANDLE: // 102
+      return "SSH_FXP_HANDLE";
+  case SSH_FXP_DATA: // 103
+      return "SSH_FXP_DATA";
+  case SSH_FXP_NAME: // 104
+      return "SSH_FXP_NAME";
+  case SSH_FXP_ATTRS: // 105
+      return "SSH_FXP_ATTRS";
+  case SSH_FXP_EXTENDED_REPLY: // 201
+      return "SSH_FXP_EXTENDED_REPLY";
+      // unknown
+  default:
+      sprintf(buffer, "Unknown Message: %d", t);
+      return buffer;
+  }
+}
+
 static sftp_ext sftp_ext_new(void) {
   sftp_ext ext;
 
@@ -1418,6 +1496,103 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
   return -1; /* not reached */
 }
 
+int
+sftp_async_write_begin(sftp_file file, const void *buf, size_t count)
+{
+  sftp_session sftp = file->sftp;
+  ssh_channel channel = sftp->channel;
+  ssh_string handle = file->handle;
+  ssh_buffer buffer;
+  ssize_t len;
+  int rc, id;
+
+  buffer = ssh_buffer_new();
+  if (buffer == NULL) {
+      ssh_set_error_oom(sftp->session);
+      sftp_set_error(sftp, SSH_FX_FAILURE);
+      return -1;
+  }
+
+  id = sftp_get_new_id(file->sftp);
+
+  rc = ssh_buffer_pack(buffer,
+                       "dSqdP",
+                       id,
+                       file->handle,
+                       file->offset,
+                       count, /* len of datastring */
+                       (size_t)count,
+                       buf);
+  if (rc != SSH_OK) {
+      ssh_set_error_oom(sftp->session);
+      SSH_BUFFER_FREE(buffer);
+      sftp_set_error(sftp, SSH_FX_FAILURE);
+      return -1;
+  }
+  len = sftp_packet_write(file->sftp, SSH_FXP_WRITE, buffer);
+  SSH_BUFFER_FREE(buffer);
+  if (len < 0) {
+      return -1;
+  }
+  file->offset += count;
+  return id;
+}
+
+int
+sftp_async_write_end(sftp_file file, int id)
+{
+  sftp_session sftp = file->sftp;
+  sftp_message msg = NULL;
+  sftp_status_message status;
+
+  while (msg == NULL) {
+      if (file->nonblocking) {
+          if (ssh_channel_poll(sftp->channel, 0) == 0) {
+        /* we cannot block */
+        return SSH_AGAIN;
+          }
+      }
+
+      if (sftp_read_and_dispatch(sftp) < 0) {
+          /* something nasty has happened */
+          return SSH_ERROR;
+      }
+      msg = sftp_dequeue(sftp, id);
+  }
+
+  switch (msg->packet_type) {
+  case SSH_FXP_STATUS:
+      status = parse_status_msg(msg);
+      sftp_message_free(msg);
+      if (status == NULL) {
+          return SSH_ERROR;
+      }
+      sftp_set_error(sftp, status->status);
+      switch (status->status) {
+      case SSH_FX_OK:
+          status_msg_free(status);
+          return 0;
+      default:
+          ssh_set_error(sftp->session,
+                        SSH_REQUEST_DENIED,
+                        "SFTP server: %s",
+                        status->errormsg);
+          status_msg_free(status);
+          return SSH_ERROR;
+      }
+  default:
+      ssh_set_error(sftp->session,
+                    SSH_FATAL,
+                    "Received %s during write!",
+                    sftp_message_type(msg->packet_type));
+      sftp_message_free(msg);
+      sftp_set_error(sftp, SSH_FX_BAD_MESSAGE);
+      return SSH_ERROR;
+  }
+
+  return SSH_ERROR; /* not reached */
+}
+
 /* Seek to a specific location in a file. */
 int sftp_seek(sftp_file file, uint32_t new_offset) {
   if (file == NULL) {
@@ -1938,6 +2113,135 @@ int sftp_utimes(sftp_session sftp, const char *file,
     SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
 
   return sftp_setstat(sftp, file, &attr);
+}
+
+int
+sftp_fsetstat(sftp_file file, sftp_attributes attr)
+{
+  sftp_status_message status = NULL;
+  sftp_message msg = NULL;
+  ssh_buffer buffer;
+  uint32_t id;
+  ssize_t rc;
+
+  if (file == NULL) {
+        return -1;
+  }
+
+  buffer = ssh_buffer_new();
+  if (buffer == NULL) {
+        ssh_set_error_oom(file->sftp->session);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+  }
+  id = sftp_get_new_id(file->sftp);
+  rc = ssh_buffer_pack(buffer, "dS", id, file->handle);
+  if (rc != SSH_OK) {
+        ssh_set_error_oom(file->sftp->session);
+        SSH_BUFFER_FREE(buffer);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+  }
+
+  rc = buffer_add_attributes(buffer, attr);
+  if (rc != 0) {
+        ssh_set_error_oom(file->sftp->session);
+        SSH_BUFFER_FREE(buffer);
+        sftp_set_error(file->sftp, SSH_FX_FAILURE);
+        return -1;
+  }
+  rc = sftp_packet_write(file->sftp, SSH_FXP_FSETSTAT, buffer);
+  SSH_BUFFER_FREE(buffer);
+  if (rc < 0) {
+        return -1;
+  }
+
+  while (msg == NULL) {
+        if (sftp_read_and_dispatch(file->sftp) < 0) {
+                return -1;
+        }
+        msg = sftp_dequeue(file->sftp, id);
+  }
+
+  if (msg->packet_type == SSH_FXP_STATUS) {
+        status = parse_status_msg(msg);
+        sftp_message_free(msg);
+        if (status == NULL) {
+                return -1;
+        }
+        sftp_set_error(file->sftp, status->status);
+        switch (status->status) {
+        case SSH_FX_OK:
+                status_msg_free(status);
+                return 0;
+        default:
+                break;
+        }
+        /*
+         * The status should be SSH_FX_OK if the command was successful, if it
+         * didn't, then there was an error
+         */
+        ssh_set_error(file->sftp->session,
+                      SSH_REQUEST_DENIED,
+                      "SFTP server: %s",
+                      status->errormsg);
+        status_msg_free(status);
+        return -1;
+  } else {
+        ssh_set_error(file->sftp->session,
+                      SSH_FATAL,
+                      "Received %s when attempting to set stats",
+                      sftp_message_type(msg->packet_type));
+        sftp_message_free(msg);
+        sftp_set_error(file->sftp, SSH_FX_BAD_MESSAGE);
+  }
+  return -1;
+}
+
+/* Change the file owner and group */
+int
+sftp_fchown(sftp_file file, uid_t owner, gid_t group)
+{
+  struct sftp_attributes_struct attr;
+  ZERO_STRUCT(attr);
+
+  attr.uid = owner;
+  attr.gid = group;
+
+  attr.flags = SSH_FILEXFER_ATTR_UIDGID;
+
+  return sftp_fsetstat(file, &attr);
+}
+
+/* Change permissions of a file */
+int
+sftp_fchmod(sftp_file file, mode_t mode)
+{
+  struct sftp_attributes_struct attr;
+  ZERO_STRUCT(attr);
+  attr.permissions = mode;
+  attr.flags = SSH_FILEXFER_ATTR_PERMISSIONS;
+
+  return sftp_fsetstat(file, &attr);
+}
+
+/* Change the last modification and access time of a file. */
+int
+sftp_futimes(sftp_file file, const struct timeval *times)
+{
+  struct sftp_attributes_struct attr;
+  ZERO_STRUCT(attr);
+
+  attr.atime = times[0].tv_sec;
+  attr.atime_nseconds = times[0].tv_usec;
+
+  attr.mtime = times[1].tv_sec;
+  attr.mtime_nseconds = times[1].tv_usec;
+
+  attr.flags |= SSH_FILEXFER_ATTR_ACCESSTIME | SSH_FILEXFER_ATTR_MODIFYTIME |
+                SSH_FILEXFER_ATTR_SUBSECOND_TIMES;
+
+  return sftp_fsetstat(file, &attr);
 }
 
 int sftp_symlink(sftp_session sftp, const char *target, const char *dest)
