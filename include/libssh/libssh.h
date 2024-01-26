@@ -871,6 +871,11 @@ LIBSSH_API const char* ssh_get_cipher_out(ssh_session session);
 LIBSSH_API const char* ssh_get_hmac_in(ssh_session session);
 LIBSSH_API const char* ssh_get_hmac_out(ssh_session session);
 
+LIBSSH_API const char *ssh_kex_get_supported_method(uint32_t algo);
+LIBSSH_API const char *ssh_kex_get_default_methods(uint32_t algo);
+LIBSSH_API const char *ssh_kex_get_fips_methods(uint32_t algo);
+LIBSSH_API const char *ssh_kex_get_description(uint32_t algo);
+
 LIBSSH_API ssh_buffer ssh_buffer_new(void);
 LIBSSH_API void ssh_buffer_free(ssh_buffer buffer);
 #define SSH_BUFFER_FREE(x) \
