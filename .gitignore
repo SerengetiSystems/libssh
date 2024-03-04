@@ -9,4 +9,5 @@ compile_commands.json
 tags
 /build
 /obj*
+doc/tags.xml
 **/.vs/

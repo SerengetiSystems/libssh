@@ -425,6 +425,7 @@ void sftp_free(sftp_session sftp)
     SAFE_FREE(sftp->read_packet);
 
     sftp_ext_free(sftp->ext);
+    sftp_limits_free(sftp->limits);
 
     SAFE_FREE(sftp);
 }
@@ -491,101 +492,152 @@ int sftp_get_error(sftp_session sftp) {
   return sftp->errnum;
 }
 
+static sftp_limits_t sftp_limits_use_extension(sftp_session sftp);
+static sftp_limits_t sftp_limits_use_default(sftp_session sftp);
+
 /* Initialize the sftp session with the server. */
-int sftp_init(sftp_session sftp) {
-  sftp_packet packet = NULL;
-  ssh_buffer buffer = NULL;
-  char *ext_name = NULL;
-  char *ext_data = NULL;
-  uint32_t version;
-  int rc;
+int sftp_init(sftp_session sftp)
+{
+    sftp_packet packet = NULL;
+    ssh_buffer buffer = NULL;
+    char *ext_name = NULL;
+    char *ext_data = NULL;
+    uint32_t version;
+    int rc;
 
-  buffer = ssh_buffer_new();
-  if (buffer == NULL) {
-    ssh_set_error_oom(sftp->session);
-    sftp_set_error(sftp, SSH_FX_FAILURE);
-    return -1;
-  }
+    buffer = ssh_buffer_new();
+    if (buffer == NULL) {
+        ssh_set_error_oom(sftp->session);
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return -1;
+    }
 
-  rc = ssh_buffer_pack(buffer, "d", LIBSFTP_VERSION);
-  if (rc != SSH_OK) {
-    ssh_set_error_oom(sftp->session);
-    SSH_BUFFER_FREE(buffer);
-    sftp_set_error(sftp, SSH_FX_FAILURE);
-    return -1;
-  }
-  if (sftp_packet_write(sftp, SSH_FXP_INIT, buffer) < 0) {
-    SSH_BUFFER_FREE(buffer);
-    return -1;
-  }
-  SSH_BUFFER_FREE(buffer);
+    rc = ssh_buffer_pack(buffer, "d", LIBSFTP_VERSION);
+    if (rc != SSH_OK) {
+        ssh_set_error_oom(sftp->session);
+        SSH_BUFFER_FREE(buffer);
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return -1;
+    }
 
-  packet = sftp_packet_read(sftp);
-  if (packet == NULL) {
-    return -1;
-  }
-
-  if (packet->type != SSH_FXP_VERSION) {
-    ssh_set_error(sftp->session, SSH_FATAL,
-        "Received a %d messages instead of SSH_FXP_VERSION", packet->type);
-    return -1;
-  }
-
-  /* TODO: are we sure there are 4 bytes ready? */
-  rc = ssh_buffer_unpack(packet->payload, "d", &version);
-  if (rc != SSH_OK){
-      sftp_set_error(sftp, SSH_FX_FAILURE);
-      return -1;
-  }
-  SSH_LOG(SSH_LOG_DEBUG,
-      "SFTP server version %" PRIu32,
-      version);
-  rc = ssh_buffer_unpack(packet->payload, "s", &ext_name);
-  while (rc == SSH_OK) {
-    uint32_t count = sftp->ext->count;
-    char **tmp;
-
-    rc = ssh_buffer_unpack(packet->payload, "s", &ext_data);
+    rc = sftp_packet_write(sftp, SSH_FXP_INIT, buffer);
     if (rc == SSH_ERROR) {
-      break;
+        SSH_BUFFER_FREE(buffer);
+        return -1;
+    }
+
+    SSH_BUFFER_FREE(buffer);
+
+    packet = sftp_packet_read(sftp);
+    if (packet == NULL) {
+        return -1;
+    }
+
+    if (packet->type != SSH_FXP_VERSION) {
+        ssh_set_error(sftp->session, SSH_FATAL,
+                      "Received a %d messages instead of SSH_FXP_VERSION",
+                      packet->type);
+        return -1;
+    }
+
+    /* TODO: are we sure there are 4 bytes ready? */
+    rc = ssh_buffer_unpack(packet->payload, "d", &version);
+    if (rc != SSH_OK){
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return -1;
     }
 
     SSH_LOG(SSH_LOG_DEBUG,
-        "SFTP server extension: %s, version: %s",
-        ext_name, ext_data);
-
-    count++;
-    tmp = realloc(sftp->ext->name, count * sizeof(char *));
-    if (tmp == NULL) {
-      ssh_set_error_oom(sftp->session);
-      SAFE_FREE(ext_name);
-      SAFE_FREE(ext_data);
-      sftp_set_error(sftp, SSH_FX_FAILURE);
-      return -1;
-    }
-    tmp[count - 1] = ext_name;
-    sftp->ext->name = tmp;
-
-    tmp = realloc(sftp->ext->data, count * sizeof(char *));
-    if (tmp == NULL) {
-      ssh_set_error_oom(sftp->session);
-      SAFE_FREE(ext_name);
-      SAFE_FREE(ext_data);
-      sftp_set_error(sftp, SSH_FX_FAILURE);
-      return -1;
-    }
-    tmp[count - 1] = ext_data;
-    sftp->ext->data = tmp;
-
-    sftp->ext->count = count;
-
+            "SFTP server version %" PRIu32,
+            version);
     rc = ssh_buffer_unpack(packet->payload, "s", &ext_name);
-  }
+    while (rc == SSH_OK) {
+        uint32_t count = sftp->ext->count;
+        char **tmp;
 
-  sftp->version = sftp->server_version = (int)version;
+        rc = ssh_buffer_unpack(packet->payload, "s", &ext_data);
+        if (rc == SSH_ERROR) {
+            break;
+        }
 
+        SSH_LOG(SSH_LOG_DEBUG,
+                "SFTP server extension: %s, version: %s",
+                ext_name, ext_data);
 
-  return 0;
+        count++;
+        tmp = realloc(sftp->ext->name, count * sizeof(char *));
+        if (tmp == NULL) {
+            ssh_set_error_oom(sftp->session);
+            SAFE_FREE(ext_name);
+            SAFE_FREE(ext_data);
+            sftp_set_error(sftp, SSH_FX_FAILURE);
+            return -1;
+        }
+
+        tmp[count - 1] = ext_name;
+        sftp->ext->name = tmp;
+
+        tmp = realloc(sftp->ext->data, count * sizeof(char *));
+        if (tmp == NULL) {
+            ssh_set_error_oom(sftp->session);
+            SAFE_FREE(ext_name);
+            SAFE_FREE(ext_data);
+            sftp_set_error(sftp, SSH_FX_FAILURE);
+            return -1;
+        }
+
+        tmp[count - 1] = ext_data;
+        sftp->ext->data = tmp;
+
+        sftp->ext->count = count;
+
+        rc = ssh_buffer_unpack(packet->payload, "s", &ext_name);
+    }
+
+    sftp->version = sftp->server_version = (int)version;
+
+    /* Set the limits */
+    rc = sftp_extension_supported(sftp, "limits@openssh.com", "1");
+    if (rc == 1) {
+        /* Get the ssh and sftp errors */
+        const char *static_ssh_err_msg = ssh_get_error(sftp->session);
+        int ssh_err_code = ssh_get_error_code(sftp->session);
+        int sftp_err_code = sftp_get_error(sftp);
+        char *ssh_err_msg = strdup(static_ssh_err_msg);
+        if (ssh_err_msg == NULL) {
+            ssh_set_error_oom(sftp->session);
+            sftp_set_error(sftp, SSH_FX_FAILURE);
+            return -1;
+        }
+
+        sftp->limits = sftp_limits_use_extension(sftp);
+        if (sftp->limits == NULL) {
+            /* fallback and use the default limits on failure */
+            SSH_LOG(SSH_LOG_TRACE,
+                    "Failed to get the limits from a server claiming to "
+                    "support the limits@openssh.com extension, falling back "
+                    "and using the default limits");
+
+            /* Restore the sftp and ssh errors to their previous state */
+            ssh_set_error(sftp->session, ssh_err_code, "%s", ssh_err_msg);
+            sftp_set_error(sftp, sftp_err_code);
+            SAFE_FREE(ssh_err_msg);
+
+            sftp->limits = sftp_limits_use_default(sftp);
+            if (sftp->limits == NULL) {
+                return -1;
+            }
+        } else {
+            SAFE_FREE(ssh_err_msg);
+        }
+    } else {
+        sftp->limits = sftp_limits_use_default(sftp);
+        if (sftp->limits == NULL) {
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 unsigned int sftp_extensions_get_count(sftp_session sftp) {
@@ -1182,6 +1234,18 @@ ssize_t sftp_read(sftp_file handle, void *buf, size_t count) {
     return 0;
   }
 
+  /*
+   * limit the reads to the maximum specified in Section 3 of
+   * https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02
+   * or to the values provided by the limits@openssh.com extension.
+   *
+   * TODO: We should iterate over the blocks rather than writing less than
+   * requested to provide less surprises to the calling applications.
+   */
+  if (count > sftp->limits->max_read_length) {
+      count = sftp->limits->max_read_length;
+  }
+
   buffer = ssh_buffer_new();
   if (buffer == NULL) {
     ssh_set_error_oom(sftp->session);
@@ -1422,16 +1486,17 @@ ssize_t sftp_write(sftp_file file, const void *buf, size_t count) {
 
   id = sftp_get_new_id(file->sftp);
 
-
-  /* limit the writes to the maximum specified in Section 3 of
+  /*
+   * limit the writes to the maximum specified in Section 3 of
    * https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02
+   * or to the values provided by the limits@openssh.com extension.
    *
-   * FIXME: This value should be adjusted to the value from the
-   * limits@openssh.com extension if supported
    * TODO: We should iterate over the blocks rather than writing less than
    * requested to provide less surprises to the calling applications.
    */
-  count = count > 32768 ? 32768 : count;
+  if (count > sftp->limits->max_write_length) {
+      count = sftp->limits->max_write_length;
+  }
 
   rc = ssh_buffer_pack(buffer,
                        "dSqdP",
@@ -2820,13 +2885,17 @@ void sftp_statvfs_free(sftp_statvfs_t statvfs) {
     SAFE_FREE(statvfs);
 }
 
-static sftp_limits_t
-sftp_parse_limits(sftp_session sftp, ssh_buffer buf)
+static sftp_limits_t sftp_limits_new(void)
+{
+    return calloc(1, sizeof(struct sftp_limits_struct));
+}
+
+static sftp_limits_t sftp_parse_limits(sftp_session sftp, ssh_buffer buf)
 {
     sftp_limits_t limits = NULL;
     int rc;
 
-    limits = calloc(1, sizeof(struct sftp_limits_struct));
+    limits = sftp_limits_new();
     if (limits == NULL) {
         ssh_set_error_oom(sftp->session);
         sftp_set_error(sftp, SSH_FX_FAILURE);
@@ -2849,8 +2918,7 @@ sftp_parse_limits(sftp_session sftp, ssh_buffer buf)
     return limits;
 }
 
-sftp_limits_t
-sftp_limits(sftp_session sftp)
+static sftp_limits_t sftp_limits_use_extension(sftp_session sftp)
 {
     sftp_status_message status = NULL;
     sftp_message msg = NULL;
@@ -2926,8 +2994,66 @@ sftp_limits(sftp_session sftp)
     return NULL;
 }
 
-void
-sftp_limits_free(sftp_limits_t limits)
+static sftp_limits_t sftp_limits_use_default(sftp_session sftp)
+{
+    sftp_limits_t limits = NULL;
+
+    if (sftp == NULL) {
+        return NULL;
+    }
+
+    limits = sftp_limits_new();
+    if (limits == NULL) {
+        ssh_set_error_oom(sftp->session);
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return NULL;
+    }
+
+    limits->max_packet_length = 34000;
+    limits->max_read_length = 32768;
+    limits->max_write_length = 32768;
+
+    /*
+     * For max-open-handles field openssh says :
+     * If the server doesn't enforce a specific limit, then the field may
+     * be set to 0.  This implies the server relies on the OS to enforce
+     * limits (e.g. available memory or file handles), and such limits
+     * might be dynamic.  The client SHOULD take care to not try to exceed
+     * reasonable limits.
+     */
+    limits->max_open_handles = 0;
+
+    return limits;
+}
+
+sftp_limits_t sftp_limits(sftp_session sftp)
+{
+    sftp_limits_t limits = NULL;
+
+    if (sftp == NULL) {
+        return NULL;
+    }
+
+    if (sftp->limits == NULL) {
+        ssh_set_error(sftp, SSH_FATAL,
+                      "Uninitialized sftp session, "
+                      "sftp_init() was not called or failed");
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return NULL;
+    }
+
+    limits = sftp_limits_new();
+    if (limits == NULL) {
+        ssh_set_error_oom(sftp);
+        sftp_set_error(sftp, SSH_FX_FAILURE);
+        return NULL;
+    }
+
+    memcpy(limits, sftp->limits, sizeof(struct sftp_limits_struct));
+    return limits;
+}
+
+void sftp_limits_free(sftp_limits_t limits)
 {
     if (limits == NULL) {
         return;

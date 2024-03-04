@@ -181,7 +181,8 @@ int ssh_gettimeofday(struct timeval *__p, void *__t)
 char *ssh_get_local_username(void)
 {
     DWORD size = 0;
-    char *user;
+    char *user = NULL;
+    int rc;
 
     /* get the size */
     GetUserName(NULL, &size);
@@ -192,8 +193,13 @@ char *ssh_get_local_username(void)
     }
 
     if (GetUserName(user, &size)) {
-        return user;
+        rc = ssh_check_username_syntax(user);
+        if (rc == SSH_OK) {
+            return user;
+        }
     }
+
+    free(user);
 
     return NULL;
 }
@@ -327,7 +333,7 @@ char *ssh_get_local_username(void)
     struct passwd pwd;
     struct passwd *pwdbuf = NULL;
     char buf[NSS_BUFLEN_PASSWD];
-    char *name;
+    char *name = NULL;
     int rc;
 
     rc = getpwuid_r(getuid(), &pwd, buf, NSS_BUFLEN_PASSWD, &pwdbuf);
@@ -336,8 +342,10 @@ char *ssh_get_local_username(void)
     }
 
     name = strdup(pwd.pw_name);
+    rc = ssh_check_username_syntax(name);
 
-    if (name == NULL) {
+    if (rc != SSH_OK) {
+        free(name);
         return NULL;
     }
 
@@ -2208,6 +2216,38 @@ int ssh_check_hostname_syntax(const char *hostname)
     } while ((it = strtok_r(NULL, ".", &buf)) != NULL);
 
     free(s);
+
+    return SSH_OK;
+}
+
+/**
+ * @brief Checks syntax of a username
+ *
+ * This check disallows metacharacters in the username
+ *
+ * @param username The username to be checked, has to be null terminated
+ *
+ * @return SSH_OK if the username passes syntax check
+ *         SSH_ERROR otherwise or if username is NULL or empty string
+ */
+int ssh_check_username_syntax(const char *username)
+{
+    size_t username_len;
+
+    if (username == NULL || *username == '-') {
+        return SSH_ERROR;
+    }
+
+    username_len = strlen(username);
+    if (username_len == 0 || username[username_len - 1] == '\\' ||
+        strpbrk(username, "'`\";&<>|(){}") != NULL) {
+        return SSH_ERROR;
+    }
+    for (size_t i = 0; i < username_len; i++) {
+        if (isspace(username[i]) != 0 && username[i + 1] == '-') {
+            return SSH_ERROR;
+        }
+    }
 
     return SSH_OK;
 }

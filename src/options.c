@@ -634,17 +634,11 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                 ssh_set_error_invalid(session);
                 return -1;
             } else {
-                char *username = NULL, *hostname = NULL, *port = NULL;
-                rc = ssh_config_parse_uri(value, &username, &hostname, &port);
+                char *username = NULL, *hostname = NULL;
+                rc = ssh_config_parse_uri(value, &username, &hostname, NULL, true);
                 if (rc != SSH_OK) {
                     return -1;
                 }
-                if (port != NULL) {
-                    SAFE_FREE(username);
-                    SAFE_FREE(hostname);
-                    SAFE_FREE(port);
-                        return -1;
-                    }
                 if (username != NULL) {
                     SAFE_FREE(session->opts.username);
                     session->opts.username = username;
@@ -744,6 +738,11 @@ int ssh_options_set(ssh_session session, enum ssh_options_e type,
                     ssh_set_error_oom(session);
                     return -1;
                 }
+                rc = ssh_check_username_syntax(session->opts.username);
+                if (rc != SSH_OK) {
+                    ssh_set_error_invalid(session);
+                    return -1;
+            }
             }
             break;
         case SSH_OPTIONS_SSH_DIR:
@@ -1932,7 +1931,8 @@ static int ssh_bind_set_algo(ssh_bind sshbind,
  *                        This is DEPRECATED, please do not use.
  *
  *                      - SSH_BIND_OPTIONS_IMPORT_KEY:
- *                        Set the Private Key for the server directly (ssh_key)
+ *                        Set the Private Key for the server directly
+ *                        (ssh_key). It will be free'd by ssh_bind_free().
  *
  *                      - SSH_BIND_OPTIONS_CIPHERS_C_S:
  *                        Set the symmetric cipher client to server (const char *,

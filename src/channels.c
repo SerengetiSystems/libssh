@@ -3227,7 +3227,7 @@ int ssh_channel_read_timeout(ssh_channel channel,
  * @brief Do a nonblocking read on the channel.
  *
  * A nonblocking read on the specified channel. it will return <= count bytes of
- * data read atomically.
+ * data read atomically. It will also trigger any callbacks set on the channel.
  *
  * @param[in]  channel  The channel to read from.
  *
@@ -3237,10 +3237,8 @@ int ssh_channel_read_timeout(ssh_channel channel,
  *
  * @param[in]  is_stderr A boolean to select the stderr stream.
  *
- * @return              The number of bytes read, 0 if nothing is available or
- *                      SSH_ERROR on error.
- *
- * @warning Don't forget to check for EOF as it would return 0 here.
+ * @return              The number of bytes read (0 if nothing is available),
+ *                      SSH_ERROR on error, and SSH_EOF if the channel is EOF.
  *
  * @see ssh_channel_is_eof()
  */

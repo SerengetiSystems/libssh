@@ -1183,6 +1183,7 @@ LIBSSH_API struct ssh_threads_callbacks_struct *ssh_threads_get_pthread(void);
  * @see ssh_threads_set_callbacks
  */
 LIBSSH_API struct ssh_threads_callbacks_struct *ssh_threads_get_noop(void);
+/** @} */
 
 /**
  * @brief Set the logging callback function.
@@ -1200,7 +1201,6 @@ LIBSSH_API int ssh_set_log_callback(ssh_logging_callback cb);
  */
 LIBSSH_API ssh_logging_callback ssh_get_log_callback(void);
 
-/** @} */
 #ifdef __cplusplus
 }
 #endif

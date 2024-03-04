@@ -92,6 +92,7 @@ struct sftp_session_struct {
     void **handles;
     sftp_ext ext;
     sftp_packet read_packet;
+    sftp_limits_t limits;
 };
 
 struct sftp_packet_struct {
@@ -488,13 +489,18 @@ LIBSSH_API void sftp_file_set_blocking(sftp_file handle);
 /**
  * @brief Read from a file using an opened sftp file handle.
  *
+ * This function caps the length a user is allowed to read from an sftp file.
+ *
+ * The value used for the cap is same as the value of the max_read_length
+ * field of the sftp_limits_t returned by sftp_limits().
+ *
  * @param file          The opened sftp file handle to be read from.
  *
  * @param buf           Pointer to buffer to receive read data.
  *
  * @param count         Size of the buffer in bytes.
  *
- * @return              Number of bytes written, < 0 on error with ssh and sftp
+ * @return              Number of bytes read, < 0 on error with ssh and sftp
  *                      error set.
  *
  * @see sftp_get_error()
@@ -602,9 +608,10 @@ LIBSSH_API int sftp_async_write_end(sftp_file file, int id);
 /**
  * @brief Write to a file using an opened sftp file handle.
  *
- * The maximum size of the SFTP packet payload is 32768 bytes so the count
- * parameter is capped at this value. This is low-level function so it does not
- * try to send more than this amount of data.
+ * This function caps the length a user is allowed to write to an sftp file.
+ *
+ * The value used for the cap is same as the value of the max_write_length
+ * field of the sftp_limits_t returned by sftp_limits().
  *
  * @param file          Open sftp file handle to write to.
  *
@@ -669,6 +676,12 @@ LIBSSH_API void sftp_aio_free(sftp_aio aio);
  * calling sftp_close() or to keep it open and perform some more operations
  * on it.
  *
+ * This function caps the length a user is allowed to read from an sftp file,
+ * the value of len parameter after capping is returned on success.
+ *
+ * The value used for the cap is same as the value of the max_read_length
+ * field of the sftp_limits_t returned by sftp_limits().
+ *
  * @param file          The opened sftp file handle to be read from.
  *
  * @param len           Number of bytes to read.
@@ -676,11 +689,14 @@ LIBSSH_API void sftp_aio_free(sftp_aio aio);
  * @param aio           Pointer to a location where the sftp aio handle
  *                      (corresponding to the sent request) should be stored.
  *
- * @returns             SSH_OK on success, SSH_ERROR on error with sftp and ssh
+ * @returns             On success, the number of bytes the server is
+ *                      requested to read (value of len parameter after
+ *                      capping). On error, SSH_ERROR with sftp and ssh
  *                      errors set.
  *
- * @warning             When calling this function, the internal offset is
- *                      updated corresponding to the len parameter.
+ * @warning             When calling this function, the internal file offset is
+ *                      updated corresponding to the number of bytes requested
+ *                      to read.
  *
  * @warning             A call to sftp_aio_begin_read() sends a request to
  *                      the server. When the server answers, libssh allocates
@@ -695,9 +711,9 @@ LIBSSH_API void sftp_aio_free(sftp_aio aio);
  * @see                 sftp_get_error()
  * @see                 ssh_get_error()
  */
-LIBSSH_API int sftp_aio_begin_read(sftp_file file,
-                                   size_t len,
-                                   sftp_aio *aio);
+LIBSSH_API ssize_t sftp_aio_begin_read(sftp_file file,
+                                       size_t len,
+                                       sftp_aio *aio);
 
 /**
  * @brief Wait for an asynchronous read to complete and store the read data
@@ -764,6 +780,12 @@ LIBSSH_API ssize_t sftp_aio_wait_read(sftp_aio *aio,
  * calling sftp_close() or to keep it open and perform some more operations
  * on it.
  *
+ * This function caps the length a user is allowed to write to an sftp file,
+ * the value of len parameter after capping is returned on success.
+ *
+ * The value used for the cap is same as the value of the max_write_length
+ * field of the sftp_limits_t returned by sftp_limits().
+ *
  * @param file          The opened sftp file handle to write to.
  *
  * @param buf           Pointer to the buffer containing data to write.
@@ -773,11 +795,14 @@ LIBSSH_API ssize_t sftp_aio_wait_read(sftp_aio *aio,
  * @param aio           Pointer to a location where the sftp aio handle
  *                      (corresponding to the sent request) should be stored.
  *
- * @returns             SSH_OK on success, SSH_ERROR with sftp and ssh errors
+ * @returns             On success, the number of bytes the server is
+ *                      requested to write (value of len parameter after
+ *                      capping). On error, SSH_ERROR with sftp and ssh errors
  *                      set.
  *
- * @warning             When calling this function, the internal offset is
- *                      updated corresponding to the len parameter.
+ * @warning             When calling this function, the internal file offset is
+ *                      updated corresponding to the number of bytes requested
+ *                      to write.
  *
  * @warning             A call to sftp_aio_begin_write() sends a request to
  *                      the server. When the server answers, libssh allocates
@@ -792,10 +817,10 @@ LIBSSH_API ssize_t sftp_aio_wait_read(sftp_aio *aio,
  * @see                 sftp_get_error()
  * @see                 ssh_get_error()
  */
-LIBSSH_API int sftp_aio_begin_write(sftp_file file,
-                                    const void *buf,
-                                    size_t len,
-                                    sftp_aio *aio);
+LIBSSH_API ssize_t sftp_aio_begin_write(sftp_file file,
+                                        const void *buf,
+                                        size_t len,
+                                        sftp_aio *aio);
 
 /**
  * @brief Wait for an asynchronous write to complete.
@@ -809,11 +834,6 @@ LIBSSH_API int sftp_aio_begin_write(sftp_file file,
  * If the file is opened in non-blocking mode and the request hasn't
  * been executed yet, this function returns SSH_AGAIN and must be called
  * again using the same sftp aio handle.
- *
- * On success, this function returns the number of bytes written.
- * The SFTP protocol doesn't support partial writes to remote files,
- * hence on success this returned value will always be equal to the
- * len passed in the previous corresponding call to sftp_aio_begin_write().
  *
  * @param aio           Pointer to the sftp aio handle returned by
  *                      sftp_aio_begin_write().
