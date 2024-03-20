@@ -38,6 +38,8 @@ int bcrypt_pbkdf(const char *pass,
 
 #define RSA_HEADER_BEGIN "-----BEGIN RSA PRIVATE KEY-----"
 #define RSA_HEADER_END "-----END RSA PRIVATE KEY-----"
+#define DSA_HEADER_BEGIN "-----BEGIN DSA PRIVATE KEY-----"
+#define DSA_HEADER_END "-----END DSA PRIVATE KEY-----"
 #define ECDSA_HEADER_BEGIN "-----BEGIN EC PRIVATE KEY-----"
 #define ECDSA_HEADER_END "-----END EC PRIVATE KEY-----"
 #define OPENSSH_HEADER_BEGIN "-----BEGIN OPENSSH PRIVATE KEY-----"
@@ -63,6 +65,7 @@ enum ssh_digest_e ssh_key_type_to_hash(ssh_session session,
 /* SSH Key Functions */
 ssh_key pki_key_dup(const ssh_key key, int demote);
 int pki_key_generate_rsa(ssh_key key, int parameter);
+int pki_key_generate_dss(ssh_key key, int parameter);
 int pki_key_generate_ecdsa(ssh_key key, int parameter);
 int pki_key_generate_ed25519(ssh_key key);
 
@@ -88,6 +91,11 @@ int pki_import_privkey_buffer(enum ssh_keytypes_e type,
                               ssh_key *pkey);
 
 /* SSH Public Key Functions */
+int pki_pubkey_build_dss(ssh_key key,
+                         ssh_string p,
+                         ssh_string q,
+                         ssh_string g,
+                         ssh_string pubkey);
 int pki_pubkey_build_rsa(ssh_key key,
                          ssh_string e,
                          ssh_string n);
@@ -95,6 +103,12 @@ int pki_pubkey_build_ecdsa(ssh_key key, int nid, ssh_string e);
 ssh_string pki_key_to_blob(const ssh_key key, enum ssh_key_e type);
 
 /* SSH Private Key Functions */
+int pki_privkey_build_dss(ssh_key key,
+                          ssh_string p,
+                          ssh_string q,
+                          ssh_string g,
+                          ssh_string pubkey,
+                          ssh_string privkey);
 int pki_privkey_build_rsa(ssh_key key,
                           ssh_string n,
                           ssh_string e,

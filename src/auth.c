@@ -1697,6 +1697,7 @@ int ssh_userauth_agent_pubkey(ssh_session session,
     key->type_c = ssh_key_type_to_char(key->type);
     key->flags = SSH_KEY_FLAG_PUBLIC;
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = publickey->dsa_pub;
     key->rsa = publickey->rsa_pub;
 #else
     key->key = publickey->key_pub;
@@ -1705,6 +1706,7 @@ int ssh_userauth_agent_pubkey(ssh_session session,
     rc = ssh_userauth_agent_publickey(session, username, key);
 
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = NULL;
     key->rsa = NULL;
 #else
     key->key = NULL;

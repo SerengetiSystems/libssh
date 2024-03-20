@@ -84,6 +84,7 @@ int ssh_userauth_pubkey(ssh_session session,
     key->type_c = ssh_key_type_to_char(key->type);
     key->flags = SSH_KEY_FLAG_PRIVATE|SSH_KEY_FLAG_PUBLIC;
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = privatekey->dsa_priv;
     key->rsa = privatekey->rsa_priv;
 #else
     key->key = privatekey->key_priv;
@@ -91,6 +92,7 @@ int ssh_userauth_pubkey(ssh_session session,
 
     rc = ssh_userauth_publickey(session, username, key);
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = NULL;
     key->rsa = NULL;
 #else
     key->key = NULL;
@@ -356,6 +358,13 @@ void publickey_free(ssh_public_key key) {
   }
 
   switch(key->type) {
+    case SSH_KEYTYPE_DSS:
+#ifdef HAVE_LIBGCRYPT
+      gcry_sexp_release(key->dsa_pub);
+#elif defined HAVE_LIBCRYPTO
+      EVP_PKEY_free(key->key_pub);
+#endif /* HAVE_LIBGCRYPT */
+      break;
     case SSH_KEYTYPE_RSA:
 #ifdef HAVE_LIBGCRYPT
       gcry_sexp_release(key->rsa_pub);
@@ -387,6 +396,7 @@ ssh_public_key publickey_from_privatekey(ssh_private_key prv) {
     privkey->type_c = ssh_key_type_to_char(privkey->type);
     privkey->flags = SSH_KEY_FLAG_PRIVATE | SSH_KEY_FLAG_PUBLIC;
 #ifndef HAVE_LIBCRYPTO
+    privkey->dsa = prv->dsa_priv;
     privkey->rsa = prv->rsa_priv;
 #else
     privkey->key = prv->key_priv;
@@ -394,6 +404,7 @@ ssh_public_key publickey_from_privatekey(ssh_private_key prv) {
 
     rc = ssh_pki_export_privkey_to_pubkey(privkey, &pubkey);
 #ifndef HAVE_LIBCRYPTO
+    privkey->dsa = NULL;
     privkey->rsa = NULL;
 #else
     privkey->key = NULL;
@@ -444,8 +455,10 @@ ssh_private_key privatekey_from_file(ssh_session session,
 
     privkey->type = key->type;
 #ifndef HAVE_LIBCRYPTO
+    privkey->dsa_priv = key->dsa;
     privkey->rsa_priv = key->rsa;
 
+    key->dsa = NULL;
     key->rsa = NULL;
 #else
     privkey->key_priv = key->key;
@@ -470,6 +483,7 @@ void privatekey_free(ssh_private_key prv) {
   }
 
 #ifdef HAVE_LIBGCRYPT
+  gcry_sexp_release(prv->dsa_priv);
   gcry_sexp_release(prv->rsa_priv);
 #elif defined HAVE_LIBCRYPTO
   EVP_PKEY_free(prv->key_priv);
@@ -538,6 +552,8 @@ ssh_public_key publickey_from_string(ssh_session session, ssh_string pubkey_s) {
     pubkey->type_c = key->type_c;
 
 #ifndef HAVE_LIBCRYPTO
+    pubkey->dsa_pub = key->dsa;
+    key->dsa = NULL;
     pubkey->rsa_pub = key->rsa;
     key->rsa = NULL;
 #else
@@ -568,6 +584,7 @@ ssh_string publickey_to_string(ssh_public_key pubkey) {
     key->type_c = pubkey->type_c;
 
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = pubkey->dsa_pub;
     key->rsa = pubkey->rsa_pub;
 #else
     key->key = pubkey->key_pub;
@@ -579,6 +596,7 @@ ssh_string publickey_to_string(ssh_public_key pubkey) {
     }
 
 #ifndef HAVE_LIBCRYPTO
+    key->dsa = NULL;
     key->rsa = NULL;
 #else
     key->key = NULL;

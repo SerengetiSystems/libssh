@@ -127,6 +127,12 @@ if (NOT WITH_GCRYPT AND NOT WITH_MBEDTLS)
 
 endif ()
 
+if (WITH_DSA)
+    if (NOT WITH_MBEDTLS)
+        set(HAVE_DSA 1)
+    endif (NOT WITH_MBEDTLS)
+endif()
+
 # FUNCTIONS
 
 check_function_exists(isblank HAVE_ISBLANK)
@@ -459,6 +465,13 @@ if (WITH_PKCS11_URI)
             message(WARNING "Could not find pkcs11 provider! Falling back to engines")
         endif (NOT PKCS11_PROVIDER)
     endif ()
+endif()
+
+if (WITH_MBEDTLS)
+    if (WITH_DSA)
+        message(FATAL_ERROR "DSA is not supported with mbedTLS crypto")
+        set(HAVE_DSA 0)
+    endif()
 endif()
 
 # ENDIAN

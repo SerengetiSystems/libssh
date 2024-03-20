@@ -121,6 +121,14 @@
 #define EC_PUBLIC_KEY_ALGORITHMS ""
 #endif /* HAVE_ECC */
 
+#ifdef HAVE_DSA
+#define DSA_HOSTKEYS ",ssh-dss"
+#define DSA_PUBLIC_KEY_ALGORITHMS ",ssh-dss-cert-v01@openssh.com"
+#else
+#define DSA_HOSTKEYS ""
+#define DSA_PUBLIC_KEY_ALGORITHMS ""
+#endif /* HAVE_DSA */
+
 #ifdef WITH_INSECURE_NONE
 #define NONE ",none"
 #else
@@ -133,7 +141,8 @@
                  EC_SK_HOSTKEYS \
                  "rsa-sha2-512," \
                  "rsa-sha2-256," \
-                 "ssh-rsa"
+                 "ssh-rsa" \
+                 DSA_HOSTKEYS
 #define DEFAULT_HOSTKEYS "ssh-ed25519," \
                          EC_HOSTKEYS \
                          "sk-ssh-ed25519@openssh.com," \
@@ -146,7 +155,8 @@
                               EC_PUBLIC_KEY_ALGORITHMS \
                               "rsa-sha2-512-cert-v01@openssh.com," \
                               "rsa-sha2-256-cert-v01@openssh.com," \
-                              "ssh-rsa-cert-v01@openssh.com," \
+                              "ssh-rsa-cert-v01@openssh.com" \
+                              DSA_PUBLIC_KEY_ALGORITHMS "," \
                               HOSTKEYS
 #define DEFAULT_PUBLIC_KEY_ALGORITHMS "ssh-ed25519-cert-v01@openssh.com," \
                                       EC_PUBLIC_KEY_ALGORITHMS \

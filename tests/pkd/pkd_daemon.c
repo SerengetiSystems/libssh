@@ -263,7 +263,8 @@ static int pkd_exec_hello(int fd, struct pkd_daemon_args *args)
         goto outclose;
     }
 
-    if (type == PKD_RSA ||
+    if (type == PKD_DSA || 
+        type == PKD_RSA ||
         type == PKD_ED25519 ||
         type == PKD_ECDSA) {
         opts = SSH_BIND_OPTIONS_HOSTKEY;

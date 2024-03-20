@@ -127,7 +127,15 @@ struct key_attrs key_attrs_list[][5] = {
         {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA384 */
         {0, 0, "", 0, 0, "", 0}, /* UNKNOWN, SHA512 */
     },
-    /* Cannot remove this as it will break the array indexing used */
+#ifdef HAVE_DSA
+    {
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, AUTO */
+        {1, 1, "ssh-dss", 1024, 20, "ssh-dss", 1}, /* DSS, SHA1 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA256 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA384 */
+        {1, 1, "ssh-dss", 1024, 0, "", 0},         /* DSS, SHA512 */
+    },
+#else
     {
         {0, 0, "", 0, 0, "", 0}, /* DSS, AUTO */
         {0, 0, "", 0, 0, "", 0}, /* DSS, SHA1 */
@@ -135,6 +143,7 @@ struct key_attrs key_attrs_list[][5] = {
         {0, 0, "", 0, 0, "", 0}, /* DSS, SHA384 */
         {0, 0, "", 0, 0, "", 0}, /* DSS, SHA512 */
     },
+#endif /* HAVE_DSA */
     {
         {1, 1, "ssh-rsa", 2048, 0, "", 0},              /* RSA, AUTO */
         {1, 1, "ssh-rsa", 2048, 20, "ssh-rsa", 1},      /* RSA, SHA1 */
@@ -163,6 +172,15 @@ struct key_attrs key_attrs_list[][5] = {
         {1, 1, "ssh-ed25519", 255, 0, "", 0},             /* ED25519, SHA384 */
         {1, 1, "ssh-ed25519", 255, 0, "", 0},             /* ED25519, SHA512 */
     },
+#ifdef HAVE_DSA
+    {
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, AUTO */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA1 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA256 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA384 */
+        {0, 1, "", 0, 0, "", 0}, /* DSS CERT, SHA512 */
+    },
+#else
     {
         {0, 0, "", 0, 0, "", 0}, /* DSS CERT, AUTO */
         {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA1 */
@@ -170,6 +188,7 @@ struct key_attrs key_attrs_list[][5] = {
         {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA384 */
         {0, 0, "", 0, 0, "", 0}, /* DSS CERT, SHA512 */
     },
+#endif /* HAVE_DSA */
     {
         {0, 1, "", 0, 0, "", 0}, /* RSA CERT, AUTO */
         {0, 1, "", 0, 0, "", 0}, /* RSA CERT, SHA1 */
@@ -249,7 +268,7 @@ static void torture_pki_verify_mismatch(void **state)
 
     ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
 
-    for (sig_type = SSH_KEYTYPE_RSA;
+    for (sig_type = SSH_KEYTYPE_DSS;
          sig_type <= SSH_KEYTYPE_ED25519_CERT01;
          sig_type++)
     {
@@ -258,7 +277,8 @@ static void torture_pki_verify_mismatch(void **state)
              hash++)
         {
             if (ssh_fips_mode()) {
-                if (sig_type == SSH_KEYTYPE_ED25519 ||
+                if (sig_type == SSH_KEYTYPE_DSS ||
+                    sig_type == SSH_KEYTYPE_ED25519 ||
                     hash == SSH_DIGEST_SHA1)
                 {
                     /* In FIPS mode, skip unsupported algorithms */
@@ -323,12 +343,13 @@ static void torture_pki_verify_mismatch(void **state)
                                       input_length);
             assert_true(rc == SSH_OK);
 
-            for (key_type = SSH_KEYTYPE_RSA;
+            for (key_type = SSH_KEYTYPE_DSS;
                  key_type <= SSH_KEYTYPE_ED25519_CERT01;
                  key_type++)
             {
                 if (ssh_fips_mode()) {
-                    if (key_type == SSH_KEYTYPE_ED25519)
+                    if (key_type == SSH_KEYTYPE_DSS ||
+                        key_type == SSH_KEYTYPE_ED25519)
                     {
                         /* In FIPS mode, skip unsupported algorithms */
                         continue;
@@ -409,6 +430,7 @@ static void torture_pki_verify_mismatch(void **state)
             key = NULL;
         }
     }
+
     ssh_free(session);
 }
 
