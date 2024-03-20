@@ -16,6 +16,7 @@ set(LIBSSH_CLIENT_TESTS
     torture_knownhosts_verify
     torture_session
     torture_request_env
+    torture_request_pty_modes
     torture_client_global_requests)
 
 find_program(SCP_EXECUTABLE NAMES scp)
@@ -65,7 +66,7 @@ foreach(_CLI_TEST ${LIBSSH_CLIENT_TESTS})
     add_cmocka_test(${_CLI_TEST}
                     SOURCES ${_CLI_TEST}.c
                     COMPILE_OPTIONS ${DEFAULT_C_COMPILE_FLAGS}
-                    LINK_LIBRARIES ${TORTURE_LIBRARY}
+                    LINK_LIBRARIES ${TORTURE_LIBRARY} util
     )
 
     if (OSX)
